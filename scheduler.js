@@ -134,16 +134,29 @@
       }
       starts.forEach(function (bs) {
         var wprev = workdayNums.filter(function (x) { return x < bs; }).sort(function (a, b) { return b - a; });
-        // izinden hemen önceki 2 iş günü -> ücretli izin
-        [0, 1].forEach(function (i) {
-          var dd = wprev[i];
-          if (dd !== undefined && P.assign[dd] === '') P.assign[dd] = 'UCI';
-        });
-        // 4 iş günü önce -> nöbet (sorumlu hariç)
-        if (!P.noNobet && wprev[3] !== undefined) {
-          var nd = wprev[3];
-          if (P.assign[nd] === '' && P.hours + 24 <= P.target) placeNobet(P, days[nd - 1], 'N24');
-          else warnings.push(P.name + ': yıllık izin öncesi 4. iş günü (' + nd + '.) nöbeti yerleştirilemedi.');
+        // Nöbet: mümkünse 4 iş günü önce (index 3), olmazsa 3 iş günü önce (index 2).
+        // Nöbetten izine kadar TÜM iş günleri off (mesai/nöbet yazılmaz): N.İ + ücretli izin.
+        var placed = false;
+        if (!P.noNobet) {
+          [3, 2].some(function (ni) {
+            var nd = wprev[ni];
+            if (nd !== undefined && P.assign[nd] === '' && P.hours + 24 <= P.target) {
+              placeNobet(P, days[nd - 1], 'N24');           // ertesi gün N.İ (bitişikse)
+              for (var k = ni - 1; k >= 0; k--) {            // nöbet ile izin arası
+                var dd2 = wprev[k];
+                if (dd2 !== undefined && P.assign[dd2] === '') P.assign[dd2] = 'UCI';
+              }
+              placed = true; return true;
+            }
+            return false;
+          });
+        }
+        if (!placed) {
+          // nöbet konulamadıysa en azından izinden önceki 2 iş günü ücretli izin
+          [0, 1].forEach(function (i) {
+            var dd = wprev[i];
+            if (dd !== undefined && P.assign[dd] === '') P.assign[dd] = 'UCI';
+          });
         }
       });
     });
