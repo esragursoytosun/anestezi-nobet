@@ -97,7 +97,7 @@
             <th style="width:80px">Sorumlu<br>(nöbet yok)</th>
             <th style="width:96px">Haftalık<br>izin günü</th>
             <th>Yıllık izin (başlangıç – bitiş)</th>
-            <th>Boş gün isteği (başlangıç – bitiş)</th>
+            <th>Boş gün isteği (gün no: 5,12,20)</th>
             <th style="width:34px"></th>
           </tr>
         </thead>
@@ -176,7 +176,7 @@ function addPerson(name){
         <option value="3">Çar</option><option value="4">Per</option><option value="5">Cum</option>
       </select></td>
     <td>${dr('p-yi')}</td>
-    <td>${dr('p-off')}</td>
+    <td><input type="text" class="p-off" placeholder="5,12,20" style="min-width:130px" /></td>
     <td><button class="sm danger" onclick="this.closest('tr').remove();renumber()">✕</button></td>`;
   tb.appendChild(tr);
   renumber(); updateDateBounds();
@@ -195,7 +195,7 @@ function readCfg(){
     noNobet: tr.querySelector('.p-sorumlu').checked,
     offDay: tr.querySelector('.p-offday').value===''? null : parseInt(tr.querySelector('.p-offday').value,10),
     leaveYI: rangeToDays(tr.querySelector('.p-yi-s').value, tr.querySelector('.p-yi-e').value),
-    offReq:  rangeToDays(tr.querySelector('.p-off-s').value, tr.querySelector('.p-off-e').value),
+    offReq:  parseDays(tr.querySelector('.p-off').value),
   })).filter(p=>p.name!=='?');
   return {
     year: parseInt(document.getElementById('year').value,10),
@@ -226,7 +226,7 @@ function loadCfg(){
       tr.querySelector('.p-sorumlu').checked=!!(p.noNobet);
       tr.querySelector('.p-offday').value = (p.offDay!=null? String(p.offDay) : (p.noThursday?'4':''));
       const yi=daysToRange(p.leaveYI,y,m); tr.querySelector('.p-yi-s').value=yi.s; tr.querySelector('.p-yi-e').value=yi.e;
-      const of=daysToRange(p.offReq,y,m); tr.querySelector('.p-off-s').value=of.s; tr.querySelector('.p-off-e').value=of.e;
+      tr.querySelector('.p-off').value=(p.offReq||[]).join(',');
     });
     updateDateBounds();
   }catch(e){resetNames();}
