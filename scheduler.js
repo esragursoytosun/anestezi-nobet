@@ -100,7 +100,8 @@
           for (var k = d + 1; k <= nDays; k++) { if (days[k - 1].workday && P.assign[k] !== 'YI') { R = k; break; } }
           var end = (R < 0) ? nDays : R - 1;
           for (var g = d + 1; g <= end; g++) P.lockedOff.add(g);
-          if (R > 0) P.mustMesai.add(R);   // dönüş günü mesai (M) olsun, nöbet değil
+          // dönüş günü (R) çalışılacak (nöbet ya da mesai farketmez); returnDays mesai yerleştirir,
+          // coverage nöbet verirse de olur. Hafta sonuna (lockedOff) iş yazılmaz.
         }
       }
     });
@@ -113,7 +114,7 @@
       var d = dd.day, cur = P.assign[d];
       if (P.noNobet) return false;
       if (P.lockedOff.has(d)) return false;            // izin sonrası hafta sonu -> nöbet yok
-      if (P.mustMesai.has(d)) return false;            // yıllık izin dönüş günü -> mesai, nöbet değil
+      if (P.offReq.has(d)) return false;               // boş gün isteği -> o güne nöbet yazma
       if (cur === 'YI' || cur === 'OFF' || cur === 'UCI') return false;
       if (cur === 'NI') return false;
       if (cur === 'N24' || cur === 'N16' || cur === 'M') return false;
@@ -125,7 +126,6 @@
       }
       if (P.hours + addHours > P.target) return false;
       if (strict) {
-        if (P.offReq.has(d)) return false;
         var cnt = 0;
         for (var k = Math.max(1, d - 6); k <= d; k++) if (P.assign[k] === 'N24' || P.assign[k] === 'N16') cnt++;
         if (cnt >= 3) return false;
@@ -160,9 +160,10 @@
             var nd = wprev[ni];
             if (nd !== undefined && P.assign[nd] === '' && P.hours + 24 <= P.target) {
               placeNobet(P, days[nd - 1], 'N24');           // ertesi gün N.İ (bitişikse)
-              for (var k = ni - 1; k >= 0; k--) {            // nöbet ile izin arası
-                var dd2 = wprev[k];
-                if (dd2 !== undefined && P.assign[dd2] === '') P.assign[dd2] = 'UCI';
+              // nöbet ile izin arası TÜM günler (HAFTA SONU DAHİL): nöbet yazılmaz, boş iş günleri ücretli izin
+              for (var g2 = nd + 1; g2 < bs; g2++) {
+                P.lockedOff.add(g2);
+                if (P.assign[g2] === '') P.assign[g2] = 'UCI';
               }
               placed = true; return true;
             }
