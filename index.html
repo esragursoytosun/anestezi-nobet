@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Anestezi Nöbet & Vardiya Planlayıcı</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#334155; --line:#475569;
+    --txt:#e2e8f0; --muted:#94a3b8; --accent:#6366f1; --accent2:#818cf8;
+    --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
+    --c-M:#1d4ed8; --c-N24:#dc2626; --c-N16:#ea580c; --c-NI:#64748b;
+    --c-HT:#475569; --c-RT:#7c3aed; --c-YI:#16a34a; --c-UI:#334155; --c-OFF:#0e7490;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+  header{background:linear-gradient(135deg,#4338ca,#6366f1);padding:18px 24px;display:flex;align-items:center;gap:14px}
+  header h1{margin:0;font-size:20px;font-weight:700}
+  header .sub{color:#c7d2fe;font-size:13px}
+  .wrap{padding:20px 24px;max-width:100%}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:18px}
+  .panel h2{margin:0 0 12px;font-size:15px;color:var(--accent2);display:flex;align-items:center;gap:8px}
+  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  input,select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 10px;font-size:13px;color-scheme:dark}
+  input[type=text]{min-width:120px}
+  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer}
+  button:hover{background:var(--accent2)}
+  button.sec{background:var(--panel2);border:1px solid var(--line)}
+  button.sm{padding:5px 10px;font-size:12px}
+  button.danger{background:#7f1d1d}
+  table{border-collapse:collapse;width:100%}
+  .ptbl th,.ptbl td{border:1px solid var(--line);padding:6px;text-align:left;font-size:12px;vertical-align:middle}
+  .ptbl th{background:var(--panel2);color:var(--muted);font-weight:600;text-align:center}
+  .ptbl td.chk{text-align:center}
+  .ptbl .p-name{width:120px}
+  .daterange{display:flex;align-items:center;gap:4px}
+  .daterange input[type=date]{padding:5px 6px;font-size:11px;width:128px}
+  .note{font-size:12px;color:var(--muted);background:#0b1220;border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin-top:10px}
+  .gridwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  table.grid{border-collapse:collapse;font-size:11px;white-space:nowrap}
+  table.grid th,table.grid td{border:1px solid #334155;padding:3px 4px;text-align:center;min-width:30px}
+  table.grid th.name,table.grid td.name{position:sticky;left:0;background:var(--panel);text-align:left;min-width:120px;z-index:2;font-weight:600}
+  table.grid thead th{background:var(--panel2);color:var(--muted);position:sticky;top:0;z-index:1}
+  table.grid th.wknd{background:#3b2f1a}
+  td.cell{font-weight:700;color:#fff}
+  .M{background:var(--c-M)} .N24{background:var(--c-N24)} .N16{background:var(--c-N16)}
+  .NI{background:var(--c-NI)} .HT{background:var(--c-HT);color:#94a3b8} .RT{background:var(--c-RT)}
+  .YI{background:var(--c-YI)} .UI{background:var(--c-UI);color:#94a3b8} .OFF{background:var(--c-OFF)}
+  .tot{background:#0b1220;font-weight:700}
+  .tot.bad{color:var(--err)} .tot.good{color:var(--ok)}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:12px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:16px;height:16px;border-radius:4px;display:inline-block}
+  .warns{background:#1f1305;border:1px solid #92400e;border-radius:10px;padding:12px;margin-top:14px;font-size:13px}
+  .warns.ok{background:#052e16;border-color:#166534;color:#86efac}
+  .warns ul{margin:6px 0 0;padding-left:18px}
+  .muted{color:var(--muted)}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  @media print{
+    body{background:#fff;color:#000;font-size:10px}
+    header,.panel.noprint,.toolbar{display:none!important}
+    table.grid th,table.grid td{border-color:#999;color:#000!important}
+    td.cell{color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .M,.N24,.N16,.NI,.HT,.RT,.YI,.UI,.OFF{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div style="font-size:28px">🩺</div>
+  <div>
+    <h1>Anestezi Nöbet &amp; Vardiya Planlayıcı</h1>
+    <div class="sub">Aylık liste otomatik oluşturulur · herkes tam 176 saat · fazla mesai yok</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="panel noprint">
+    <h2>📅 Ay Ayarları</h2>
+    <div class="row">
+      <div><label>Ay</label><select id="month"></select></div>
+      <div><label>Yıl</label><input type="number" id="year" value="2026" style="width:90px" /></div>
+      <div><label>Resmi tatil günleri (virgülle gün no: 1,30)</label>
+        <input type="text" id="holidays" placeholder="ör. 30" style="min-width:160px" /></div>
+    </div>
+  </div>
+
+  <div class="panel noprint">
+    <h2>👥 Personel &amp; Talepler</h2>
+    <div class="gridwrap" style="border:none">
+      <table class="ptbl" id="ptbl">
+        <thead>
+          <tr>
+            <th style="width:26px">#</th>
+            <th>Ad Soyad</th>
+            <th style="width:80px">Sorumlu<br>(nöbet yok)</th>
+            <th style="width:96px">Haftalık<br>izin günü</th>
+            <th>Yıllık izin (başlangıç – bitiş)</th>
+            <th>Ücretsiz izin (başlangıç – bitiş)</th>
+            <th>Boş gün isteği (başlangıç – bitiş)</th>
+            <th style="width:34px"></th>
+          </tr>
+        </thead>
+        <tbody id="pbody"></tbody>
+      </table>
+    </div>
+    <div class="note">
+      • <b>Sorumlu</b> işaretli kişi nöbet tutmaz, yalnızca gündüz mesaisi yapar.<br>
+      • <b>Haftalık izin günü</b>: o kişi her hafta seçilen günde çalışmaz, o günler saatinden düşülür. İstediğin kişiye, istediğin güne ayarla.<br>
+      • Yıllık/Ücretsiz izin çalışma saatinden düşülür. Tek günlük izin için sadece başlangıç tarihini seç.<br>
+      • Boş gün isteği <i>mümkünse</i> dikkate alınır (zorunlu değil).
+    </div>
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+      <button class="sec sm" onclick="addPerson()">+ Personel ekle</button>
+      <button class="sec sm" onclick="saveCfg()">💾 Kaydet</button>
+      <button class="sec sm" onclick="resetNames()">↺ Varsayılan 14 isim</button>
+    </div>
+  </div>
+
+  <div class="toolbar noprint">
+    <button onclick="generate()" style="font-size:15px">⚙️ Liste Oluştur</button>
+    <button class="sec" onclick="exportCSV()">⬇️ Excel (CSV)</button>
+    <button class="sec" onclick="window.print()">🖨️ Yazdır / PDF</button>
+  </div>
+
+  <div id="output"></div>
+</div>
+
+<script src="scheduler.js"></script>
+<script>
+const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+const DEFAULT_NAMES = Array.from({length:14},(_,i)=>'Personel '+(i+1));
+const CODE_LABEL = {M:'M8-17',N24:'N08-08',N16:'N16-08',NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UI:'Üİ',OFF:'İ','':''};
+
+const msel=document.getElementById('month');
+MONTHS.forEach((m,i)=>{const o=document.createElement('option');o.value=i;o.textContent=m;if(i===6)o.selected=true;msel.appendChild(o);});
+
+const pad=n=>String(n).padStart(2,'0');
+function curYM(){return {y:parseInt(document.getElementById('year').value,10), m:parseInt(document.getElementById('month').value,10)};}
+function dayToISO(y,m,d){return `${y}-${pad(m+1)}-${pad(d)}`;}
+function rangeToDays(sISO,eISO){
+  if(!sISO) return [];
+  const {y,m}=curYM();
+  const s=new Date(sISO+'T00:00:00');
+  const e=eISO?new Date(eISO+'T00:00:00'):new Date(sISO+'T00:00:00');
+  const out=[];
+  for(let cur=new Date(s); cur<=e; cur.setDate(cur.getDate()+1)){
+    if(cur.getFullYear()===y && cur.getMonth()===m) out.push(cur.getDate());
+  }
+  return out;
+}
+function parseDays(s){ // resmi tatil için gün no
+  if(!s) return [];
+  return s.split(',').map(x=>parseInt(x.trim(),10)).filter(n=>!isNaN(n)&&n>=1&&n<=31);
+}
+function updateDateBounds(){
+  const {y,m}=curYM();
+  const last=Scheduler.daysInMonth(y,m);
+  const min=dayToISO(y,m,1), max=dayToISO(y,m,last);
+  document.querySelectorAll('#pbody input[type=date]').forEach(inp=>{inp.min=min;inp.max=max;});
+}
+
+function dr(cls){ // date-range hücresi
+  return `<div class="daterange"><input type="date" class="${cls}-s" title="başlangıç"><span>–</span><input type="date" class="${cls}-e" title="bitiş"></div>`;
+}
+function addPerson(name){
+  const tb=document.getElementById('pbody');
+  const tr=document.createElement('tr');
+  tr.innerHTML=`
+    <td class="num"></td>
+    <td><input type="text" class="p-name" value="${name||''}" /></td>
+    <td class="chk"><input type="checkbox" class="p-sorumlu" /></td>
+    <td class="chk"><select class="p-offday">
+        <option value="">—</option><option value="1">Pzt</option><option value="2">Sal</option>
+        <option value="3">Çar</option><option value="4">Per</option><option value="5">Cum</option>
+      </select></td>
+    <td>${dr('p-yi')}</td>
+    <td>${dr('p-ui')}</td>
+    <td>${dr('p-off')}</td>
+    <td><button class="sm danger" onclick="this.closest('tr').remove();renumber()">✕</button></td>`;
+  tb.appendChild(tr);
+  renumber(); updateDateBounds();
+}
+function renumber(){[...document.querySelectorAll('#pbody tr')].forEach((tr,i)=>tr.querySelector('.num').textContent=i+1);}
+function resetNames(){
+  document.getElementById('pbody').innerHTML='';
+  DEFAULT_NAMES.forEach(n=>addPerson(n));
+  const trs=[...document.querySelectorAll('#pbody tr')];
+  if(trs[0]) trs[0].querySelector('.p-sorumlu').checked=true;   // örnek: 1. kişi sorumlu
+  if(trs[1]) trs[1].querySelector('.p-offday').value='4';       // örnek: 2. kişi Perşembe izinli
+}
+function readCfg(){
+  const personnel=[...document.querySelectorAll('#pbody tr')].map(tr=>({
+    name: tr.querySelector('.p-name').value.trim()||'?',
+    noNobet: tr.querySelector('.p-sorumlu').checked,
+    offDay: tr.querySelector('.p-offday').value===''? null : parseInt(tr.querySelector('.p-offday').value,10),
+    leaveYI: rangeToDays(tr.querySelector('.p-yi-s').value, tr.querySelector('.p-yi-e').value),
+    leaveUI: rangeToDays(tr.querySelector('.p-ui-s').value, tr.querySelector('.p-ui-e').value),
+    offReq:  rangeToDays(tr.querySelector('.p-off-s').value, tr.querySelector('.p-off-e').value),
+  })).filter(p=>p.name!=='?');
+  return {
+    year: parseInt(document.getElementById('year').value,10),
+    month: parseInt(document.getElementById('month').value,10),
+    holidays: parseDays(document.getElementById('holidays').value),
+    personnel
+  };
+}
+function saveCfg(){ localStorage.setItem('anestezi_cfg', JSON.stringify(readCfg())); flash('Kaydedildi ✓'); }
+function daysToRange(arr,y,m){ // gün dizisi -> {s,e} ISO (bitişik varsayımı)
+  if(!arr||!arr.length) return {s:'',e:''};
+  const mn=Math.min(...arr), mx=Math.max(...arr);
+  return {s:dayToISO(y,m,mn), e:dayToISO(y,m,mx)};
+}
+function loadCfg(){
+  const raw=localStorage.getItem('anestezi_cfg');
+  if(!raw){resetNames();return;}
+  try{
+    const c=JSON.parse(raw);
+    document.getElementById('year').value=c.year;
+    document.getElementById('month').value=c.month;
+    document.getElementById('holidays').value=(c.holidays||[]).join(',');
+    document.getElementById('pbody').innerHTML='';
+    const y=c.year, m=c.month;
+    (c.personnel||[]).forEach(p=>{
+      addPerson(p.name);
+      const tr=document.querySelector('#pbody tr:last-child');
+      tr.querySelector('.p-sorumlu').checked=!!(p.noNobet);
+      tr.querySelector('.p-offday').value = (p.offDay!=null? String(p.offDay) : (p.noThursday?'4':''));
+      const yi=daysToRange(p.leaveYI,y,m); tr.querySelector('.p-yi-s').value=yi.s; tr.querySelector('.p-yi-e').value=yi.e;
+      const ui=daysToRange(p.leaveUI,y,m); tr.querySelector('.p-ui-s').value=ui.s; tr.querySelector('.p-ui-e').value=ui.e;
+      const of=daysToRange(p.offReq,y,m); tr.querySelector('.p-off-s').value=of.s; tr.querySelector('.p-off-e').value=of.e;
+    });
+    updateDateBounds();
+  }catch(e){resetNames();}
+}
+function flash(msg){
+  const d=document.createElement('div');d.textContent=msg;
+  d.style.cssText='position:fixed;bottom:20px;right:20px;background:#16a34a;color:#fff;padding:10px 16px;border-radius:8px;z-index:99';
+  document.body.appendChild(d);setTimeout(()=>d.remove(),1500);
+}
+
+document.getElementById('month').addEventListener('change',updateDateBounds);
+document.getElementById('year').addEventListener('change',updateDateBounds);
+
+let LAST=null;
+function generate(){
+  const cfg=readCfg();
+  if(!cfg.personnel.length){alert('En az 1 personel ekleyin.');return;}
+  LAST=Scheduler.buildSchedule(cfg);
+  render(LAST);
+  saveCfg();
+}
+function render(r){
+  const out=document.getElementById('output');
+  const title=`${MONTHS[r.month]} ${r.year}`;
+  let h=`<div class="panel"><h2>📋 ${title} Nöbet Listesi</h2><div class="gridwrap"><table class="grid"><thead><tr><th class="name">Personel</th>`;
+  r.days.forEach(d=>{ h+=`<th class="${d.weekend||d.holiday?'wknd':''}">${d.day}<br><span class="muted">${d.dowName}</span></th>`; });
+  h+=`<th class="tot">Hedef</th><th class="tot">Top.</th><th class="tot">Fark</th><th class="tot">M</th><th class="tot">N24</th><th class="tot">N16</th><th class="tot">Nİ</th><th class="tot">HSn</th></tr></thead><tbody>`;
+  r.totals.forEach(t=>{
+    const g=r.grid[t.name];
+    h+=`<tr><td class="name">${t.name}</td>`;
+    r.days.forEach(d=>{ const code=g[d.day]||''; h+=`<td class="cell ${code}">${CODE_LABEL[code]}</td>`; });
+    const fc=t.fark===0?'good':'bad';
+    h+=`<td class="tot">${t.target}</td><td class="tot">${t.hours}</td><td class="tot ${fc}">${t.fark>0?'+':''}${t.fark}</td>`;
+    h+=`<td class="tot">${t.mesai}</td><td class="tot">${t.n24}</td><td class="tot">${t.n16}</td><td class="tot">${t.ni}</td><td class="tot">${t.weekendNobet}</td></tr>`;
+  });
+  h+=`</tbody></table></div>`;
+  h+=`<div class="legend">
+    <span><i class="sw M"></i> M8-17 (8s)</span><span><i class="sw N24"></i> N08-08 (24s)</span>
+    <span><i class="sw N16"></i> N16-08 (16s)</span><span><i class="sw NI"></i> N.İ</span>
+    <span><i class="sw HT"></i> H.T</span><span><i class="sw RT"></i> R.T</span>
+    <span><i class="sw YI"></i> Yıllık izin</span><span><i class="sw UI"></i> Ücretsiz izin</span>
+    <span><i class="sw OFF"></i> İzin</span></div>`;
+  if(r.warnings.length){
+    h+=`<div class="warns"><b>⚠️ ${r.warnings.length} uyarı / not</b><ul>`+r.warnings.map(w=>`<li>${w}</li>`).join('')+`</ul></div>`;
+  }else{
+    h+=`<div class="warns ok"><b>✓ Liste hazır.</b> Herkes tam hedefini tutturdu, her gün 2 nöbetçi var, fazla mesai yok.</div>`;
+  }
+  h+=`</div>`;
+  out.innerHTML=h;
+}
+function exportCSV(){
+  if(!LAST){alert('Önce liste oluşturun.');return;}
+  const r=LAST;
+  const head=['Personel'].concat(r.days.map(d=>d.day+' '+d.dowName)).concat(['Hedef','Toplam','Fark','M','N24','N16','Nİ','HSnöb']);
+  const rows=[head];
+  r.totals.forEach(t=>{
+    const g=r.grid[t.name];
+    let row=[t.name].concat(r.days.map(d=>CODE_LABEL[g[d.day]||'']||''));
+    row=row.concat([t.target,t.hours,t.fark,t.mesai,t.n24,t.n16,t.ni,t.weekendNobet]);
+    rows.push(row);
+  });
+  const csv='﻿'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`anestezi_${MONTHS[r.month]}_${r.year}.csv`; a.click();
+}
+
+loadCfg();
+generate();
+</script>
+</body>
+</html>
