@@ -96,6 +96,7 @@
             <th>Ad Soyad</th>
             <th style="width:80px">Sorumlu<br>(nöbet yok)</th>
             <th style="width:96px">Haftalık<br>izin günü</th>
+            <th style="width:74px">Aya N.İ<br>başla</th>
             <th>Yıllık izin (başlangıç – bitiş)</th>
             <th>Boş gün isteği (gün no: 5,12,20)</th>
             <th style="width:34px"></th>
@@ -107,6 +108,7 @@
     <div class="note">
       • <b>Sorumlu</b> işaretli kişi nöbet tutmaz, yalnızca gündüz mesaisi yapar.<br>
       • <b>Haftalık izin günü</b>: o kişi her hafta seçilen günde çalışmaz, o günler saatinden düşülür.<br>
+      • <b>Aya N.İ başla</b>: önceki ayın son nöbetçisi; ayın 1. günü nöbet izinli (dinlenme) başlar, o gün nöbet/mesai almaz.<br>
       • <b>Yıllık izin</b> çalışma saatinden düşülür. Tek gün için sadece başlangıç tarihini seç.<br>
       • <b>Ücretli izin</b> otomatik eklenir: 176 saat dolunca kalan iş günleri ücretli izin olur (boş hücre kalmaz, 176 aşılmaz). Ayrıca yıllık izne çıkan kişi izinden 4 iş günü önce nöbet tutar, izinden önceki 2 iş günü ücretli izinli olur.<br>
       • <b>Boş gün isteği</b> mümkünse dikkate alınır (zorunlu değil).
@@ -175,6 +177,7 @@ function addPerson(name){
         <option value="">—</option><option value="1">Pzt</option><option value="2">Sal</option>
         <option value="3">Çar</option><option value="4">Per</option><option value="5">Cum</option>
       </select></td>
+    <td class="chk"><input type="checkbox" class="p-startni" /></td>
     <td>${dr('p-yi')}</td>
     <td><input type="text" class="p-off" placeholder="5,12,20" style="min-width:130px" /></td>
     <td><button class="sm danger" onclick="this.closest('tr').remove();renumber()">✕</button></td>`;
@@ -193,6 +196,7 @@ function readCfg(){
   const personnel=[...document.querySelectorAll('#pbody tr')].map(tr=>({
     name: tr.querySelector('.p-name').value.trim()||'?',
     noNobet: tr.querySelector('.p-sorumlu').checked,
+    startNI: tr.querySelector('.p-startni').checked,
     offDay: tr.querySelector('.p-offday').value===''? null : parseInt(tr.querySelector('.p-offday').value,10),
     leaveYI: rangeToDays(tr.querySelector('.p-yi-s').value, tr.querySelector('.p-yi-e').value),
     offReq:  parseDays(tr.querySelector('.p-off').value),
@@ -224,6 +228,7 @@ function loadCfg(){
       addPerson(p.name);
       const tr=document.querySelector('#pbody tr:last-child');
       tr.querySelector('.p-sorumlu').checked=!!(p.noNobet);
+      tr.querySelector('.p-startni').checked=!!p.startNI;
       tr.querySelector('.p-offday').value = (p.offDay!=null? String(p.offDay) : (p.noThursday?'4':''));
       const yi=daysToRange(p.leaveYI,y,m); tr.querySelector('.p-yi-s').value=yi.s; tr.querySelector('.p-yi-e').value=yi.e;
       tr.querySelector('.p-off').value=(p.offReq||[]).join(',');

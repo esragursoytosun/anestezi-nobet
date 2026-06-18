@@ -71,7 +71,7 @@
       });
       if (target < 0) target = 0;
       return {
-        idx: idx, name: p.name, noNobet: !!p.noNobet,
+        idx: idx, name: p.name, noNobet: !!p.noNobet, startNI: !!p.startNI,
         YI: YI, offReq: offReq, thursdays: thursdays,
         target: target, assign: {}, nobetDays: [], weekendNobet: 0, hours: 0
       };
@@ -87,6 +87,8 @@
         else if (dd.weekend) c = 'HT';
         P.assign[dd.day] = c;
       });
+      // önceki ayın son nöbetçisi -> yeni aya N.İ (dinlenme) ile başlar
+      if (P.startNI && (P.assign[1] === '' || P.assign[1] === 'HT')) P.assign[1] = 'NI';
     });
 
     function hoursOf(P) { var h = 0; for (var d = 1; d <= nDays; d++) h += HOURS[P.assign[d]] || 0; return h; }
