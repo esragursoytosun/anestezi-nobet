@@ -222,15 +222,16 @@
       }
       return res;
     }
-    // 2a) Her HAFTA İÇİ günü gündüz mesaisinde (M8-17) EN AZ 2 kişi. Sorumlu SAYILMAZ (fazlası serbest).
+    // 2a) Gündüz mesaisi (M8-17) minimumu: her hafta içi >=2, SALI ve PERŞEMBE >=3. Sorumlu SAYILMAZ.
     days.forEach(function (dd) {
       if (!dd.workday) return;
+      var need = dd.isTueThu ? 3 : 2;
       var have = people.filter(function (P) { return !P.noNobet && P.assign[dd.day] === 'M'; }).length;
-      while (have < 2) {
+      while (have < need) {
         var cand = people.filter(function (P) {
           return !P.noNobet && P.assign[dd.day] === '' && (P.hours + 8 <= P.target) && !P.offReq.has(dd.day);
         }).sort(function (a, b) { return (b.target - b.hours) - (a.target - a.hours); })[0];
-        if (!cand) { warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüz mesaisinde en az 2 kişi sağlanamadı.'); break; }
+        if (!cand) { warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüz mesaisinde en az ' + need + ' kişi sağlanamadı.'); break; }
         addMesai(cand, dd.day); have++;
       }
     });
