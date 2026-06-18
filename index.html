@@ -180,11 +180,21 @@ function addPerson(name){
     <td class="chk"><input type="checkbox" class="p-startni" /></td>
     <td>${dr('p-yi')}</td>
     <td><input type="text" class="p-off" placeholder="5,12,20" style="min-width:130px" /></td>
-    <td><button class="sm danger" onclick="this.closest('tr').remove();renumber()">✕</button></td>`;
+    <td style="white-space:nowrap">
+      <button class="sm sec" onclick="moveRow(this,-1)" title="Yukarı">↑</button>
+      <button class="sm sec" onclick="moveRow(this,1)" title="Aşağı">↓</button>
+      <button class="sm danger" onclick="this.closest('tr').remove();renumber()" title="Sil">✕</button>
+    </td>`;
   tb.appendChild(tr);
   renumber(); updateDateBounds();
 }
 function renumber(){[...document.querySelectorAll('#pbody tr')].forEach((tr,i)=>tr.querySelector('.num').textContent=i+1);}
+function moveRow(btn,dir){
+  const tr=btn.closest('tr');
+  if(dir<0 && tr.previousElementSibling) tr.parentNode.insertBefore(tr,tr.previousElementSibling);
+  if(dir>0 && tr.nextElementSibling) tr.parentNode.insertBefore(tr.nextElementSibling,tr);
+  renumber();
+}
 function resetNames(){
   document.getElementById('pbody').innerHTML='';
   DEFAULT_NAMES.forEach(n=>addPerson(n));

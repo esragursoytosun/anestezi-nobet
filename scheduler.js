@@ -218,12 +218,12 @@
       }
       return res;
     }
-    // 2a) Salı/Perşembe ekstra gündüz
+    // 2a) Salı/Perşembe ekstra gündüz (SORUMLU gündüz sayısına SAYILMAZ -> gerçek bir ek kişi gelir)
     days.forEach(function (dd) {
       if (!dd.isTueThu || !dd.workday) return;
-      if (people.some(function (P) { return P.assign[dd.day] === 'M'; })) return;
+      if (people.some(function (P) { return !P.noNobet && P.assign[dd.day] === 'M'; })) return;
       var cand = people.filter(function (P) {
-        return P.assign[dd.day] === '' && (P.hours + 8 <= P.target) && !P.offReq.has(dd.day);
+        return !P.noNobet && P.assign[dd.day] === '' && (P.hours + 8 <= P.target) && !P.offReq.has(dd.day);
       }).sort(function (a, b) { return (b.target - b.hours) - (a.target - a.hours); })[0];
       if (cand) addMesai(cand, dd.day);
     });
@@ -263,14 +263,17 @@
         for (var k = best.start + 3; k < best.end; k++) if (P.assign[workdayNums[k]] === 'UCI') { mid = workdayNums[k]; break; }
         if (mid < 0) for (var k2 = best.start; k2 < best.end; k2++) if (P.assign[workdayNums[k2]] === 'UCI') { mid = workdayNums[k2]; break; }
         if (mid < 0) return;
-        var donor = -1;
+        // donör seçimi: kümenin İÇİNDEN bir M (iki komşusu da dolu) tercih edilir
+        // (taşıyınca yeni uzun seri yaratmaz). Yoksa tek komşusu dolu olan.
+        var donor = -1, donorScore = 0;
         for (var m = 0; m < workdayNums.length; m++) {
           var dm = workdayNums[m];
           if (P.assign[dm] !== 'M') continue;
           if (dm >= workdayNums[best.start] && dm <= workdayNums[best.end - 1]) continue;
           var prevOk = m > 0 && !offRun(P.assign[workdayNums[m - 1]]);
           var nextOk = m < workdayNums.length - 1 && !offRun(P.assign[workdayNums[m + 1]]);
-          if (prevOk || nextOk) { donor = dm; break; }
+          var sc = (prevOk ? 1 : 0) + (nextOk ? 1 : 0);
+          if (sc > donorScore) { donorScore = sc; donor = dm; if (sc === 2) break; }
         }
         if (donor < 0) return;
         P.assign[donor] = 'UCI'; P.assign[mid] = 'M';
