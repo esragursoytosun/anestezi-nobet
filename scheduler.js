@@ -73,7 +73,7 @@
       return {
         idx: idx, name: p.name, noNobet: !!p.noNobet, startNI: !!p.startNI,
         YI: YI, offReq: offReq, thursdays: thursdays,
-        target: target, assign: {}, nobetDays: [], weekendNobet: 0, hours: 0
+        target: target, assign: {}, nobetDays: [], weekendNobet: 0, hours: 0, lastNobet: -99
       };
     });
 
@@ -118,7 +118,7 @@
     }
     function placeNobet(P, dd, kind) {
       var d = dd.day;
-      P.assign[d] = kind; P.hours += HOURS[kind]; P.nobetDays.push(d);
+      P.assign[d] = kind; P.hours += HOURS[kind]; P.nobetDays.push(d); P.lastNobet = d;
       if (dd.weekend || dd.holiday) P.weekendNobet++;
       if (d < nDays) {
         var nx = P.assign[d + 1];
@@ -171,6 +171,8 @@
       pool.sort(function (a, b) {
         if (dd.weekend || dd.holiday) { if (a.weekendNobet !== b.weekendNobet) return a.weekendNobet - b.weekendNobet; }
         if (a.nobetDays.length !== b.nobetDays.length) return a.nobetDays.length - b.nobetDays.length;
+        // nöbetleri aya YAY: nöbeti en eski olan (ya da hiç tutmamış) önce gelsin
+        if (a.lastNobet !== b.lastNobet) return a.lastNobet - b.lastNobet;
         var ra = a.target - a.hours, rb = b.target - b.hours;
         if (ra !== rb) return rb - ra;
         return a.idx - b.idx;
@@ -227,16 +229,34 @@
       }).sort(function (a, b) { return (b.target - b.hours) - (a.target - a.hours); })[0];
       if (cand) addMesai(cand, dd.day);
     });
-    // 2b) hedefe tamamla (önce yıllık izin dönüş günü, sonra aya yay)
+    // 2b) hedefe tamamla — mesaiyi EN UZUN BOŞLUĞU kıracak şekilde yerleştir
+    //     (böylece üst üste >3 gün "gelmeme" oluşmaz). offReq günleri mümkünse boş bırakılır.
+    function fillMesaiGapAware(P, need) {
+      for (var c = 0; c < need; c++) {
+        var bestStart = -1, bestLen = 0, rs = -1;
+        for (var i = 0; i <= workdayNums.length; i++) {
+          var pres = i < workdayNums.length && presentCode(P.assign[workdayNums[i]]);
+          if (i < workdayNums.length && !pres) { if (rs < 0) rs = i; }
+          else { if (rs >= 0) { if (i - rs > bestLen) { bestLen = i - rs; bestStart = rs; } rs = -1; } }
+        }
+        if (bestLen <= 0) return;
+        var center = bestStart + Math.floor(bestLen / 2), pick = -1, pickScore = 1e9;
+        for (var j = bestStart; j < bestStart + bestLen; j++) {
+          var d = workdayNums[j];
+          if (P.assign[d] !== '') continue;
+          var score = Math.abs(j - center) * 2 + (P.offReq.has(d) ? 1000 : 0);
+          if (score < pickScore) { pickScore = score; pick = d; }
+        }
+        if (pick < 0) { for (var k = 0; k < workdayNums.length; k++) if (P.assign[workdayNums[k]] === '') { pick = workdayNums[k]; break; } }
+        if (pick < 0) return;
+        addMesai(P, pick);
+      }
+    }
     people.forEach(function (P) {
       if (P.target - P.hours < 8) return;
       returnDays(P).forEach(function (d) { if (P.assign[d] === '' && P.hours + 8 <= P.target) addMesai(P, d); });
       var need = Math.floor((P.target - P.hours) / 8);
-      if (need <= 0) return;
-      var slots = freeWorkdaySlots(P);
-      var pref = slots.filter(function (d) { return !P.offReq.has(d); });
-      var use = (pref.length >= need) ? pref : slots;
-      pickEven(use, need).forEach(function (d) { addMesai(P, d); });
+      if (need > 0) fillMesaiGapAware(P, need);
     });
 
     // ---- 2.5) KALAN BOŞ İŞ GÜNLERİ -> ÜCRETLİ İZİN (boş hücre kalmaz) ----
@@ -263,19 +283,25 @@
         for (var k = best.start + 3; k < best.end; k++) if (P.assign[workdayNums[k]] === 'UCI') { mid = workdayNums[k]; break; }
         if (mid < 0) for (var k2 = best.start; k2 < best.end; k2++) if (P.assign[workdayNums[k2]] === 'UCI') { mid = workdayNums[k2]; break; }
         if (mid < 0) return;
-        // donör seçimi: kümenin İÇİNDEN bir M (iki komşusu da dolu) tercih edilir
-        // (taşıyınca yeni uzun seri yaratmaz). Yoksa tek komşusu dolu olan.
-        var donor = -1, donorScore = 0;
+        // donör: yalnızca İKİ yanı da dolu (güvenli) bir M taşınır -> taşıma yeni boşluk açmaz.
+        // (tek yanı dolu M taşımak başka yerde boşluk açıp oynamaya yol açıyordu.)
+        var donor = -1;
         for (var m = 0; m < workdayNums.length; m++) {
           var dm = workdayNums[m];
           if (P.assign[dm] !== 'M') continue;
           if (dm >= workdayNums[best.start] && dm <= workdayNums[best.end - 1]) continue;
           var prevOk = m > 0 && !offRun(P.assign[workdayNums[m - 1]]);
           var nextOk = m < workdayNums.length - 1 && !offRun(P.assign[workdayNums[m + 1]]);
-          var sc = (prevOk ? 1 : 0) + (nextOk ? 1 : 0);
-          if (sc > donorScore) { donorScore = sc; donor = dm; if (sc === 2) break; }
+          if (prevOk && nextOk) { donor = dm; break; }
         }
-        if (donor < 0) return;
+        if (donor < 0) {
+          // taşınacak mesai yok (kişi çok nöbetli): bir 24s nöbeti 16s'e indir (8s açılır),
+          // bu seride bir ücretli izin gününü mesaiye çevir -> saat 176 sabit, boşluk kırılır.
+          var n24 = -1;
+          for (var q = 0; q < workdayNums.length; q++) { if (P.assign[workdayNums[q]] === 'N24') { n24 = workdayNums[q]; break; } }
+          if (n24 > 0) { P.assign[n24] = 'N16'; P.hours -= 8; P.assign[mid] = 'M'; P.hours += 8; continue; }
+          return;
+        }
         P.assign[donor] = 'UCI'; P.assign[mid] = 'M';
       }
     }
