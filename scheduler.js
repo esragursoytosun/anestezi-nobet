@@ -97,11 +97,12 @@
       for (var d = 1; d <= nDays; d++) {
         if (P.assign[d] === 'YI' && (d === nDays || P.assign[d + 1] !== 'YI')) {
           var R = -1;
-          for (var k = d + 1; k <= nDays; k++) { if (days[k - 1].workday && P.assign[k] !== 'YI') { R = k; break; } }
+          for (var k = d + 1; k <= nDays; k++) { if (days[k - 1].workday && P.assign[k] === '') { R = k; break; } }
           var end = (R < 0) ? nDays : R - 1;
           for (var g = d + 1; g <= end; g++) P.lockedOff.add(g);
-          // dönüş günü (R) çalışılacak (nöbet ya da mesai farketmez); returnDays mesai yerleştirir,
-          // coverage nöbet verirse de olur. Hafta sonuna (lockedOff) iş yazılmaz.
+          // dönüş günü ZORUNLU çalışma: en baştan mesai olarak ayrılır (hedefe sayılır),
+          // coverage/diğer dağıtım bunun etrafında çalışır. Hafta sonuna (lockedOff) iş yazılmaz.
+          if (R > 0) { P.assign[R] = 'M'; P.hours += 8; P.mustMesai.add(R); }
         }
       }
     });
@@ -231,7 +232,7 @@
       for (var d = 1; d <= nDays; d++) {
         if (P.assign[d] === 'YI') inBlock = true;
         else if (inBlock) {
-          for (var k = d; k <= nDays; k++) if (days[k - 1].workday && P.assign[k] !== 'YI') { res.push(k); break; }
+          for (var k = d; k <= nDays; k++) if (days[k - 1].workday && P.assign[k] !== 'YI' && P.assign[k] !== 'OFF') { res.push(k); break; }
           inBlock = false;
         }
       }
@@ -314,6 +315,7 @@
         for (var m = 0; m < workdayNums.length; m++) {
           var dm = workdayNums[m];
           if (P.assign[dm] !== 'M') continue;
+          if (P.mustMesai.has(dm)) continue;            // yıllık izin dönüş günü taşınmaz
           if (dm >= workdayNums[best.start] && dm <= workdayNums[best.end - 1]) continue;
           var prevOk = m > 0 && !offRun(P.assign[workdayNums[m - 1]]);
           var nextOk = m < workdayNums.length - 1 && !offRun(P.assign[workdayNums[m + 1]]);
