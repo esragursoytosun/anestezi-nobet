@@ -10,7 +10,7 @@
     --txt:#e2e8f0; --muted:#94a3b8; --accent:#6366f1; --accent2:#818cf8;
     --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
     --c-M:#1d4ed8; --c-N24:#dc2626; --c-N16:#ea580c; --c-NI:#64748b;
-    --c-HT:#475569; --c-RT:#7c3aed; --c-YI:#16a34a; --c-UI:#334155; --c-OFF:#0e7490;
+    --c-HT:#475569; --c-RT:#7c3aed; --c-YI:#16a34a; --c-UCI:#0d9488; --c-OFF:#db2777;
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
@@ -46,7 +46,7 @@
   td.cell{font-weight:700;color:#fff}
   .M{background:var(--c-M)} .N24{background:var(--c-N24)} .N16{background:var(--c-N16)}
   .NI{background:var(--c-NI)} .HT{background:var(--c-HT);color:#94a3b8} .RT{background:var(--c-RT)}
-  .YI{background:var(--c-YI)} .UI{background:var(--c-UI);color:#94a3b8} .OFF{background:var(--c-OFF)}
+  .YI{background:var(--c-YI)} .UCI{background:var(--c-UCI)} .OFF{background:var(--c-OFF)}
   .tot{background:#0b1220;font-weight:700}
   .tot.bad{color:var(--err)} .tot.good{color:var(--ok)}
   .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:12px}
@@ -62,7 +62,7 @@
     header,.panel.noprint,.toolbar{display:none!important}
     table.grid th,table.grid td{border-color:#999;color:#000!important}
     td.cell{color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .M,.N24,.N16,.NI,.HT,.RT,.YI,.UI,.OFF{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .M,.N24,.N16,.NI,.HT,.RT,.YI,.UCI,.OFF{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
 </style>
 </head>
@@ -97,7 +97,6 @@
             <th style="width:80px">Sorumlu<br>(nöbet yok)</th>
             <th style="width:96px">Haftalık<br>izin günü</th>
             <th>Yıllık izin (başlangıç – bitiş)</th>
-            <th>Ücretsiz izin (başlangıç – bitiş)</th>
             <th>Boş gün isteği (başlangıç – bitiş)</th>
             <th style="width:34px"></th>
           </tr>
@@ -107,9 +106,10 @@
     </div>
     <div class="note">
       • <b>Sorumlu</b> işaretli kişi nöbet tutmaz, yalnızca gündüz mesaisi yapar.<br>
-      • <b>Haftalık izin günü</b>: o kişi her hafta seçilen günde çalışmaz, o günler saatinden düşülür. İstediğin kişiye, istediğin güne ayarla.<br>
-      • Yıllık/Ücretsiz izin çalışma saatinden düşülür. Tek günlük izin için sadece başlangıç tarihini seç.<br>
-      • Boş gün isteği <i>mümkünse</i> dikkate alınır (zorunlu değil).
+      • <b>Haftalık izin günü</b>: o kişi her hafta seçilen günde çalışmaz, o günler saatinden düşülür.<br>
+      • <b>Yıllık izin</b> çalışma saatinden düşülür. Tek gün için sadece başlangıç tarihini seç.<br>
+      • <b>Ücretli izin</b> otomatik eklenir: 176 saat dolunca kalan iş günleri ücretli izin olur (boş hücre kalmaz, 176 aşılmaz). Ayrıca yıllık izne çıkan kişi izinden 4 iş günü önce nöbet tutar, izinden önceki 2 iş günü ücretli izinli olur.<br>
+      • <b>Boş gün isteği</b> mümkünse dikkate alınır (zorunlu değil).
     </div>
     <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
       <button class="sec sm" onclick="addPerson()">+ Personel ekle</button>
@@ -131,7 +131,7 @@
 <script>
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DEFAULT_NAMES = Array.from({length:14},(_,i)=>'Personel '+(i+1));
-const CODE_LABEL = {M:'M8-17',N24:'N08-08',N16:'N16-08',NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UI:'Üİ',OFF:'İ','':''};
+const CODE_LABEL = {M:'M8-17',N24:'N08-08',N16:'N16-08',NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UCI:'Ü.İ',OFF:'İ','':''};
 
 const msel=document.getElementById('month');
 MONTHS.forEach((m,i)=>{const o=document.createElement('option');o.value=i;o.textContent=m;if(i===6)o.selected=true;msel.appendChild(o);});
@@ -176,7 +176,6 @@ function addPerson(name){
         <option value="3">Çar</option><option value="4">Per</option><option value="5">Cum</option>
       </select></td>
     <td>${dr('p-yi')}</td>
-    <td>${dr('p-ui')}</td>
     <td>${dr('p-off')}</td>
     <td><button class="sm danger" onclick="this.closest('tr').remove();renumber()">✕</button></td>`;
   tb.appendChild(tr);
@@ -196,7 +195,6 @@ function readCfg(){
     noNobet: tr.querySelector('.p-sorumlu').checked,
     offDay: tr.querySelector('.p-offday').value===''? null : parseInt(tr.querySelector('.p-offday').value,10),
     leaveYI: rangeToDays(tr.querySelector('.p-yi-s').value, tr.querySelector('.p-yi-e').value),
-    leaveUI: rangeToDays(tr.querySelector('.p-ui-s').value, tr.querySelector('.p-ui-e').value),
     offReq:  rangeToDays(tr.querySelector('.p-off-s').value, tr.querySelector('.p-off-e').value),
   })).filter(p=>p.name!=='?');
   return {
@@ -228,7 +226,6 @@ function loadCfg(){
       tr.querySelector('.p-sorumlu').checked=!!(p.noNobet);
       tr.querySelector('.p-offday').value = (p.offDay!=null? String(p.offDay) : (p.noThursday?'4':''));
       const yi=daysToRange(p.leaveYI,y,m); tr.querySelector('.p-yi-s').value=yi.s; tr.querySelector('.p-yi-e').value=yi.e;
-      const ui=daysToRange(p.leaveUI,y,m); tr.querySelector('.p-ui-s').value=ui.s; tr.querySelector('.p-ui-e').value=ui.e;
       const of=daysToRange(p.offReq,y,m); tr.querySelector('.p-off-s').value=of.s; tr.querySelector('.p-off-e').value=of.e;
     });
     updateDateBounds();
@@ -256,22 +253,22 @@ function render(r){
   const title=`${MONTHS[r.month]} ${r.year}`;
   let h=`<div class="panel"><h2>📋 ${title} Nöbet Listesi</h2><div class="gridwrap"><table class="grid"><thead><tr><th class="name">Personel</th>`;
   r.days.forEach(d=>{ h+=`<th class="${d.weekend||d.holiday?'wknd':''}">${d.day}<br><span class="muted">${d.dowName}</span></th>`; });
-  h+=`<th class="tot">Hedef</th><th class="tot">Top.</th><th class="tot">Fark</th><th class="tot">M</th><th class="tot">N24</th><th class="tot">N16</th><th class="tot">Nİ</th><th class="tot">HSn</th></tr></thead><tbody>`;
+  h+=`<th class="tot">Hedef</th><th class="tot">Top.</th><th class="tot">Fark</th><th class="tot">M</th><th class="tot">N24</th><th class="tot">N16</th><th class="tot">Nİ</th><th class="tot">Ü.İ</th><th class="tot">HSn</th></tr></thead><tbody>`;
   r.totals.forEach(t=>{
     const g=r.grid[t.name];
     h+=`<tr><td class="name">${t.name}</td>`;
     r.days.forEach(d=>{ const code=g[d.day]||''; h+=`<td class="cell ${code}">${CODE_LABEL[code]}</td>`; });
     const fc=t.fark===0?'good':'bad';
     h+=`<td class="tot">${t.target}</td><td class="tot">${t.hours}</td><td class="tot ${fc}">${t.fark>0?'+':''}${t.fark}</td>`;
-    h+=`<td class="tot">${t.mesai}</td><td class="tot">${t.n24}</td><td class="tot">${t.n16}</td><td class="tot">${t.ni}</td><td class="tot">${t.weekendNobet}</td></tr>`;
+    h+=`<td class="tot">${t.mesai}</td><td class="tot">${t.n24}</td><td class="tot">${t.n16}</td><td class="tot">${t.ni}</td><td class="tot">${t.uci}</td><td class="tot">${t.weekendNobet}</td></tr>`;
   });
   h+=`</tbody></table></div>`;
   h+=`<div class="legend">
     <span><i class="sw M"></i> M8-17 (8s)</span><span><i class="sw N24"></i> N08-08 (24s)</span>
     <span><i class="sw N16"></i> N16-08 (16s)</span><span><i class="sw NI"></i> N.İ</span>
     <span><i class="sw HT"></i> H.T</span><span><i class="sw RT"></i> R.T</span>
-    <span><i class="sw YI"></i> Yıllık izin</span><span><i class="sw UI"></i> Ücretsiz izin</span>
-    <span><i class="sw OFF"></i> İzin</span></div>`;
+    <span><i class="sw YI"></i> Yıllık izin</span><span><i class="sw UCI"></i> Ücretli izin</span>
+    <span><i class="sw OFF"></i> Haftalık izin</span></div>`;
   if(r.warnings.length){
     h+=`<div class="warns"><b>⚠️ ${r.warnings.length} uyarı / not</b><ul>`+r.warnings.map(w=>`<li>${w}</li>`).join('')+`</ul></div>`;
   }else{
@@ -283,12 +280,12 @@ function render(r){
 function exportCSV(){
   if(!LAST){alert('Önce liste oluşturun.');return;}
   const r=LAST;
-  const head=['Personel'].concat(r.days.map(d=>d.day+' '+d.dowName)).concat(['Hedef','Toplam','Fark','M','N24','N16','Nİ','HSnöb']);
+  const head=['Personel'].concat(r.days.map(d=>d.day+' '+d.dowName)).concat(['Hedef','Toplam','Fark','M','N24','N16','Nİ','Ü.İ','HSnöb']);
   const rows=[head];
   r.totals.forEach(t=>{
     const g=r.grid[t.name];
     let row=[t.name].concat(r.days.map(d=>CODE_LABEL[g[d.day]||'']||''));
-    row=row.concat([t.target,t.hours,t.fark,t.mesai,t.n24,t.n16,t.ni,t.weekendNobet]);
+    row=row.concat([t.target,t.hours,t.fark,t.mesai,t.n24,t.n16,t.ni,t.uci,t.weekendNobet]);
     rows.push(row);
   });
   const csv='﻿'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
