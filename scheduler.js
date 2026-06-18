@@ -54,6 +54,8 @@
       });
     }
     var workdayNums = days.filter(function (x) { return x.workday; }).map(function (x) { return x.day; });
+    // Aylık hedef = 8 saat × o ayın iş günü (hafta içi, resmi tatil hariç) sayısı.
+    var baseTarget = 8 * workdayNums.length;
 
     // ---- kişiler ----
     var people = config.personnel.map(function (p, idx) {
@@ -65,7 +67,7 @@
       if (offDow !== null && !isNaN(offDow)) {
         days.forEach(function (dd) { if (dd.dow === offDow) thursdays.add(dd.day); });
       }
-      var target = BASE_TARGET;
+      var target = baseTarget;
       days.forEach(function (dd) {
         if ((YI.has(dd.day) || thursdays.has(dd.day)) && dd.workday) target -= 8;
       });
@@ -220,14 +222,17 @@
       }
       return res;
     }
-    // 2a) Salı/Perşembe ekstra gündüz (SORUMLU gündüz sayısına SAYILMAZ -> gerçek bir ek kişi gelir)
+    // 2a) Her HAFTA İÇİ günü gündüz mesaisinde (M8-17) EN AZ 2 kişi. Sorumlu SAYILMAZ (fazlası serbest).
     days.forEach(function (dd) {
-      if (!dd.isTueThu || !dd.workday) return;
-      if (people.some(function (P) { return !P.noNobet && P.assign[dd.day] === 'M'; })) return;
-      var cand = people.filter(function (P) {
-        return !P.noNobet && P.assign[dd.day] === '' && (P.hours + 8 <= P.target) && !P.offReq.has(dd.day);
-      }).sort(function (a, b) { return (b.target - b.hours) - (a.target - a.hours); })[0];
-      if (cand) addMesai(cand, dd.day);
+      if (!dd.workday) return;
+      var have = people.filter(function (P) { return !P.noNobet && P.assign[dd.day] === 'M'; }).length;
+      while (have < 2) {
+        var cand = people.filter(function (P) {
+          return !P.noNobet && P.assign[dd.day] === '' && (P.hours + 8 <= P.target) && !P.offReq.has(dd.day);
+        }).sort(function (a, b) { return (b.target - b.hours) - (a.target - a.hours); })[0];
+        if (!cand) { warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüz mesaisinde en az 2 kişi sağlanamadı.'); break; }
+        addMesai(cand, dd.day); have++;
+      }
     });
     // 2b) hedefe tamamla — mesaiyi EN UZUN BOŞLUĞU kıracak şekilde yerleştir
     //     (böylece üst üste >3 gün "gelmeme" oluşmaz). offReq günleri mümkünse boş bırakılır.
@@ -357,7 +362,7 @@
     var grid = {};
     people.forEach(function (P) { grid[P.name] = P.assign; });
     return { year: year, month: month, nDays: nDays, days: days, grid: grid, totals: totals, warnings: warnings,
-      meta: { base: BASE_TARGET, hours: HOURS, dowName: DOW_TR } };
+      meta: { base: baseTarget, hours: HOURS, dowName: DOW_TR } };
   }
 
   var API = { buildSchedule: buildSchedule, HOURS: HOURS, DOW_TR: DOW_TR, daysInMonth: daysInMonth };
