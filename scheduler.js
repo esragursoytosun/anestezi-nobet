@@ -75,7 +75,8 @@
       return {
         idx: idx, name: p.name, noNobet: !!p.noNobet, startNI: !!p.startNI,
         YI: YI, offReq: offReq, thursdays: thursdays,
-        target: target, assign: {}, nobetDays: [], weekendNobet: 0, hours: 0, lastNobet: -99
+        target: target, assign: {}, nobetDays: [], weekendNobet: 0, hours: 0, lastNobet: -99,
+        lockedOff: new Set(), mustMesai: new Set()
       };
     });
 
@@ -91,6 +92,17 @@
       });
       // önceki ayın son nöbetçisi -> yeni aya N.İ (dinlenme) ile başlar
       if (P.startNI && (P.assign[1] === '' || P.assign[1] === 'HT')) P.assign[1] = 'NI';
+      // Yıllık izin sonrası: izin bitişi ile ilk iş günü arasındaki hafta sonu/tatil
+      // günlerine NÖBET yazılmaz (izinden sonra dinlenip ilk iş günü gelir).
+      for (var d = 1; d <= nDays; d++) {
+        if (P.assign[d] === 'YI' && (d === nDays || P.assign[d + 1] !== 'YI')) {
+          var R = -1;
+          for (var k = d + 1; k <= nDays; k++) { if (days[k - 1].workday && P.assign[k] !== 'YI') { R = k; break; } }
+          var end = (R < 0) ? nDays : R - 1;
+          for (var g = d + 1; g <= end; g++) P.lockedOff.add(g);
+          if (R > 0) P.mustMesai.add(R);   // dönüş günü mesai (M) olsun, nöbet değil
+        }
+      }
     });
 
     function hoursOf(P) { var h = 0; for (var d = 1; d <= nDays; d++) h += HOURS[P.assign[d]] || 0; return h; }
@@ -100,6 +112,8 @@
     function eligibleForNobet(P, dd, addHours, strict) {
       var d = dd.day, cur = P.assign[d];
       if (P.noNobet) return false;
+      if (P.lockedOff.has(d)) return false;            // izin sonrası hafta sonu -> nöbet yok
+      if (P.mustMesai.has(d)) return false;            // yıllık izin dönüş günü -> mesai, nöbet değil
       if (cur === 'YI' || cur === 'OFF' || cur === 'UCI') return false;
       if (cur === 'NI') return false;
       if (cur === 'N24' || cur === 'N16' || cur === 'M') return false;
@@ -226,7 +240,11 @@
     days.forEach(function (dd) {
       if (!dd.workday) return;
       var need = dd.isTueThu ? 3 : 2;
-      var have = people.filter(function (P) { return !P.noNobet && P.assign[dd.day] === 'M'; }).length;
+      // Gündüz 08-17'de fiilen bulunanlar: M8-17 + N08-08 (24s). N16-08 daytime'ı kapsamaz, sayılmaz.
+      // Sorumlu sayılmaz.
+      var have = people.filter(function (P) {
+        return !P.noNobet && (P.assign[dd.day] === 'M' || P.assign[dd.day] === 'N24');
+      }).length;
       while (have < need) {
         var cand = people.filter(function (P) {
           return !P.noNobet && P.assign[dd.day] === '' && (P.hours + 8 <= P.target) && !P.offReq.has(dd.day);

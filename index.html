@@ -162,6 +162,13 @@ function updateDateBounds(){
   const min=dayToISO(y,m,1), max=dayToISO(y,m,last);
   document.querySelectorAll('#pbody input[type=date]').forEach(inp=>{inp.min=min;inp.max=max;});
 }
+// Türkiye sabit tarihli resmi tatilleri (ay -> gün). Dini bayramlar (Ramazan/Kurban) değişken, elle eklenir.
+function fixedHolidays(m){
+  return ({0:[1],3:[23],4:[1,19],6:[15],7:[30],9:[29]})[m] || [];
+}
+function fillHolidays(){
+  document.getElementById('holidays').value = fixedHolidays(curYM().m).join(',');
+}
 
 function dr(cls){ // date-range hücresi
   return `<div class="daterange"><input type="date" class="${cls}-s" title="başlangıç"><span>–</span><input type="date" class="${cls}-e" title="bitiş"></div>`;
@@ -252,7 +259,7 @@ function flash(msg){
   document.body.appendChild(d);setTimeout(()=>d.remove(),1500);
 }
 
-document.getElementById('month').addEventListener('change',updateDateBounds);
+document.getElementById('month').addEventListener('change',()=>{updateDateBounds();fillHolidays();});
 document.getElementById('year').addEventListener('change',updateDateBounds);
 
 let LAST=null;
@@ -310,6 +317,7 @@ function exportCSV(){
 }
 
 loadCfg();
+if(!document.getElementById('holidays').value.trim()) fillHolidays();
 generate();
 </script>
 </body>
