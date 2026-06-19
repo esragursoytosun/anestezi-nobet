@@ -110,6 +110,9 @@
     function hoursOf(P) { var h = 0; for (var d = 1; d <= nDays; d++) h += HOURS[P.assign[d]] || 0; return h; }
     function presentCode(c) { return c === 'M' || c === 'N24' || c === 'N16'; }
     function offRun(c) { return c === 'NI' || c === 'UCI'; }   // "gelmeme" sayılan boşluk
+    // Yıllık izin ÖNCESİ/sonrası KASITLI boşluk (yönetim verir) lockedOff'ta işaretli;
+    // bu günler "üst üste en fazla 3 gün gelmeme" sayımına GİRMEZ (izin bloğunun parçası).
+    function absentRun(P, d) { return offRun(P.assign[d]) && !P.lockedOff.has(d); }
 
     function eligibleForNobet(P, dd, addHours, strict) {
       var d = dd.day, cur = P.assign[d];
@@ -186,7 +189,7 @@
           // nöbet konulamadıysa en azından izinden önceki 2 iş günü ücretli izin
           [0, 1].forEach(function (i) {
             var dd = wprev[i];
-            if (dd !== undefined && P.assign[dd] === '') P.assign[dd] = 'UCI';
+            if (dd !== undefined && P.assign[dd] === '') { P.assign[dd] = 'UCI'; P.lockedOff.add(dd); }
           });
         }
       });
@@ -306,7 +309,7 @@
       for (var guard = 0; guard < 80; guard++) {
         var runStart = -1, best = null;
         for (var i = 0; i <= workdayNums.length; i++) {
-          var absent = (i < workdayNums.length) && offRun(P.assign[workdayNums[i]]);
+          var absent = (i < workdayNums.length) && absentRun(P, workdayNums[i]);
           if (absent) { if (runStart < 0) runStart = i; }
           else if (runStart >= 0) {
             var len = i - runStart, hasUCI = false;
@@ -328,8 +331,8 @@
           if (P.assign[dm] !== 'M') continue;
           if (P.mustMesai.has(dm)) continue;            // yıllık izin dönüş günü taşınmaz
           if (dm >= workdayNums[best.start] && dm <= workdayNums[best.end - 1]) continue;
-          var prevOk = m > 0 && !offRun(P.assign[workdayNums[m - 1]]);
-          var nextOk = m < workdayNums.length - 1 && !offRun(P.assign[workdayNums[m + 1]]);
+          var prevOk = m > 0 && !absentRun(P, workdayNums[m - 1]);
+          var nextOk = m < workdayNums.length - 1 && !absentRun(P, workdayNums[m + 1]);
           if (prevOk && nextOk) { donor = dm; break; }
         }
         if (donor < 0) {
@@ -352,7 +355,7 @@
     function longestAbsentRun(P) {
       var best = 0, run = 0;
       for (var i = 0; i < workdayNums.length; i++) {
-        if (offRun(P.assign[workdayNums[i]])) { run++; if (run > best) best = run; } else run = 0;
+        if (absentRun(P, workdayNums[i])) { run++; if (run > best) best = run; } else run = 0;
       }
       return best;
     }
