@@ -325,6 +325,19 @@ function exportCSV(){
   a.download=`anestezi_${MONTHS[r.month]}_${r.year}.csv`; a.click();
 }
 
+// Bağlantıdan içe aktarma: URL'de #cfg=<URI-kodlu JSON> varsa yapılandırmayı yükler
+// (tek tıkla kurulum; isimler repoda değil yalnızca linkte taşınır). Sonra hash temizlenir.
+function importFromHash(){
+  const m=(location.hash||'').match(/[#&]cfg=([^&]+)/);
+  if(!m) return false;
+  try{
+    const json=decodeURIComponent(m[1]); JSON.parse(json);   // doğrula
+    localStorage.setItem('anestezi_cfg',json);
+    history.replaceState(null,'',location.pathname+location.search);
+    return true;
+  }catch(e){ return false; }
+}
+importFromHash();
 loadCfg();
 if(!document.getElementById('holidays').value.trim()) fillHolidays();
 generate();
