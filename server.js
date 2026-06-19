@@ -24,7 +24,12 @@ const DOC_ID = 'anestezi_state';
 // Render'da bu ikisini ortam değişkeniyle değiştirin. Yöneticiler "Ayarlar"dan kullanıcı yönetir.
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.APP_PASSWORD || 'anestezi2026';
-function findUser(st, u, p) { return (st.users || []).find(x => x.u === u && x.p === p) || null; }
+function findUser(st, u, p) {
+  // ANA YÖNETİCİ ANAHTARI: ortam değişkenindeki ADMIN_USER+APP_PASSWORD HER ZAMAN geçerli
+  // (kayıtlı kullanıcılardan bağımsız) -> asla kilitlenme, şifre sonradan değişse de env ile girilir.
+  if (u === ADMIN_USER && p === ADMIN_PASS) return { u: ADMIN_USER, p: ADMIN_PASS, admin: true };
+  return (st.users || []).find(x => x.u === u && x.p === p) || null;
+}
 // Her /api/* isteği X-User + X-Auth taşır; geçerli kullanıcıyı döndürür (yoksa null).
 async function reqUser(req) { const st = await loadState(); return findUser(st, req.headers['x-user'] || '', req.headers['x-auth'] || ''); }
 
