@@ -37,12 +37,15 @@ Bu repo `git push` ile güncel. Render bu repoyu otomatik çeker.
    - **Plan:** Free (yeterli)
 4. **Environment** → **Add Environment Variable**:
    - **Key:** `MONGODB_URI` · **Value:** (1. adımdaki bağlantı dizesi)
-   *(Atlas kullanmıyorsanız bu adımı atlayın; dosya moduna düşer.)*
+     *(Atlas kullanmıyorsanız bu adımı atlayın; dosya moduna düşer.)*
+   - **Key:** `APP_PASSWORD` · **Value:** (ekip parolanız — örn. kendi belirlediğiniz gizli bir söz)
+     ❗ **ÖNEMLİ:** Bunu mutlaka değiştirin. Ayarlamazsanız varsayılan parola `anestezi2026` olur ve bu
+     kod herkese açık repoda görünür — yani yetkisiz biri girebilir. Kendi gizli parolanızı verin.
 5. **Create Web Service** → ~2-3 dk'da `https://anestezi-nobet.onrender.com` gibi bir adres verir.
 
 ## 4) Kullanım
 
-- O adresi **iki kişi** de açar. Sağ üstte **🟢 Ortak (canlı)** görünür.
+- O adresi **iki kişi** de açar; **parola** sorulur (`APP_PASSWORD`). Girince sağ üstte **🟢 Ortak (canlı)** görünür. (Tarayıcı parolayı hatırlar; "Çıkış" ile çıkılır.)
 - Biri değişiklik yapıp **Liste Oluştur** der ya da bir hücreyi elle değiştirir → ~2.5 sn içinde diğerinin ekranı kendiliğinden güncellenir ("Arkadaşınız güncelledi ↻").
 - Aynı anda farklı şeyler değiştirirseniz **son kaydeden** geçerli olur; çakışmamak için kabaca aynı bölümü aynı anda düzenlemeyin.
 

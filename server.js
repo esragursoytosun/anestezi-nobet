@@ -19,6 +19,9 @@ const DATA_DIR = path.join(ROOT, 'data');
 const FILE = path.join(DATA_DIR, 'state.json');
 const MONGODB_URI = process.env.MONGODB_URI;
 const DOC_ID = 'anestezi_state';
+// Ortak parola (Render'da APP_PASSWORD ortam değişkeniyle değiştirin). Yalnız /api/* korunur.
+const PASSWORD = process.env.APP_PASSWORD || 'anestezi2026';
+function authed(req) { return (req.headers['x-auth'] || '') === PASSWORD; }
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.csv': 'text/csv; charset=utf-8',
@@ -74,8 +77,22 @@ function sendJSON(res, code, obj) { res.writeHead(code, { 'Content-Type': 'appli
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
 
-  // ---- API ----
+  // ---- Giriş: parola doğrula ----
+  if (u.pathname === '/api/login' && req.method === 'POST') {
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 1e4) req.destroy(); });
+    req.on('end', () => {
+      try { const p = (JSON.parse(body || '{}').password) || '';
+        if (p === PASSWORD) return sendJSON(res, 200, { ok: true });
+        return sendJSON(res, 401, { ok: false, error: 'Parola hatalı' });
+      } catch (e) { return sendJSON(res, 400, { error: e.message }); }
+    });
+    return;
+  }
+
+  // ---- API (parola korumalı) ----
   if (u.pathname === '/api/state') {
+    if (!authed(req)) return sendJSON(res, 401, { error: 'Giriş gerekli' });
     if (req.method === 'GET') { const st = await loadState(); return sendJSON(res, 200, st); }
     if (req.method === 'POST') {
       let body = '';

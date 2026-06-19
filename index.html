@@ -83,6 +83,18 @@
 </style>
 </head>
 <body>
+<div id="loginOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.92);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px;width:320px;max-width:90%;text-align:center">
+    <div style="font-size:30px">🔒</div>
+    <h2 style="margin:8px 0 4px;color:var(--accent2);font-size:17px">Giriş</h2>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 14px">Bu sayfa parola korumalı. Ekip parolasını girin.</p>
+    <input id="loginPw" type="password" placeholder="Parola" style="width:100%;margin-bottom:10px"
+      onkeydown="if(event.key==='Enter')doLogin()" />
+    <div id="loginErr" style="color:var(--err);font-size:13px;min-height:18px;margin-bottom:8px"></div>
+    <button onclick="doLogin()" style="width:100%">Giriş Yap</button>
+  </div>
+</div>
+
 <header>
   <div style="font-size:28px">🩺</div>
   <div>
@@ -152,12 +164,13 @@
     <button class="sec" onclick="exportCSV()">⬇️ CSV</button>
     <button class="sec" onclick="window.print()">🖨️ Yazdır / PDF</button>
     <span id="syncBadge" style="margin-left:auto;align-self:center;font-size:13px;font-weight:600;color:#94a3b8">⚪ Yerel</span>
+    <button id="logoutBtn" class="sec sm" style="display:none;align-self:center" onclick="logout()">Çıkış</button>
   </div>
 
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v30</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v31</b>
   </div>
 </div>
 
@@ -319,19 +332,22 @@ function generate(){
   cloudSave();
 }
 
-// ====================== ORTAK / CANLI SENKRON (Utopya benzeri) ======================
+// ============== ORTAK / CANLI SENKRON + PAROLA GİRİŞİ (Utopya benzeri) ==============
 // /api/state ile ortak durum: iki kişi aynı anda çalışır, ~2.5sn poll ile canlı senkron.
-// Sunucu yoksa (GitHub Pages / file://) otomatik localStorage moduna düşer.
-const SYNC={on:false,rev:-1,me:'u'+Math.random().toString(36).slice(2,7),editing:false};
-function setSyncBadge(){ const b=document.getElementById('syncBadge'); if(!b)return;
-  b.textContent=SYNC.on?'🟢 Ortak (canlı)':'⚪ Yerel';
-  b.style.color=SYNC.on?'#4ade80':'#94a3b8';
-  b.title=SYNC.on?'Değişiklikler sunucuya kaydolur, arkadaşınızla canlı paylaşılır':'Sunucu yok — yalnız bu tarayıcıda';
-}
+// /api/* parola korumalı (X-Auth). Sunucu yoksa (GitHub Pages) otomatik localStorage moduna düşer.
+const SYNC={on:false,rev:-1,me:'u'+Math.random().toString(36).slice(2,7),editing:false,pollStarted:false};
+function getAuth(){ return localStorage.getItem('anestezi_auth')||''; }
+function authHeaders(extra){ return Object.assign({'X-Auth':getAuth()}, extra||{}); }
+function setSyncBadge(){ const b=document.getElementById('syncBadge'); if(b){
+    b.textContent=SYNC.on?'🟢 Ortak (canlı)':'⚪ Yerel';
+    b.style.color=SYNC.on?'#4ade80':'#94a3b8';
+    b.title=SYNC.on?'Değişiklikler sunucuya kaydolur, arkadaşınızla canlı paylaşılır':'Sunucu yok — yalnız bu tarayıcıda'; }
+  const lo=document.getElementById('logoutBtn'); if(lo) lo.style.display=SYNC.on?'inline-block':'none'; }
 function cloudSaveNow(){ if(!SYNC.on||!LAST)return;
-  fetch('/api/state',{method:'POST',headers:{'Content-Type':'application/json'},
+  fetch('/api/state',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),
     body:JSON.stringify({cfg:readCfg(),grid:LAST.grid,by:SYNC.me})})
-    .then(r=>r.json()).then(st=>{ if(st&&st.rev!=null)SYNC.rev=st.rev; }).catch(()=>{}); }
+    .then(r=>{ if(r.status===401){requireLogin();return null;} return r.json(); })
+    .then(st=>{ if(st&&st.rev!=null)SYNC.rev=st.rev; }).catch(()=>{}); }
 let _saveT=null;
 function cloudSave(){ if(!SYNC.on)return; clearTimeout(_saveT); _saveT=setTimeout(cloudSaveNow,600); }
 function applyState(st){ if(!st||!st.cfg)return;
@@ -340,15 +356,36 @@ function applyState(st){ if(!st||!st.cfg)return;
     render(LAST); localStorage.setItem('anestezi_cfg',JSON.stringify(readCfg()));
   }catch(e){} }
 async function cloudPoll(){ if(!SYNC.on||SYNC.editing)return;
-  try{ const st=await(await fetch('/api/state',{cache:'no-store'})).json();
+  try{ const r=await fetch('/api/state',{cache:'no-store',headers:authHeaders()});
+    if(r.status===401){ requireLogin(); return; }
+    const st=await r.json();
     if(st&&st.rev>SYNC.rev){ const other=st.by!==SYNC.me; SYNC.rev=st.rev; if(other){ applyState(st); flash('Arkadaşınız güncelledi ↻'); } }
   }catch(e){} }
 async function cloudInit(){
-  try{ const st=await(await fetch('/api/state',{cache:'no-store'})).json();
-    SYNC.on=true; setSyncBadge();
+  try{ const r=await fetch('/api/state',{cache:'no-store',headers:authHeaders()});
+    if(r.status===401){ SYNC.on=true; setSyncBadge(); requireLogin(); return 'need-login'; }
+    const st=await r.json(); SYNC.on=true; setSyncBadge();
     if(st&&st.cfg){ SYNC.rev=st.rev; applyState(st); return true; }
     SYNC.rev=st?st.rev:0; return false;
   }catch(e){ SYNC.on=false; setSyncBadge(); return false; }
+}
+// ---- Parola girişi ----
+function requireLogin(){ const o=document.getElementById('loginOverlay'); if(o){o.style.display='flex'; const i=document.getElementById('loginPw'); if(i)i.focus();} }
+async function doLogin(){
+  const pw=(document.getElementById('loginPw').value||'').trim();
+  const err=document.getElementById('loginErr');
+  try{ const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+    if(r.ok){ localStorage.setItem('anestezi_auth',pw); document.getElementById('loginOverlay').style.display='none'; err.textContent=''; initApp(); }
+    else { err.textContent='Parola hatalı'; }
+  }catch(e){ err.textContent='Sunucuya ulaşılamadı'; }
+}
+function logout(){ localStorage.removeItem('anestezi_auth'); location.reload(); }
+function initApp(){
+  cloudInit().then(loaded=>{
+    if(loaded==='need-login') return;                 // giriş ekranı açık, bekle
+    if(!loaded){ loadCfg(); if(!document.getElementById('holidays').value.trim()) fillHolidays(); generate(); }
+    if(SYNC.on && !SYNC.pollStarted){ SYNC.pollStarted=true; setInterval(cloudPoll,2500); }
+  });
 }
 function render(r){
   const out=document.getElementById('output');
@@ -476,15 +513,8 @@ function importFromHash(){
     return true;
   }catch(e){ return false; }
 }
-const _imported=importFromHash();
-cloudInit().then(loadedFromCloud=>{
-  if(!loadedFromCloud){
-    loadCfg();
-    if(!document.getElementById('holidays').value.trim()) fillHolidays();
-    generate();                       // generate() ortak boşsa cloudSaveNow ile ilk durumu yazar (cloudSave)
-  }
-  if(SYNC.on) setInterval(cloudPoll, 2500);   // canlı senkron (arkadaşın değişiklikleri ~2.5sn'de)
-});
+importFromHash();
+initApp();
 </script>
 </body>
 </html>
