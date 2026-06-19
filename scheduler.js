@@ -367,18 +367,21 @@
         {
           // taşınacak mesai yok (kişi çok nöbetli): bir 24s nöbeti 16s'e indir (8s açılır),
           // bu seride bir ücretli izin gününü mesaiye çevir -> saat 176 sabit, boşluk kırılır.
-          var n24 = -1;
-          // TÜM günleri tara (hafta sonu/tatil DAHİL): N24'ü N16'ya indirip açılan 8 saati
-          // boşluğa mesai olarak koyarız. Gündüz min YALNIZCA iş gününde geçerli -> hafta
-          // sonu/tatilde indirim serbest (yine 2 nöbetçi kalır). Önce iş-günü-dışını tercih et.
+          var n24 = -1, wkndCand = -1;
+          // Bir N24'ü N16'ya indirip açılan 8 saati boşluğa mesai yaparız (saat sabit).
+          // ÖNCELİK: İŞ GÜNÜ fazlası olan N24 (gündüz min'i bozmadan). Hafta sonu N16'yı
+          // SON ÇARE tut: hafta sonu N16 olunca o gün gündüzde 1 kişi kalıyor (kullanıcı:
+          // "zorunda kalmadıkça hafta sonu 16 olmasın"). İş günü fazlası yoksa hafta sonuna düş.
           for (var dq2 = 1; dq2 <= nDays; dq2++) {
             if (P.assign[dq2] !== 'N24') continue;
-            var isWd = days[dq2 - 1].workday;
-            if (!isWd && !OPT_WEEKEND_N16) continue;             // seçenek kapalı: hafta sonu N16'ya inme
-            if (isWd && daytimeCount(dq2) - 1 < dayNeed(days[dq2 - 1])) continue;
-            if (!isWd) { n24 = dq2; break; }                    // hafta sonu/tatil: en güvenli, öncele
-            if (n24 < 0) n24 = dq2;                              // iş günü adayı (yedek)
+            if (days[dq2 - 1].workday) {
+              if (daytimeCount(dq2) - 1 < dayNeed(days[dq2 - 1])) continue;  // yalnız fazlası olan iş günü
+              n24 = dq2; break;                                  // iş günü fazlası -> TERCİH
+            } else if (OPT_WEEKEND_N16 && wkndCand < 0) {
+              wkndCand = dq2;                                     // hafta sonu adayı (son çare)
+            }
           }
+          if (n24 < 0) n24 = wkndCand;                           // iş günü fazlası yoksa zorunlu hafta sonu
           if (n24 > 0) { P.assign[n24] = 'N16'; P.hours -= 8; P.assign[mid] = 'M'; P.hours += 8; continue; }
           return;
         }
