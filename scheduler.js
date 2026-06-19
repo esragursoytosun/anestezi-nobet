@@ -568,6 +568,25 @@
       if (!moved) break;
     }
 
+    // ---- 2.95) N24 TERCİHİ: mümkünse N16'yı N24'e yükselt ----
+    // Kullanıcı: "mümkünse nöbetler 16 yerine 24 olsun". N16->N24 (+8s) yapıp dengelemek
+    // için fazlası olan bir iş gününde bir M'yi UCI'ye çevir (saat sabit). YALNIZCA
+    // >3 boş seri açılmıyorsa kabul (yani N16 küme kırmak için 'yük taşımıyorsa').
+    people.forEach(function (P) {
+      if (P.noNobet) return;
+      for (var d = 1; d <= nDays; d++) {
+        if (P.assign[d] !== 'N16') continue;
+        for (var m = 0; m < workdayNums.length; m++) {
+          var dm = workdayNums[m];
+          if (dm === d || P.assign[dm] !== 'M' || P.mustMesai.has(dm)) continue;
+          if (daytimeCount(dm) - 1 < dayNeed(days[dm - 1])) continue;     // donör günün gündüz min'i korunur
+          P.assign[d] = 'N24'; P.hours += 8; P.assign[dm] = 'UCI'; P.hours -= 8;   // tentatif
+          if (longestAbsentRun(P) <= 3) break;                            // kabul -> bu N16 yükseldi
+          P.assign[d] = 'N16'; P.hours -= 8; P.assign[dm] = 'M'; P.hours += 8;     // geri al
+        }
+      }
+    });
+
     // ---- NİHAİ DOĞRULAMA: TEK kaynak analyze() (yalnızca son grid'den; bayat uyarı olmaz) ----
     var gridA = {}; people.forEach(function (P) { gridA[P.name] = P.assign; });
     var plist = people.map(function (P) {
