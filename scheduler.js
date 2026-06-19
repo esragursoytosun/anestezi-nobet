@@ -177,9 +177,16 @@
         // Nöbetten izine kadar TÜM iş günleri off (mesai/nöbet yazılmaz): N.İ + ücretli izin.
         var placed = false;
         if (!P.noNobet) {
-          [3, 2].some(function (ni) {
-            var nd = wprev[ni];
-            if (nd !== undefined && P.assign[nd] === '' && P.hours + 24 <= P.target) {
+          // Aday: 4 iş günü önce (index 3), olmazsa 3 iş günü önce (index 2).
+          // ÖNEMLİ: PAZARTESİ'ye denk gelen adayı ilk turda ATLA. (Pzt'den başlamak
+          // izine kadar bir gün fazla boşluk verir; örn. araya resmi tatil girince
+          // 4-geri sayım Pzt'ye kayıyor.) Pzt-izin için tercih edilen: önceki SALI.
+          // Hiçbir uygun gün kalmazsa 2. turda Pazartesi'ye de izin verilir.
+          [false, true].some(function (allowMon) {
+            return [3, 2].some(function (ni) {
+              var nd = wprev[ni];
+              if (nd === undefined || P.assign[nd] !== '' || P.hours + 24 > P.target) return false;
+              if (!allowMon && days[nd - 1].dow === 1) return false;   // Pazartesi'yi ilk turda atla
               placeNobet(P, days[nd - 1], 'N24');           // ertesi gün N.İ (bitişikse)
               // nöbet ile izin arası TÜM günler (HAFTA SONU DAHİL): nöbet yazılmaz, boş iş günleri ücretli izin
               for (var g2 = nd + 1; g2 < bs; g2++) {
@@ -187,8 +194,7 @@
                 if (P.assign[g2] === '') P.assign[g2] = 'UCI';
               }
               placed = true; return true;
-            }
-            return false;
+            });
           });
         }
         if (!placed) {
