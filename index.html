@@ -87,11 +87,41 @@
   <div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px;width:320px;max-width:90%;text-align:center">
     <div style="font-size:30px">🔒</div>
     <h2 style="margin:8px 0 4px;color:var(--accent2);font-size:17px">Giriş</h2>
-    <p style="color:var(--muted);font-size:13px;margin:0 0 14px">Bu sayfa parola korumalı. Ekip parolasını girin.</p>
-    <input id="loginPw" type="password" placeholder="Parola" style="width:100%;margin-bottom:10px"
+    <p style="color:var(--muted);font-size:13px;margin:0 0 14px">Kullanıcı adı ve şifrenizle girin.</p>
+    <input id="loginUser" type="text" placeholder="Kullanıcı adı" autocomplete="username" style="width:100%;margin-bottom:8px"
+      onkeydown="if(event.key==='Enter')document.getElementById('loginPw').focus()" />
+    <input id="loginPw" type="password" placeholder="Şifre" autocomplete="current-password" style="width:100%;margin-bottom:10px"
       onkeydown="if(event.key==='Enter')doLogin()" />
     <div id="loginErr" style="color:var(--err);font-size:13px;min-height:18px;margin-bottom:8px"></div>
     <button onclick="doLogin()" style="width:100%">Giriş Yap</button>
+  </div>
+</div>
+
+<div id="settingsOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.92);z-index:1000;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 12px">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;width:420px;max-width:95%">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <div style="font-size:22px">⚙️</div><h2 style="margin:0;color:var(--accent2);font-size:17px;flex:1">Ayarlar</h2>
+      <button class="sec sm" onclick="closeSettings()">Kapat</button>
+    </div>
+    <div id="setWho" class="muted" style="font-size:13px;margin-bottom:14px"></div>
+
+    <h3 style="font-size:14px;color:var(--txt);margin:0 0 8px">🔑 Şifremi değiştir</h3>
+    <div style="display:flex;gap:8px;margin-bottom:6px">
+      <input id="setNewPw" type="password" placeholder="Yeni şifre" style="flex:1" />
+      <button onclick="changeMyPw()">Değiştir</button>
+    </div>
+
+    <div id="setAdminBox" style="display:none;margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+      <h3 style="font-size:14px;color:var(--txt);margin:0 0 8px">👥 Kullanıcılar (yönetici)</h3>
+      <div id="setUserList" style="font-size:13px;margin-bottom:10px"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <input id="newUserName" type="text" placeholder="Kullanıcı adı" style="flex:1;min-width:110px" />
+        <input id="newUserPw" type="text" placeholder="Şifre" style="flex:1;min-width:90px" />
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);margin:0"><input type="checkbox" id="newUserAdmin" style="width:auto" /> yönetici</label>
+        <button class="sm" onclick="addUser()">+ Ekle</button>
+      </div>
+    </div>
+    <div id="setMsg" style="font-size:13px;min-height:18px;margin-top:12px"></div>
   </div>
 </div>
 
@@ -164,13 +194,14 @@
     <button class="sec" onclick="exportCSV()">⬇️ CSV</button>
     <button class="sec" onclick="window.print()">🖨️ Yazdır / PDF</button>
     <span id="syncBadge" style="margin-left:auto;align-self:center;font-size:13px;font-weight:600;color:#94a3b8">⚪ Yerel</span>
+    <button id="settingsBtn" class="sec sm" style="display:none;align-self:center" onclick="openSettings()">⚙️ Ayarlar</button>
     <button id="logoutBtn" class="sec sm" style="display:none;align-self:center" onclick="logout()">Çıkış</button>
   </div>
 
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v32</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v33</b>
   </div>
 </div>
 
@@ -359,14 +390,17 @@ function generate(){
 // ============== ORTAK / CANLI SENKRON + PAROLA GİRİŞİ (Utopya benzeri) ==============
 // /api/state ile ortak durum: iki kişi aynı anda çalışır, ~2.5sn poll ile canlı senkron.
 // /api/* parola korumalı (X-Auth). Sunucu yoksa (GitHub Pages) otomatik localStorage moduna düşer.
-const SYNC={on:false,rev:-1,me:'u'+Math.random().toString(36).slice(2,7),editing:false,pollStarted:false};
+const SYNC={on:false,rev:-1,me:'',admin:false,editing:false,pollStarted:false};
+function getUser(){ return localStorage.getItem('anestezi_user')||''; }
 function getAuth(){ return localStorage.getItem('anestezi_auth')||''; }
-function authHeaders(extra){ return Object.assign({'X-Auth':getAuth()}, extra||{}); }
+function authHeaders(extra){ return Object.assign({'X-User':getUser(),'X-Auth':getAuth()}, extra||{}); }
 function setSyncBadge(){ const b=document.getElementById('syncBadge'); if(b){
-    b.textContent=SYNC.on?'🟢 Ortak (canlı)':'⚪ Yerel';
+    b.textContent=SYNC.on?('🟢 '+(SYNC.me||'')+' (canlı)'):'⚪ Yerel';
     b.style.color=SYNC.on?'#4ade80':'#94a3b8';
-    b.title=SYNC.on?'Değişiklikler sunucuya kaydolur, arkadaşınızla canlı paylaşılır':'Sunucu yok — yalnız bu tarayıcıda'; }
-  const lo=document.getElementById('logoutBtn'); if(lo) lo.style.display=SYNC.on?'inline-block':'none'; }
+    b.title=SYNC.on?'Giriş: '+SYNC.me+' · değişiklikler ortak/canlı':'Sunucu yok — yalnız bu tarayıcıda'; }
+  const show=SYNC.on?'inline-block':'none';
+  const lo=document.getElementById('logoutBtn'); if(lo) lo.style.display=show;
+  const se=document.getElementById('settingsBtn'); if(se) se.style.display=show; }
 function cloudSaveNow(){ if(!SYNC.on||!LAST)return;
   fetch('/api/state',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),
     body:JSON.stringify({cfg:readCfg(),grid:LAST.grid,by:SYNC.me})})
@@ -383,27 +417,78 @@ async function cloudPoll(){ if(!SYNC.on||SYNC.editing)return;
   try{ const r=await fetch('/api/state',{cache:'no-store',headers:authHeaders()});
     if(r.status===401){ requireLogin(); return; }
     const st=await r.json();
-    if(st&&st.rev>SYNC.rev){ const other=st.by!==SYNC.me; SYNC.rev=st.rev; if(other){ applyState(st); flash('Arkadaşınız güncelledi ↻'); } }
+    if(st&&st.rev>SYNC.rev){ const other=st.by!==SYNC.me; SYNC.rev=st.rev; if(other){ applyState(st); flash((st.by||'Arkadaşınız')+' güncelledi ↻'); } }
   }catch(e){} }
 async function cloudInit(){
   try{ const r=await fetch('/api/state',{cache:'no-store',headers:authHeaders()});
-    if(r.status===401){ SYNC.on=true; setSyncBadge(); requireLogin(); return 'need-login'; }
-    const st=await r.json(); SYNC.on=true; setSyncBadge();
+    if(r.status===401){ SYNC.on=true; SYNC.me=''; setSyncBadge(); requireLogin(); return 'need-login'; }
+    const st=await r.json(); SYNC.on=true; SYNC.me=getUser(); setSyncBadge();
     if(st&&st.cfg){ SYNC.rev=st.rev; applyState(st); return true; }
     SYNC.rev=st?st.rev:0; return false;
   }catch(e){ SYNC.on=false; setSyncBadge(); return false; }
 }
-// ---- Parola girişi ----
-function requireLogin(){ const o=document.getElementById('loginOverlay'); if(o){o.style.display='flex'; const i=document.getElementById('loginPw'); if(i)i.focus();} }
+// ---- Kullanıcı adı + şifre girişi ----
+function requireLogin(){ const o=document.getElementById('loginOverlay'); if(o){o.style.display='flex'; const i=document.getElementById('loginUser'); if(i)i.focus();} }
 async function doLogin(){
+  const usr=(document.getElementById('loginUser').value||'').trim();
   const pw=(document.getElementById('loginPw').value||'').trim();
   const err=document.getElementById('loginErr');
-  try{ const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
-    if(r.ok){ localStorage.setItem('anestezi_auth',pw); document.getElementById('loginOverlay').style.display='none'; err.textContent=''; initApp(); }
-    else { err.textContent='Parola hatalı'; }
+  if(!usr){ err.textContent='Kullanıcı adı girin'; return; }
+  try{ const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:usr,password:pw})});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok&&j.ok){ localStorage.setItem('anestezi_user',usr); localStorage.setItem('anestezi_auth',pw);
+      SYNC.me=usr; SYNC.admin=!!j.admin; document.getElementById('loginOverlay').style.display='none'; err.textContent=''; initApp(); }
+    else { err.textContent=(j&&j.error)||'Kullanıcı adı veya şifre hatalı'; }
   }catch(e){ err.textContent='Sunucuya ulaşılamadı'; }
 }
-function logout(){ localStorage.removeItem('anestezi_auth'); location.reload(); }
+function logout(){ localStorage.removeItem('anestezi_user'); localStorage.removeItem('anestezi_auth'); location.reload(); }
+
+// ---- AYARLAR: şifre değiştir + (yönetici) kullanıcı yönetimi ----
+async function openSettings(){
+  const ov=document.getElementById('settingsOverlay'); if(!ov)return;
+  ov.style.display='flex';
+  document.getElementById('setMsg').textContent='';
+  document.getElementById('setNewPw').value='';
+  // yönetici bölümü + kullanıcı listesi
+  try{ const j=await (await fetch('/api/users',{headers:authHeaders()})).json();
+    SYNC.admin=!!j.admin;
+    document.getElementById('setWho').textContent='Giriş: '+(j.me||SYNC.me)+(j.admin?' (yönetici)':'');
+    const adminBox=document.getElementById('setAdminBox'); adminBox.style.display=j.admin?'block':'none';
+    if(j.admin) renderUsers(j.users);
+  }catch(e){ document.getElementById('setWho').textContent='Giriş: '+SYNC.me; }
+}
+function closeSettings(){ const ov=document.getElementById('settingsOverlay'); if(ov)ov.style.display='none'; }
+function renderUsers(users){
+  const box=document.getElementById('setUserList');
+  box.innerHTML=(users||[]).map(u=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)">
+    <span style="flex:1">${u.u}${u.admin?' <span class="muted">(yönetici)</span>':''}</span>
+    ${u.u===SYNC.me?'':`<button class="sm danger" onclick="userAction('remove','${u.u}')">Sil</button>`}
+  </div>`).join('');
+}
+async function changeMyPw(){
+  const np=(document.getElementById('setNewPw').value||'').trim(); const m=document.getElementById('setMsg');
+  if(np.length<3){ m.style.color='var(--err)'; m.textContent='Şifre en az 3 karakter olmalı'; return; }
+  try{ const r=await fetch('/api/changepw',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({newPass:np})});
+    const j=await r.json();
+    if(r.ok){ localStorage.setItem('anestezi_auth',np); m.style.color='var(--ok)'; m.textContent='Şifreniz değiştirildi ✓'; document.getElementById('setNewPw').value=''; }
+    else { m.style.color='var(--err)'; m.textContent=j.error||'Hata'; }
+  }catch(e){ m.style.color='var(--err)'; m.textContent='Sunucuya ulaşılamadı'; }
+}
+async function userAction(action,u,p,admin){
+  const m=document.getElementById('setMsg');
+  try{ const r=await fetch('/api/users',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action,u,p,admin})});
+    const j=await r.json();
+    if(r.ok){ renderUsers(j.users); m.style.color='var(--ok)'; m.textContent='Kaydedildi ✓'; }
+    else { m.style.color='var(--err)'; m.textContent=j.error||'Hata'; }
+  }catch(e){ m.style.color='var(--err)'; m.textContent='Sunucuya ulaşılamadı'; }
+}
+function addUser(){
+  const u=(document.getElementById('newUserName').value||'').trim();
+  const p=(document.getElementById('newUserPw').value||'').trim();
+  const ad=document.getElementById('newUserAdmin').checked;
+  if(!u||!p){ const m=document.getElementById('setMsg'); m.style.color='var(--err)'; m.textContent='Kullanıcı adı ve şifre girin'; return; }
+  userAction('add',u,p,ad); document.getElementById('newUserName').value=''; document.getElementById('newUserPw').value=''; document.getElementById('newUserAdmin').checked=false;
+}
 function initApp(){
   cloudInit().then(loaded=>{
     if(loaded==='need-login') return;                 // giriş ekranı açık, bekle

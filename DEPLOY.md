@@ -38,9 +38,15 @@ Bu repo `git push` ile güncel. Render bu repoyu otomatik çeker.
 4. **Environment** → **Add Environment Variable**:
    - **Key:** `MONGODB_URI` · **Value:** (1. adımdaki bağlantı dizesi)
      *(Atlas kullanmıyorsanız bu adımı atlayın; dosya moduna düşer.)*
-   - **Key:** `APP_PASSWORD` · **Value:** (ekip parolanız — örn. kendi belirlediğiniz gizli bir söz)
-     ❗ **ÖNEMLİ:** Bunu mutlaka değiştirin. Ayarlamazsanız varsayılan parola `anestezi2026` olur ve bu
-     kod herkese açık repoda görünür — yani yetkisiz biri girebilir. Kendi gizli parolanızı verin.
+   - **Key:** `APP_PASSWORD` · **Value:** (yönetici şifresi — kendi belirlediğiniz gizli bir söz)
+     ❗ **ÖNEMLİ:** Bunu mutlaka değiştirin. Ayarlamazsanız varsayılan `anestezi2026` olur ve bu kod
+     herkese açık repoda görünür. Bu, **yönetici** (`admin`) kullanıcısının ilk şifresidir.
+   - *(İsteğe bağlı)* **Key:** `ADMIN_USER` · **Value:** yönetici kullanıcı adı (varsayılan `admin`).
+
+   **Giriş ve kullanıcılar:** İlk girişte **kullanıcı adı: `admin`** (veya `ADMIN_USER`), **şifre: `APP_PASSWORD`**.
+   Giriş yaptıktan sonra sağ üstteki **⚙️ Ayarlar**'dan kendi şifrenizi değiştirebilir, **yeni kullanıcılar
+   ekleyip silebilirsiniz** (arkadaşınıza ayrı kullanıcı adı/şifre verin). Herkes kendi adıyla girer;
+   "kim güncelledi" bilgisinde kullanıcı adı görünür.
 5. **Create Web Service** → ~2-3 dk'da `https://anestezi-nobet.onrender.com` gibi bir adres verir.
 
 ## 4) Kullanım

@@ -19,15 +19,20 @@ const DATA_DIR = path.join(ROOT, 'data');
 const FILE = path.join(DATA_DIR, 'state.json');
 const MONGODB_URI = process.env.MONGODB_URI;
 const DOC_ID = 'anestezi_state';
-// Ortak parola (Render'da APP_PASSWORD ortam değişkeniyle değiştirin). Yalnız /api/* korunur.
-const PASSWORD = process.env.APP_PASSWORD || 'anestezi2026';
-function authed(req) { return (req.headers['x-auth'] || '') === PASSWORD; }
+// Kullanıcılar state.users içinde saklanır. İlk kurulumda yönetici tohumlanır:
+//   kullanıcı adı: ADMIN_USER (vars. "admin"), şifre: APP_PASSWORD (vars. "anestezi2026").
+// Render'da bu ikisini ortam değişkeniyle değiştirin. Yöneticiler "Ayarlar"dan kullanıcı yönetir.
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASS = process.env.APP_PASSWORD || 'anestezi2026';
+function findUser(st, u, p) { return (st.users || []).find(x => x.u === u && x.p === p) || null; }
+// Her /api/* isteği X-User + X-Auth taşır; geçerli kullanıcıyı döndürür (yoksa null).
+async function reqUser(req) { const st = await loadState(); return findUser(st, req.headers['x-user'] || '', req.headers['x-auth'] || ''); }
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.csv': 'text/csv; charset=utf-8',
   '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 
-function emptyState() { return { cfg: null, grid: null, rev: 0, savedAt: null, by: null }; }
+function emptyState() { return { cfg: null, grid: null, rev: 0, savedAt: null, by: null, users: [] }; }
 
 // ---- MongoDB (opsiyonel) ----
 let _col = null, _mongoTried = false;
@@ -53,14 +58,16 @@ async function loadState() {
   if (col) {
     try {
       const doc = await col.findOne({ _id: DOC_ID });
-      if (!doc) return emptyState();
-      const { _id, ...rest } = doc; return Object.assign(emptyState(), rest);
+      if (!doc) return seed(emptyState());
+      const { _id, ...rest } = doc; return seed(Object.assign(emptyState(), rest));
     } catch (e) { console.error('[db] load hata, dosya:', e.message); }
   }
-  try { if (fs.existsSync(FILE)) return Object.assign(emptyState(), JSON.parse(fs.readFileSync(FILE, 'utf8'))); }
+  try { if (fs.existsSync(FILE)) return seed(Object.assign(emptyState(), JSON.parse(fs.readFileSync(FILE, 'utf8')))); }
   catch (e) { console.error('[db] dosya okuma hata:', e.message); }
-  return emptyState();
+  return seed(emptyState());
 }
+// Hiç kullanıcı yoksa yöneticiyi tohumla (kilitlenmeyi önler; admin asla yok olmaz).
+function seed(st) { if (!st.users || !st.users.length) st.users = [{ u: ADMIN_USER, p: ADMIN_PASS, admin: true }]; return st; }
 async function saveState(st) {
   const col = await getCol();
   if (col) {
@@ -73,27 +80,69 @@ async function saveState(st) {
 }
 
 function sendJSON(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
+function pub(st) { const r = Object.assign({}, st); delete r.users; return r; }   // şifreleri istemciye gönderme
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
 
-  // ---- Giriş: parola doğrula ----
+  // ---- Giriş: kullanıcı adı + şifre ----
   if (u.pathname === '/api/login' && req.method === 'POST') {
     let body = '';
     req.on('data', c => { body += c; if (body.length > 1e4) req.destroy(); });
-    req.on('end', () => {
-      try { const p = (JSON.parse(body || '{}').password) || '';
-        if (p === PASSWORD) return sendJSON(res, 200, { ok: true });
-        return sendJSON(res, 401, { ok: false, error: 'Parola hatalı' });
+    req.on('end', async () => {
+      try { const b = JSON.parse(body || '{}'); const st = await loadState();
+        const usr = findUser(st, (b.username || '').trim(), b.password || '');
+        if (usr) return sendJSON(res, 200, { ok: true, username: usr.u, admin: !!usr.admin });
+        return sendJSON(res, 401, { ok: false, error: 'Kullanıcı adı veya şifre hatalı' });
       } catch (e) { return sendJSON(res, 400, { error: e.message }); }
     });
     return;
   }
 
-  // ---- API (parola korumalı) ----
+  // ---- Şifre değiştir (giriş yapan kendi şifresini) ----
+  if (u.pathname === '/api/changepw' && req.method === 'POST') {
+    const me = await reqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
+    let body = ''; req.on('data', c => { body += c; });
+    req.on('end', async () => { try {
+      const np = ((JSON.parse(body || '{}').newPass) || '').trim();
+      if (np.length < 3) return sendJSON(res, 400, { error: 'Şifre en az 3 karakter olmalı' });
+      const st = await loadState(); const usr = st.users.find(x => x.u === me.u);
+      if (usr) { usr.p = np; await saveState(st); }
+      return sendJSON(res, 200, { ok: true, newPass: np });
+    } catch (e) { sendJSON(res, 400, { error: e.message }); } });
+    return;
+  }
+
+  // ---- Kullanıcı yönetimi (liste herkese; ekle/sil/şifre yalnız yönetici) ----
+  if (u.pathname === '/api/users') {
+    const me = await reqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
+    if (req.method === 'GET') { const st = await loadState();
+      return sendJSON(res, 200, { users: st.users.map(x => ({ u: x.u, admin: !!x.admin })), admin: !!me.admin, me: me.u }); }
+    if (req.method === 'POST') {
+      if (!me.admin) return sendJSON(res, 403, { error: 'Bu işlem için yönetici olmalısınız' });
+      let body = ''; req.on('data', c => { body += c; });
+      req.on('end', async () => { try {
+        const b = JSON.parse(body || '{}'); const st = await loadState(); const list = st.users;
+        if (b.action === 'add') { const uu = (b.u || '').trim(), pp = (b.p || '').trim();
+          if (!uu || !pp) return sendJSON(res, 400, { error: 'Kullanıcı adı ve şifre gerekli' });
+          if (list.some(x => x.u === uu)) return sendJSON(res, 400, { error: 'Bu kullanıcı adı zaten var' });
+          list.push({ u: uu, p: pp, admin: !!b.admin }); }
+        else if (b.action === 'remove') { if (b.u === me.u) return sendJSON(res, 400, { error: 'Kendinizi silemezsiniz' });
+          const i = list.findIndex(x => x.u === b.u); if (i >= 0) list.splice(i, 1); }
+        else if (b.action === 'setpass') { const usr = list.find(x => x.u === b.u); if (usr && b.p) usr.p = b.p; }
+        else return sendJSON(res, 400, { error: 'bilinmeyen işlem' });
+        await saveState(st);
+        return sendJSON(res, 200, { ok: true, users: list.map(x => ({ u: x.u, admin: !!x.admin })) });
+      } catch (e) { sendJSON(res, 400, { error: e.message }); } });
+      return;
+    }
+    return sendJSON(res, 405, { error: 'method' });
+  }
+
+  // ---- Ortak durum (giriş gerekli; yanıtta şifreler GİZLENİR) ----
   if (u.pathname === '/api/state') {
-    if (!authed(req)) return sendJSON(res, 401, { error: 'Giriş gerekli' });
-    if (req.method === 'GET') { const st = await loadState(); return sendJSON(res, 200, st); }
+    const me = await reqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
+    if (req.method === 'GET') { const st = await loadState(); return sendJSON(res, 200, pub(st)); }
     if (req.method === 'POST') {
       let body = '';
       req.on('data', c => { body += c; if (body.length > 5e6) req.destroy(); });
@@ -101,11 +150,12 @@ const server = http.createServer(async (req, res) => {
         try {
           const incoming = JSON.parse(body || '{}');
           const cur = await loadState();
-          const next = { cfg: incoming.cfg !== undefined ? incoming.cfg : cur.cfg,
+          const next = Object.assign({}, cur, {
+            cfg: incoming.cfg !== undefined ? incoming.cfg : cur.cfg,
             grid: incoming.grid !== undefined ? incoming.grid : cur.grid,
-            rev: (cur.rev || 0) + 1, savedAt: new Date().toISOString(), by: incoming.by || null };
+            rev: (cur.rev || 0) + 1, savedAt: new Date().toISOString(), by: incoming.by || me.u });
           await saveState(next);
-          sendJSON(res, 200, next);
+          sendJSON(res, 200, pub(next));
         } catch (e) { sendJSON(res, 400, { error: e.message }); }
       });
       return;
