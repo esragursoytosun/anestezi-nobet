@@ -477,7 +477,7 @@
       var run = longestAbsentRun(P);
       if (run > 3) warnings.push(P.name + ': ' + run + ' iş günü üst üste izinli/boşta (en fazla 3 olmalı).');
       return {
-        name: P.name, target: P.target, hours: hours, fark: fark,
+        name: P.name, target: P.target, hours: hours, fark: fark, noNobet: P.noNobet,
         mesai: nM, n24: nN24, n16: nN16, ni: nNI, uci: nUCI, yi: nYI, weekendNobet: P.weekendNobet
       };
     });
