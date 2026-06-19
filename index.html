@@ -170,7 +170,7 @@
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v31</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v32</b>
   </div>
 </div>
 
@@ -215,9 +215,30 @@ function fillHolidays(){
   document.getElementById('holidays').value = fixedHolidays(curYM().m).join(',');
 }
 
-function dr(cls){ // date-range hücresi
-  return `<div class="daterange"><input type="date" class="${cls}-s" title="başlangıç"><span>–</span><input type="date" class="${cls}-e" title="bitiş"></div>`;
+// ---- Yıllık izin: kişi başına ÇOKLU dönem (her biri başlangıç–bitiş) ----
+function yiRangeHtml(s,e){
+  return `<div class="daterange"><input type="date" class="p-yi-s" title="başlangıç" value="${s||''}"><span>–</span>`
+    +`<input type="date" class="p-yi-e" title="bitiş" value="${e||''}">`
+    +`<button type="button" class="sm sec yix" onclick="rmYi(this)" title="Bu dönemi sil" style="padding:2px 7px;display:none">×</button></div>`;
 }
+function yiCellHtml(){
+  return `<div class="yi-list">${yiRangeHtml('','')}</div>`
+    +`<button type="button" class="sm sec" onclick="addYi(this)" style="margin-top:4px">+ izin ekle</button>`;
+}
+function updateYiX(cell){ const list=cell.querySelector('.yi-list'); const multi=list.children.length>1;
+  list.querySelectorAll('.yix').forEach(x=>x.style.display=multi?'inline-block':'none'); }
+function addYi(btn){ const cell=btn.closest('td');
+  cell.querySelector('.yi-list').insertAdjacentHTML('beforeend', yiRangeHtml('',''));
+  updateDateBounds(); updateYiX(cell); }
+function rmYi(btn){ const cell=btn.closest('td'), row=btn.closest('.daterange'), list=cell.querySelector('.yi-list');
+  if(list.children.length>1) row.remove();
+  else { row.querySelector('.p-yi-s').value=''; row.querySelector('.p-yi-e').value=''; }
+  updateYiX(cell); }
+function rangesOf(tr){ return [...tr.querySelectorAll('.yi-list .daterange')]
+  .map(d=>({s:d.querySelector('.p-yi-s').value, e:d.querySelector('.p-yi-e').value})).filter(r=>r.s); }
+function leaveDaysOf(tr){ const set=new Set();
+  rangesOf(tr).forEach(r=>rangeToDays(r.s,r.e).forEach(d=>set.add(d)));
+  return [...set].sort((a,b)=>a-b); }
 function addPerson(name){
   const tb=document.getElementById('pbody');
   const tr=document.createElement('tr');
@@ -230,7 +251,7 @@ function addPerson(name){
         <option value="3">Çar</option><option value="4">Per</option><option value="5">Cum</option>
       </select></td>
     <td class="chk"><input type="checkbox" class="p-startni" /></td>
-    <td>${dr('p-yi')}</td>
+    <td>${yiCellHtml()}</td>
     <td><input type="text" class="p-off" placeholder="5,12,20" style="min-width:130px" /></td>
     <td style="white-space:nowrap">
       <button class="sm sec" onclick="moveRow(this,-1)" title="Yukarı">↑</button>
@@ -260,11 +281,11 @@ function readCfg(){
     noNobet: tr.querySelector('.p-sorumlu').checked,
     startNI: tr.querySelector('.p-startni').checked,
     offDay: tr.querySelector('.p-offday').value===''? null : parseInt(tr.querySelector('.p-offday').value,10),
-    leaveYI: rangeToDays(tr.querySelector('.p-yi-s').value, tr.querySelector('.p-yi-e').value),
-    // Ham (ISO) tarihler de saklanır: yeniden yüklemede aya bağlı filtreden ETKİLENMEDEN
-    // birebir geri yüklenir -> yıllık izin tarihleri yenilemede ASLA kaybolmaz.
-    yiStart: tr.querySelector('.p-yi-s').value,
-    yiEnd:   tr.querySelector('.p-yi-e').value,
+    // ÇOKLU izin dönemi: tüm dönemlerin günleri birleştirilir (algoritma gün dizisi alır).
+    leaveYI: leaveDaysOf(tr),
+    // Ham (ISO) dönemler de saklanır: yeniden yüklemede aya bağlı filtreden ETKİLENMEDEN
+    // birebir geri yüklenir -> izin tarihleri yenilemede ASLA kaybolmaz.
+    yiRanges: rangesOf(tr),
     offReq:  parseDays(tr.querySelector('.p-off').value),
   })).filter(p=>p.name!=='?');
   return {
@@ -299,11 +320,14 @@ function applyCfg(c){
     tr.querySelector('.p-sorumlu').checked=!!(p.noNobet);
     tr.querySelector('.p-startni').checked=!!p.startNI;
     tr.querySelector('.p-offday').value = (p.offDay!=null? String(p.offDay) : (p.noThursday?'4':''));
-    if(p.yiStart!==undefined){
-      tr.querySelector('.p-yi-s').value=p.yiStart||''; tr.querySelector('.p-yi-e').value=p.yiEnd||'';
-    }else{
-      const yi=daysToRange(p.leaveYI,y,m); tr.querySelector('.p-yi-s').value=yi.s; tr.querySelector('.p-yi-e').value=yi.e;
-    }
+    // İzin dönemleri: yeni çoklu (yiRanges) -> eski tek (yiStart/yiEnd) -> en eski (leaveYI gün dizisi)
+    let ranges = (p.yiRanges && p.yiRanges.length) ? p.yiRanges
+      : (p.yiStart ? [{s:p.yiStart,e:p.yiEnd}] : []);
+    if(!ranges.length && p.leaveYI && p.leaveYI.length){ const yi=daysToRange(p.leaveYI,y,m); ranges=[{s:yi.s,e:yi.e}]; }
+    if(!ranges.length) ranges=[{s:'',e:''}];
+    const cell=tr.querySelector('.yi-list').closest('td');
+    tr.querySelector('.yi-list').innerHTML = ranges.map(r=>yiRangeHtml(r.s,r.e)).join('');
+    updateYiX(cell);
     tr.querySelector('.p-off').value=(p.offReq||[]).join(',');
   });
   updateDateBounds();
