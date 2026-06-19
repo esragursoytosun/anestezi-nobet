@@ -1,0 +1,19 @@
+# Render Blueprint — tek tıkla kurulum.
+# Render → New → Blueprint → bu repo seçilince ayarlar otomatik gelir.
+# MONGODB_URI ve APP_PASSWORD değerlerini Render kurulum ekranında siz girersiniz (sync:false).
+services:
+  - type: web
+    name: anestezi-nobet
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: MONGODB_URI
+        sync: false        # MongoDB Atlas bağlantı dizenizi kurulumda girin (kalıcı veri için)
+      - key: APP_PASSWORD
+        sync: false        # admin kullanıcısının ilk şifresi (kendiniz belirleyin)
+      - key: ADMIN_USER
+        value: admin       # yönetici kullanıcı adı (isterseniz değiştirin)

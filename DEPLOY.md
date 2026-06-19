@@ -27,6 +27,12 @@ Bu repo `git push` ile güncel. Render bu repoyu otomatik çeker.
 
 ## 3) Render Web Service
 
+> **En kolayı — Blueprint (tek tık):** Render → **New → Blueprint** → `anestezi-nobet` reposunu seç.
+> Repodaki `render.yaml` ayarları (Node, Frankfurt, build/start, Free plan) otomatik getirir; sadece
+> `MONGODB_URI` ve `APP_PASSWORD` değerlerini girersiniz. Aşağıdaki manuel adımlara gerek kalmaz.
+
+**Manuel yol** (Blueprint kullanmazsanız):
+
 1. [render.com](https://render.com) → GitHub ile giriş.
 2. **New → Web Service** → `anestezi-nobet` reposunu seç.
 3. Ayarlar:
@@ -54,6 +60,13 @@ Bu repo `git push` ile güncel. Render bu repoyu otomatik çeker.
 - O adresi **iki kişi** de açar; **parola** sorulur (`APP_PASSWORD`). Girince sağ üstte **🟢 Ortak (canlı)** görünür. (Tarayıcı parolayı hatırlar; "Çıkış" ile çıkılır.)
 - Biri değişiklik yapıp **Liste Oluştur** der ya da bir hücreyi elle değiştirir → ~2.5 sn içinde diğerinin ekranı kendiliğinden güncellenir ("Arkadaşınız güncelledi ↻").
 - Aynı anda farklı şeyler değiştirirseniz **son kaydeden** geçerli olur; çakışmamak için kabaca aynı bölümü aynı anda düzenlemeyin.
+
+## 5) Uyumama (no-sleep)
+
+Render Free, 15 dk hareketsizlikte uyur (ilk açılış ~30 sn). **Sunucu bunu kendisi çözer:** kendi genel
+adresine (`RENDER_EXTERNAL_URL`, Render otomatik verir) ~13 dk'da bir istek atarak uyanık kalır — ek servis,
+ek ücret yok. Yani normalde her zaman hızlı açılır. (Render aylık 750 saat ücretsiz; tek servis ~744 saat
+çektiği için sınır içinde kalır.)
 
 ## Notlar
 

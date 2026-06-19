@@ -175,4 +175,16 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
+// Sağlık ucu (uyumama ping'i buraya gelir, hafif).
+// (statik handler '/healthz' yolunu dosya arar; aşağıdaki kısayolu eklemek için handler'da değil
+//  burada basit tutuyoruz: '/' zaten index.html veriyor, ping '/' veya RENDER_EXTERNAL_URL'a gider.)
+
 server.listen(PORT, () => console.log('Anestezi ortak sunucu: http://localhost:' + PORT + (MONGODB_URI ? ' (MongoDB)' : ' (dosya)')));
+
+// ---- UYUMAMA: Render Free 15 dk hareketsizlikte uyur. Kendi genel adresimize ~13 dk'da bir
+//      istek atarak uyanık tutarız (RENDER_EXTERNAL_URL'i Render otomatik verir). Bedava, ek servis yok.
+const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+if (SELF_URL && typeof fetch === 'function') {
+  setInterval(() => { fetch(SELF_URL).catch(() => {}); }, 13 * 60 * 1000);
+  console.log('[keepalive] uyumama aktif:', SELF_URL);
+}
