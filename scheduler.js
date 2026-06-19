@@ -133,6 +133,12 @@
         var cnt = 0;
         for (var k = Math.max(1, d - 6); k <= d; k++) if (P.assign[k] === 'N24' || P.assign[k] === 'N16') cnt++;
         if (cnt >= 3) return false;
+        // "3 ardarda nöbet" (sık nöbet) engeli: önceki 4 günde zaten 2 nöbet varsa
+        // bu 3.'yü REDDET -> nöbetler aya yayılır, kişi erken dolup ay sonu boş kalmaz.
+        // Sadece strict'te; coverage darboğazında non-strict bunu görmezden gelir (gerekirse).
+        var near = 0;
+        for (var k2 = Math.max(1, d - 4); k2 <= d - 1; k2++) if (P.assign[k2] === 'N24' || P.assign[k2] === 'N16') near++;
+        if (near >= 2) return false;
       }
       return true;
     }
