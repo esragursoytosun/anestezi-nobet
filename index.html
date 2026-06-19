@@ -216,6 +216,10 @@ function readCfg(){
     startNI: tr.querySelector('.p-startni').checked,
     offDay: tr.querySelector('.p-offday').value===''? null : parseInt(tr.querySelector('.p-offday').value,10),
     leaveYI: rangeToDays(tr.querySelector('.p-yi-s').value, tr.querySelector('.p-yi-e').value),
+    // Ham (ISO) tarihler de saklanır: yeniden yüklemede aya bağlı filtreden ETKİLENMEDEN
+    // birebir geri yüklenir -> yıllık izin tarihleri yenilemede ASLA kaybolmaz.
+    yiStart: tr.querySelector('.p-yi-s').value,
+    yiEnd:   tr.querySelector('.p-yi-e').value,
     offReq:  parseDays(tr.querySelector('.p-off').value),
   })).filter(p=>p.name!=='?');
   return {
@@ -247,7 +251,12 @@ function loadCfg(){
       tr.querySelector('.p-sorumlu').checked=!!(p.noNobet);
       tr.querySelector('.p-startni').checked=!!p.startNI;
       tr.querySelector('.p-offday').value = (p.offDay!=null? String(p.offDay) : (p.noThursday?'4':''));
-      const yi=daysToRange(p.leaveYI,y,m); tr.querySelector('.p-yi-s').value=yi.s; tr.querySelector('.p-yi-e').value=yi.e;
+      // Ham ISO tarih varsa birebir geri yükle; yoksa eski (gün-no) biçimden türet.
+      if(p.yiStart!==undefined){
+        tr.querySelector('.p-yi-s').value=p.yiStart||''; tr.querySelector('.p-yi-e').value=p.yiEnd||'';
+      }else{
+        const yi=daysToRange(p.leaveYI,y,m); tr.querySelector('.p-yi-s').value=yi.s; tr.querySelector('.p-yi-e').value=yi.e;
+      }
       tr.querySelector('.p-off').value=(p.offReq||[]).join(',');
     });
     updateDateBounds();
