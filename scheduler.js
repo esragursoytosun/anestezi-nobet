@@ -332,21 +332,27 @@
     // ---- 2.6) ÜST ÜSTE 3 İŞ GÜNÜ SINIRI: (NI+UCI) serilerini mesai TAŞIYARAK kır ----
     function fixAbsence(P) {
       for (var guard = 0; guard < 80; guard++) {
-        var runStart = -1, best = null;
-        for (var i = 0; i <= workdayNums.length; i++) {
-          var absent = (i < workdayNums.length) && absentRun(P, workdayNums[i]);
-          if (absent) { if (runStart < 0) runStart = i; }
-          else if (runStart >= 0) {
-            var len = i - runStart, hasUCI = false;
-            for (var j = runStart; j < i; j++) if (P.assign[workdayNums[j]] === 'UCI') hasUCI = true;
-            if (len > 3 && hasUCI && (!best || len > best.len)) best = { start: runStart, end: i, len: len };
-            runStart = -1;
-          }
+        // Seri tespiti: TÜM günleri gez. ÇALIŞILAN (present) gün -> seriyi kapat (hafta sonu
+        // nöbeti dahil "geldi"). İş günü boşluğu -> seriye ekle. Hafta sonu boş / YI -> nötr.
+        var runs = [], cur = [];
+        for (var d = 1; d <= nDays; d++) {
+          var cc = P.assign[d];
+          if (cc === 'M' || cc === 'N24' || cc === 'N16') { if (cur.length) { runs.push(cur); cur = []; } }
+          else if (days[d - 1].workday && absentRun(P, d)) cur.push(d);
+        }
+        if (cur.length) runs.push(cur);
+        var best = null;
+        for (var ri = 0; ri < runs.length; ri++) {
+          var rn = runs[ri];
+          if (rn.length <= 3) continue;
+          var hasUCI = false;
+          for (var hu = 0; hu < rn.length; hu++) if (P.assign[rn[hu]] === 'UCI') hasUCI = true;
+          if (hasUCI && (!best || rn.length > best.length)) best = rn;
         }
         if (!best) return;
         var mid = -1;
-        for (var k = best.start + 3; k < best.end; k++) if (P.assign[workdayNums[k]] === 'UCI') { mid = workdayNums[k]; break; }
-        if (mid < 0) for (var k2 = best.start; k2 < best.end; k2++) if (P.assign[workdayNums[k2]] === 'UCI') { mid = workdayNums[k2]; break; }
+        for (var k = 3; k < best.length; k++) if (P.assign[best[k]] === 'UCI') { mid = best[k]; break; }
+        if (mid < 0) for (var k2 = 0; k2 < best.length; k2++) if (P.assign[best[k2]] === 'UCI') { mid = best[k2]; break; }
         if (mid < 0) return;
         // donör: P'nin (seri DIŞI) bir M'sini mid'e TAŞI. Saat sabit (8->0, 0->8).
         // Kabul şartı: (a) donör günün gündüz min'i bozulmaz, (b) taşıma sonrası P'de
@@ -357,7 +363,7 @@
           var dm = workdayNums[m];
           if (P.assign[dm] !== 'M') continue;
           if (P.mustMesai.has(dm)) continue;            // yıllık izin dönüş günü taşınmaz
-          if (dm >= workdayNums[best.start] && dm <= workdayNums[best.end - 1]) continue;
+          if (dm >= best[0] && dm <= best[best.length - 1]) continue;   // seri içindeki günü donör yapma
           if (daytimeCount(dm) - 1 < dayNeed(days[dm - 1])) continue;   // donör günün gündüz min'i korunur
           P.assign[dm] = 'UCI'; P.assign[mid] = 'M';
           if (longestAbsentRun(P) <= 3) { donor = dm; break; }
@@ -388,9 +394,14 @@
       }
     }
     function longestAbsentRun(P) {
+      // ÜST ÜSTE boş İŞ GÜNÜ sayısı. ÖNEMLİ: kişi HERHANGİ bir gün (hafta sonu nöbeti
+      // dahil) ÇALIŞTIYSA seri sıfırlanır ("o gün işe geldi"). Hafta sonu tatili (boş)
+      // ve yıllık izin nötrdür (seriyi ne artırır ne sıfırlar).
       var best = 0, run = 0;
-      for (var i = 0; i < workdayNums.length; i++) {
-        if (absentRun(P, workdayNums[i])) { run++; if (run > best) best = run; } else run = 0;
+      for (var d = 1; d <= nDays; d++) {
+        var c = P.assign[d];
+        if (c === 'M' || c === 'N24' || c === 'N16') run = 0;                 // çalıştı -> sıfırla
+        else if (days[d - 1].workday && absentRun(P, d)) { run++; if (run > best) best = run; }
       }
       return best;
     }
@@ -449,6 +460,11 @@
         break;
       }
     });
+
+    // 2.7 gündüz pass'i bazı günlerde fazlalık yaratmış olabilir (ör. ay sonu N24'leri).
+    // fixAbsence'i BİR KEZ DAHA çalıştır: ilk turda kırılamayan kümeler artık iş-günü
+    // fazlası N24->N16 ile kırılabilir (hafta sonuna dokunmadan).
+    people.forEach(fixAbsence);
 
     // ---- 3) YILLIK İZİN DÖNÜŞÜ doğrulaması ----
     people.forEach(function (P) {
