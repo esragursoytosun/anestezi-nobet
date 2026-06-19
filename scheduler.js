@@ -44,7 +44,7 @@
 
     // ---- AYARLANABİLİR SEÇENEKLER (UI'dan; hepsi varsayılan AÇIK) ----
     var opts = config.options || {};
-    var OPT_WEEKEND_N16 = opts.weekendN16 !== false;  // hafta sonu N24->N16 indirip boşluğa mesai (küme kır)
+    // NOT: Hafta sonu/resmi tatil KESİNLİKLE 2x N08-08 (24s) — bu artık sabit kural, opsiyon değil.
     var OPT_PRELEAVE_WED = opts.preLeaveWed !== false; // Pzt-izinde izin-öncesi nöbet Salı->Çarşamba esneyebilsin
     var OPT_DENSE_BLOCK = opts.denseBlock !== false;   // "3 nöbet 5 günden az" sık-nöbet engeli
 
@@ -239,7 +239,9 @@
       for (var slot = have; slot < 2; slot++) {
         var kind = 'N24';
         var cand = pickCandidate(dd, kind, true) || pickCandidate(dd, kind, false);
-        if (!cand) { kind = 'N16'; cand = pickCandidate(dd, kind, true) || pickCandidate(dd, kind, false); }
+        // N16'ya YALNIZCA iş gününde düşülür. Hafta sonu/resmi tatil KESİNLİKLE 2x N08-08
+        // (24s, gündüzde 2 kişi) olmalı -> hafta sonu/tatilde N16 fallback YOK.
+        if (!cand && dd.workday) { kind = 'N16'; cand = pickCandidate(dd, kind, true) || pickCandidate(dd, kind, false); }
         if (cand) placeNobet(cand, dd, kind);
         else warnings.push(dd.day + '. gün (' + dd.dowName + '): ' + (slot + 1) + '. nöbetçi atanamadı.');
       }
@@ -373,21 +375,15 @@
         {
           // taşınacak mesai yok (kişi çok nöbetli): bir 24s nöbeti 16s'e indir (8s açılır),
           // bu seride bir ücretli izin gününü mesaiye çevir -> saat 176 sabit, boşluk kırılır.
-          var n24 = -1, wkndCand = -1;
+          var n24 = -1;
           // Bir N24'ü N16'ya indirip açılan 8 saati boşluğa mesai yaparız (saat sabit).
-          // ÖNCELİK: İŞ GÜNÜ fazlası olan N24 (gündüz min'i bozmadan). Hafta sonu N16'yı
-          // SON ÇARE tut: hafta sonu N16 olunca o gün gündüzde 1 kişi kalıyor (kullanıcı:
-          // "zorunda kalmadıkça hafta sonu 16 olmasın"). İş günü fazlası yoksa hafta sonuna düş.
+          // YALNIZCA İŞ GÜNÜ fazlası olan N24 indirilir (gündüz min'i bozmadan).
+          // Hafta sonu/resmi tatil N24'üne ASLA dokunulmaz -> hafta sonu/tatil hep 2x N08-08.
           for (var dq2 = 1; dq2 <= nDays; dq2++) {
-            if (P.assign[dq2] !== 'N24') continue;
-            if (days[dq2 - 1].workday) {
-              if (daytimeCount(dq2) - 1 < dayNeed(days[dq2 - 1])) continue;  // yalnız fazlası olan iş günü
-              n24 = dq2; break;                                  // iş günü fazlası -> TERCİH
-            } else if (OPT_WEEKEND_N16 && wkndCand < 0) {
-              wkndCand = dq2;                                     // hafta sonu adayı (son çare)
-            }
+            if (P.assign[dq2] !== 'N24' || !days[dq2 - 1].workday) continue;   // sadece iş günü
+            if (daytimeCount(dq2) - 1 < dayNeed(days[dq2 - 1])) continue;      // yalnız fazlası olan
+            n24 = dq2; break;
           }
-          if (n24 < 0) n24 = wkndCand;                           // iş günü fazlası yoksa zorunlu hafta sonu
           if (n24 > 0) { P.assign[n24] = 'N16'; P.hours -= 8; P.assign[mid] = 'M'; P.hours += 8; continue; }
           return;
         }

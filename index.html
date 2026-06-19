@@ -86,9 +86,7 @@
     </div>
     <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:13px">
       <label style="margin:0;color:var(--txt);font-weight:600;font-size:12px">Dağıtım seçenekleri</label>
-      <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
-        <input type="checkbox" id="optWeekendN16" style="width:auto" />
-        Hafta sonu/tatilde boşluk kırmak için N16-08'e inilebilsin <span class="muted">(KAPALI = hafta sonu/tatil hep 2×N08-08, gündüzde 2 kişi · AÇIK = az kişide kümeleri çözer ama o gün gündüz 1 kişi kalabilir)</span></label>
+      <div class="muted" style="font-size:12px">✓ Hafta sonu ve resmi tatiller her zaman <b>2 kişi × N08-08 (24 saat)</b> — sabit kural.</div>
       <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
         <input type="checkbox" id="optPreLeaveWed" checked style="width:auto" />
         Pazartesi-izinde izin-öncesi nöbet Salı yerine Çarşamba olabilsin <span class="muted">(gerekirse)</span></label>
@@ -141,7 +139,7 @@
   <div id="output"></div>
 </div>
 
-<script src="scheduler.js?v=23"></script>
+<script src="scheduler.js?v=24"></script>
 <script>
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DEFAULT_NAMES = Array.from({length:14},(_,i)=>'Personel '+(i+1));
@@ -239,7 +237,6 @@ function readCfg(){
     month: parseInt(document.getElementById('month').value,10),
     holidays: parseDays(document.getElementById('holidays').value),
     options: {
-      weekendN16: document.getElementById('optWeekendN16').checked,
       preLeaveWed: document.getElementById('optPreLeaveWed').checked,
       denseBlock:  document.getElementById('optDenseBlock').checked
     },
@@ -261,7 +258,6 @@ function loadCfg(){
     document.getElementById('month').value=c.month;
     document.getElementById('holidays').value=(c.holidays||[]).join(',');
     var o=c.options||{};
-    document.getElementById('optWeekendN16').checked = o.weekendN16===true;  // varsayılan KAPALI (hafta sonu/tatil hep 2xN24)
     document.getElementById('optPreLeaveWed').checked = o.preLeaveWed!==false;
     document.getElementById('optDenseBlock').checked = o.denseBlock!==false;
     document.getElementById('pbody').innerHTML='';
