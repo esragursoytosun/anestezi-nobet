@@ -265,7 +265,9 @@
         var cand = people.filter(function (P) {
           return !P.noNobet && P.assign[dd.day] === '' && (P.hours + 8 <= P.target) && !P.offReq.has(dd.day);
         }).sort(function (a, b) { return (b.target - b.hours) - (a.target - a.hours); })[0];
-        if (!cand) { warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüz mesaisinde en az ' + need + ' kişi sağlanamadı.'); break; }
+        // NOT: burada uyarı BASMA — bu erken adım; mesai-doldurma (2b) ve son-garanti (2.7)
+        // sonradan günü tamamlayabiliyor. Gündüz uyarısının tek yetkilisi 2.7'dir (FİNAL sayı).
+        if (!cand) break;
         addMesai(cand, dd.day); have++;
       }
     });
@@ -323,19 +325,23 @@
         for (var k = best.start + 3; k < best.end; k++) if (P.assign[workdayNums[k]] === 'UCI') { mid = workdayNums[k]; break; }
         if (mid < 0) for (var k2 = best.start; k2 < best.end; k2++) if (P.assign[workdayNums[k2]] === 'UCI') { mid = workdayNums[k2]; break; }
         if (mid < 0) return;
-        // donör: yalnızca İKİ yanı da dolu (güvenli) bir M taşınır -> taşıma yeni boşluk açmaz.
-        // (tek yanı dolu M taşımak başka yerde boşluk açıp oynamaya yol açıyordu.)
+        // donör: P'nin (seri DIŞI) bir M'sini mid'e TAŞI. Saat sabit (8->0, 0->8).
+        // Kabul şartı: (a) donör günün gündüz min'i bozulmaz, (b) taşıma sonrası P'de
+        // >3 boş seri açılmaz. Tentatif uygulanıp longestAbsentRun ile doğrulanır;
+        // olmazsa geri alınıp başka donör denenir (eski katı komşu kontrolünden daha esnek).
         var donor = -1;
         for (var m = 0; m < workdayNums.length; m++) {
           var dm = workdayNums[m];
           if (P.assign[dm] !== 'M') continue;
           if (P.mustMesai.has(dm)) continue;            // yıllık izin dönüş günü taşınmaz
           if (dm >= workdayNums[best.start] && dm <= workdayNums[best.end - 1]) continue;
-          var prevOk = m > 0 && !absentRun(P, workdayNums[m - 1]);
-          var nextOk = m < workdayNums.length - 1 && !absentRun(P, workdayNums[m + 1]);
-          if (prevOk && nextOk) { donor = dm; break; }
+          if (daytimeCount(dm) - 1 < dayNeed(days[dm - 1])) continue;   // donör günün gündüz min'i korunur
+          P.assign[dm] = 'UCI'; P.assign[mid] = 'M';
+          if (longestAbsentRun(P) <= 3) { donor = dm; break; }
+          P.assign[dm] = 'M'; P.assign[mid] = 'UCI';    // geri al, başka donör dene
         }
-        if (donor < 0) {
+        if (donor >= 0) continue;                        // takas başarılı -> tekrar tara
+        {
           // taşınacak mesai yok (kişi çok nöbetli): bir 24s nöbeti 16s'e indir (8s açılır),
           // bu seride bir ücretli izin gününü mesaiye çevir -> saat 176 sabit, boşluk kırılır.
           var n24 = -1;
@@ -349,7 +355,6 @@
           if (n24 > 0) { P.assign[n24] = 'N16'; P.hours -= 8; P.assign[mid] = 'M'; P.hours += 8; continue; }
           return;
         }
-        P.assign[donor] = 'UCI'; P.assign[mid] = 'M';
       }
     }
     function longestAbsentRun(P) {
