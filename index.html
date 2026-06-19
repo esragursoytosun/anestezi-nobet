@@ -87,8 +87,8 @@
     <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:13px">
       <label style="margin:0;color:var(--txt);font-weight:600;font-size:12px">Dağıtım seçenekleri</label>
       <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
-        <input type="checkbox" id="optWeekendN16" checked style="width:auto" />
-        Hafta sonu nöbetini N16-08'e indirip boşlukları mesaiyle kır <span class="muted">(az kişide kümeleri çözer)</span></label>
+        <input type="checkbox" id="optWeekendN16" style="width:auto" />
+        Hafta sonu/tatilde boşluk kırmak için N16-08'e inilebilsin <span class="muted">(KAPALI = hafta sonu/tatil hep 2×N08-08, gündüzde 2 kişi · AÇIK = az kişide kümeleri çözer ama o gün gündüz 1 kişi kalabilir)</span></label>
       <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
         <input type="checkbox" id="optPreLeaveWed" checked style="width:auto" />
         Pazartesi-izinde izin-öncesi nöbet Salı yerine Çarşamba olabilsin <span class="muted">(gerekirse)</span></label>
@@ -261,7 +261,7 @@ function loadCfg(){
     document.getElementById('month').value=c.month;
     document.getElementById('holidays').value=(c.holidays||[]).join(',');
     var o=c.options||{};
-    document.getElementById('optWeekendN16').checked = o.weekendN16!==false;
+    document.getElementById('optWeekendN16').checked = o.weekendN16===true;  // varsayılan KAPALI (hafta sonu/tatil hep 2xN24)
     document.getElementById('optPreLeaveWed').checked = o.preLeaveWed!==false;
     document.getElementById('optDenseBlock').checked = o.denseBlock!==false;
     document.getElementById('pbody').innerHTML='';
@@ -316,6 +316,14 @@ function render(r){
     h+=`<td class="tot">${t.target}</td><td class="tot">${t.hours}</td><td class="tot ${fc}">${t.fark>0?'+':''}${t.fark}</td>`;
     h+=`<td class="tot">${t.mesai}</td><td class="tot">${t.n24}</td><td class="tot">${t.n16}</td><td class="tot">${t.ni}</td><td class="tot">${t.uci}</td><td class="tot">${t.weekendNobet}</td></tr>`;
   });
+  // ---- GÜNLÜK ÖZET: o gün kaç kişi gündüzde / kaç nöbetçi (eksikse kırmızı) ----
+  function dayCounts(day){ let nob=0,gun=0; r.totals.forEach(t=>{const c=r.grid[t.name][day]; if(c==='N24'||c==='N16')nob++; if(!t.noNobet&&(c==='M'||c==='N24'))gun++;}); return {nob,gun}; }
+  h+=`<tr style="font-weight:700;border-top:2px solid var(--accent)"><td class="name">☀️ Gündüz (08-17)</td>`;
+  r.days.forEach(d=>{ const c=dayCounts(d.day); const need=d.workday?(d.isTueThu?3:2):2; h+=`<td class="tot ${c.gun<need?'bad':'good'}" title="en az ${need}">${c.gun}</td>`; });
+  h+=`<td class="tot" colspan="9"></td></tr>`;
+  h+=`<tr style="font-weight:700"><td class="name">🌙 Nöbetçi</td>`;
+  r.days.forEach(d=>{ const c=dayCounts(d.day); h+=`<td class="tot ${c.nob<2?'bad':'good'}" title="en az 2">${c.nob}</td>`; });
+  h+=`<td class="tot" colspan="9"></td></tr>`;
   h+=`</tbody></table></div>`;
   h+=`<div class="legend">
     <span><i class="sw M"></i> M8-17 (8s)</span><span><i class="sw N24"></i> N08-08 (24s)</span>
@@ -365,6 +373,16 @@ function recomputeTotals(r){
       if(!t.noNobet && (c==='M'||c==='N24'))day++; });
     if(nob<2) w.push(d.day+'. gün ('+d.dowName+'): sadece '+nob+' nöbetçi (2 gerekli).');
     if(d.workday){ const need=d.isTueThu?3:2; if(day<need) w.push(d.day+'. gün ('+d.dowName+'): gündüzde '+day+' kişi (en az '+need+' olmalı).'); }
+  });
+  // yıllık izin dönüşü: izin bitişinden sonraki ilk İŞ GÜNÜ çalışmalı (elle düzenleme kontrolü)
+  r.totals.forEach(t=>{ const g=r.grid[t.name];
+    for(let d=1; d<=r.nDays; d++){
+      if(g[d]==='YI' && (d===r.nDays || g[d+1]!=='YI')){
+        for(let k=d+1; k<=r.nDays; k++){ if(r.days[k-1].workday){ const c=g[k];
+          if(!(c==='M'||c==='N24'||c==='N16')) w.push(t.name+': yıllık izin dönüşü ('+k+'. gün) çalışmıyor — izinden sonraki ilk iş günü çalışmalı.');
+          break; } }
+      }
+    }
   });
   r.warnings=w;
 }
