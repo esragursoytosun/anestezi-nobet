@@ -207,7 +207,7 @@
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v39</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v40</b>
   </div>
 </div>
 
@@ -342,7 +342,11 @@ function readCfg(){
     personnel
   };
 }
-function saveCfg(){ localStorage.setItem('anestezi_cfg', JSON.stringify(readCfg())); flash('Kaydedildi ✓'); }
+function saveCfg(){ localStorage.setItem('anestezi_cfg', JSON.stringify(readCfg())); storeActiveMonth();
+  // ORTAK/CANLI modda değişikliği ANINDA sunucuya da yaz (yalnız localStorage'da kalmasın ->
+  // yenilemede sunucudaki eski hal geri gelip silmesin). LAST yoksa önce listeyi kur.
+  if(SYNC.on){ if(!LAST){ try{ LAST=Scheduler.buildSchedule(readCfg()); }catch(e){} } cloudSaveNow(); }
+  flash(SYNC.on?'Kaydedildi ✓ (ortak)':'Kaydedildi ✓'); }
 function daysToRange(arr,y,m){ // gün dizisi -> {s,e} ISO (bitişik varsayımı)
   if(!arr||!arr.length) return {s:'',e:''};
   const mn=Math.min(...arr), mx=Math.max(...arr);
