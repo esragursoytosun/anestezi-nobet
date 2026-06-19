@@ -36,6 +36,81 @@
   function dow(year, month, day) { return new Date(year, month, day).getDay(); }
   function isWeekend(d) { return d === 0 || d === 6; }
 
+  // ======================================================================
+  // analyze() — TEK DOĞRULUK KAYNAĞI. Tüm uyarılar/totaller YALNIZCA nihai
+  // grid'den burada hesaplanır. Hem buildSchedule (üretim sonu) hem
+  // Scheduler.recompute (elle düzenleme) bunu çağırır -> analiz hep tutarlı,
+  // asla bayat/yanlış olmaz. Yeni kural eklerken SADECE buraya ekle.
+  //   grid:  { isim: {gün: kod} }
+  //   plist: [{ name, target, noNobet, lockedOff:[gün...] }]
+  //   daysArr/nDays: gün meta
+  // ======================================================================
+  function analyze(grid, plist, daysArr, nDays) {
+    var warnings = [];
+    function pres(c) { return c === 'M' || c === 'N24' || c === 'N16'; }
+    function need(dd) { return dd.isTueThu ? 3 : 2; }
+    var totals = plist.map(function (p) {
+      var a = grid[p.name] || {}, lock = new Set(p.lockedOff || []);
+      var nM = 0, nN24 = 0, nN16 = 0, nNI = 0, nUCI = 0, nYI = 0, hours = 0, wknd = 0;
+      for (var d = 1; d <= nDays; d++) {
+        var c = a[d] || '', dd = daysArr[d - 1];
+        hours += HOURS[c] || 0;
+        if (c === 'M') nM++; else if (c === 'N24') { nN24++; if (dd.weekend || dd.holiday) wknd++; }
+        else if (c === 'N16') { nN16++; if (dd.weekend || dd.holiday) wknd++; }
+        else if (c === 'NI') nNI++; else if (c === 'UCI') nUCI++; else if (c === 'YI') nYI++;
+      }
+      var fark = hours - p.target;
+      if (fark > 0) warnings.push(p.name + ': FAZLA MESAİ ' + fark + ' saat (hedef ' + p.target + ').');
+      else if (fark < 0) {
+        if (p.noNobet) {
+          var avail = daysArr.filter(function (dd) { return dd.workday && a[dd.day] !== 'YI' && a[dd.day] !== 'OFF'; }).length;
+          warnings.push(p.name + ' (sorumlu · sadece gündüz): bu ay ' + avail + ' iş günü var → en fazla ' +
+            (avail * 8) + ' saat yapılabilir, ' + (-fark) + ' saat eksik (nöbet tutmadığı için 176 dolmuyor, ay kısa).');
+        } else warnings.push(p.name + ': EKSİK ' + (-fark) + ' saat (hedef ' + p.target + ', toplam ' + hours + ').');
+      }
+      // ÜST ÜSTE boş iş günü: çalışılan HER gün (hafta sonu/tatil nöbeti dahil) seriyi sıfırlar;
+      // hafta sonu boş ve KASITLI izin-öncesi boşluk (lockedOff) nötr.
+      var best = 0, run = 0;
+      for (var d2 = 1; d2 <= nDays; d2++) {
+        var c2 = a[d2] || '', dd2 = daysArr[d2 - 1];
+        if (pres(c2)) run = 0;
+        else if (dd2.workday && (c2 === 'NI' || c2 === 'UCI') && !lock.has(d2)) { run++; if (run > best) best = run; }
+      }
+      if (best > 3) warnings.push(p.name + ': ' + best + ' iş günü üst üste izinli/boşta (en fazla 3 olmalı).');
+      // Yıllık izin dönüşü: izinden sonraki ilk iş günü çalışılmalı.
+      for (var d3 = 1; d3 <= nDays; d3++) {
+        if (a[d3] === 'YI' && (d3 === nDays || a[d3 + 1] !== 'YI')) {
+          for (var k = d3 + 1; k <= nDays; k++) {
+            if (daysArr[k - 1].workday) {
+              if (!pres(a[k] || '')) warnings.push(p.name + ': yıllık izin dönüşü (' + k + '. gün) çalışmıyor (izinden sonraki ilk iş günü çalışmalı).');
+              break;
+            }
+          }
+        }
+      }
+      return { name: p.name, target: p.target, hours: hours, fark: fark, noNobet: p.noNobet,
+        lockedOff: p.lockedOff || [], mesai: nM, n24: nN24, n16: nN16, ni: nNI, uci: nUCI, yi: nYI, weekendNobet: wknd };
+    });
+    // Günlük: nöbetçi >=2 ve (iş gününde) gündüz >=need.
+    daysArr.forEach(function (dd) {
+      var nob = 0, gun = 0;
+      plist.forEach(function (p) { var c = (grid[p.name] || {})[dd.day]; if (c === 'N24' || c === 'N16') nob++; if (!p.noNobet && (c === 'M' || c === 'N24')) gun++; });
+      if (nob < 2) warnings.push(dd.day + '. gün (' + dd.dowName + '): sadece ' + nob + ' nöbetçi (2 gerekli).');
+      if (dd.workday && gun < need(dd)) warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüzde ' + gun + ' kişi (en az ' + need(dd) + ' olmalı).');
+    });
+    // ÖNERİ: kapasite darboğazı (kırılamayan küme / kapsama-gündüz eksiği).
+    var hasCluster = warnings.some(function (w) { return /üst üste izinli\/boşta/.test(w); });
+    var hasGap = warnings.some(function (w) { return /sadece \d+ nöbetçi|gündüzde \d+ kişi/.test(w); });
+    if (hasCluster || hasGap) {
+      var nNobet = plist.filter(function (p) { return !p.noNobet; }).length;
+      warnings.push('💡 ÖNERİ: Bu ay ' + nNobet + ' nöbetçi kişi var; bu izin yoğunluğu için kapasite sınırda. ' +
+        'Kaçınılmaz boş günler kümeleniyor (taşımak yalnızca başka kişiye kaydırır, toplamı azaltmaz). ' +
+        'Çözüm: çakışan yıllık izinleri farklı haftalara yayın, ya da o ay 1 kişi daha ekleyin ' +
+        '(çoğunlukla +1 kişi tüm bu uyarıları giderir).');
+    }
+    return { totals: totals, warnings: warnings };
+  }
+
   function buildSchedule(config) {
     var year = config.year, month = config.month;
     var nDays = daysInMonth(year, month);
@@ -243,7 +318,7 @@
         // (24s, gündüzde 2 kişi) olmalı -> hafta sonu/tatilde N16 fallback YOK.
         if (!cand && dd.workday) { kind = 'N16'; cand = pickCandidate(dd, kind, true) || pickCandidate(dd, kind, false); }
         if (cand) placeNobet(cand, dd, kind);
-        else warnings.push(dd.day + '. gün (' + dd.dowName + '): ' + (slot + 1) + '. nöbetçi atanamadı.');
+        // Aday yoksa slot boş kalır; eksik kapsama NİHAİ doğrulamada (final grid) raporlanır.
       }
     });
 
@@ -493,73 +568,29 @@
       if (!moved) break;
     }
 
-    // ---- 3) YILLIK İZİN DÖNÜŞÜ doğrulaması ----
-    people.forEach(function (P) {
-      returnDays(P).forEach(function (d) {
-        if (P.assign[d] !== 'M' && !presentCode(P.assign[d]))
-          warnings.push(P.name + ': yıllık izin dönüşü (' + d + '. gün) çalıştırılamadı (hedef dolu).');
-      });
+    // ---- NİHAİ DOĞRULAMA: TEK kaynak analyze() (yalnızca son grid'den; bayat uyarı olmaz) ----
+    var gridA = {}; people.forEach(function (P) { gridA[P.name] = P.assign; });
+    var plist = people.map(function (P) {
+      return { name: P.name, target: P.target, noNobet: P.noNobet, lockedOff: Array.from(P.lockedOff) };
     });
+    var av = analyze(gridA, plist, days, nDays);
+    var totals = av.totals;
+    warnings = av.warnings;
 
-    // ---- TOTALLER & UYARILAR ----
-    var totals = people.map(function (P) {
-      var nM = 0, nN24 = 0, nN16 = 0, nNI = 0, nUCI = 0, nYI = 0;
-      for (var d = 1; d <= nDays; d++) {
-        var c = P.assign[d];
-        if (c === 'M') nM++; else if (c === 'N24') nN24++; else if (c === 'N16') nN16++;
-        else if (c === 'NI') nNI++; else if (c === 'UCI') nUCI++; else if (c === 'YI') nYI++;
-      }
-      var hours = hoursOf(P), fark = hours - P.target;
-      if (fark > 0) warnings.push(P.name + ': FAZLA MESAİ ' + fark + ' saat (hedef ' + P.target + ').');
-      else if (fark < 0) {
-        if (P.noNobet) {
-          var avail = days.filter(function (dd) {
-            return dd.workday && P.assign[dd.day] !== 'YI' && P.assign[dd.day] !== 'OFF';
-          }).length;
-          warnings.push(P.name + ' (sorumlu · sadece gündüz): bu ay ' + avail + ' iş günü var → en fazla ' +
-            (avail * 8) + ' saat yapılabilir, ' + (-fark) + ' saat eksik (nöbet tutmadığı için 176 dolmuyor, ay kısa).');
-        } else warnings.push(P.name + ': EKSİK ' + (-fark) + ' saat (hedef ' + P.target + ', toplam ' + hours + ').');
-      }
-      var run = longestAbsentRun(P);
-      if (run > 3) warnings.push(P.name + ': ' + run + ' iş günü üst üste izinli/boşta (en fazla 3 olmalı).');
-      return {
-        name: P.name, target: P.target, hours: hours, fark: fark, noNobet: P.noNobet,
-        mesai: nM, n24: nN24, n16: nN16, ni: nNI, uci: nUCI, yi: nYI, weekendNobet: P.weekendNobet
-      };
-    });
-
-    days.forEach(function (dd) {
-      var nob = people.filter(function (P) { return P.assign[dd.day] === 'N24' || P.assign[dd.day] === 'N16'; }).length;
-      if (nob < 2) warnings.push(dd.day + '. gün (' + dd.dowName + '): sadece ' + nob + ' nöbetçi (2 gerekli).');
-      // GÜNDÜZ eksiği: FİNAL grid'den kontrol (iş gününde >=need; need=Sal/Per 3, diğer 2).
-      if (dd.workday) {
-        var need = dayNeed(dd), have = daytimeCount(dd.day);
-        if (have < need) warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüzde ' + have +
-          ' kişi (en az ' + need + ' olmalı).');
-      }
-    });
-
-    // ---- ÖNERİ: kırılamayan boşluk kümeleri kapasite darboğazını gösterir ----
-    // Boş günler (NI+UCI) matematiksel olarak sabittir; çok izin + az kişi olunca
-    // bazı kişilerde >3 üst üste birikir ve taşımak yalnız kümeyi başkasına kaydırır.
-    // Bu durumda eyleme dönük öneri ver (kullanıcı: "gerekirse yeni tahmin/öneri versin").
-    var clusterCount = warnings.filter(function (w) { return /üst üste izinli\/boşta/.test(w); }).length;
-    var coverGap = warnings.filter(function (w) { return /sağlanamadı|nöbetçi atanamadı/.test(w); }).length;
-    if (clusterCount > 0 || coverGap > 0) {
-      var nNobet = people.filter(function (P) { return !P.noNobet; }).length;
-      warnings.push('💡 ÖNERİ: Bu ay ' + nNobet + ' nöbetçi kişi var; bu izin yoğunluğu için kapasite sınırda. ' +
-        'Kaçınılmaz boş günler kümeleniyor (taşımak yalnızca başka kişiye kaydırır, toplamı azaltmaz). ' +
-        'Çözüm: çakışan yıllık izinleri farklı haftalara yayın, ya da o ay 1 kişi daha ekleyin ' +
-        '(çoğunlukla +1 kişi tüm bu uyarıları giderir).');
-    }
-
-    var grid = {};
-    people.forEach(function (P) { grid[P.name] = P.assign; });
-    return { year: year, month: month, nDays: nDays, days: days, grid: grid, totals: totals, warnings: warnings,
+    return { year: year, month: month, nDays: nDays, days: days, grid: gridA, totals: totals, warnings: warnings,
       meta: { base: baseTarget, hours: HOURS, dowName: DOW_TR } };
   }
 
-  var API = { buildSchedule: buildSchedule, HOURS: HOURS, DOW_TR: DOW_TR, daysInMonth: daysInMonth };
+  // Elle düzenleme sonrası yeniden analiz: ÜRETİMLE AYNI analyze()'i kullanır (tek kaynak).
+  // result.totals'taki name/target/noNobet/lockedOff + result.grid + result.days ile çalışır.
+  function recompute(result) {
+    var plist = (result.totals || []).map(function (t) {
+      return { name: t.name, target: t.target, noNobet: t.noNobet, lockedOff: t.lockedOff || [] };
+    });
+    return analyze(result.grid, plist, result.days, result.nDays);
+  }
+
+  var API = { buildSchedule: buildSchedule, recompute: recompute, HOURS: HOURS, DOW_TR: DOW_TR, daysInMonth: daysInMonth };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else root.Scheduler = API;
 })(typeof window !== 'undefined' ? window : this);
