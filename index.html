@@ -203,7 +203,7 @@
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v36</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v37</b>
   </div>
 </div>
 
@@ -417,7 +417,11 @@ async function cloudSaveNow(){ if(!SYNC.on||!LAST)return;
   try{
     if(SYNC.backend==='server'){ const r=await fetch('/api/state',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
       if(r.status===401){requireLogin();return;} const st=await r.json(); if(st&&st.rev!=null)SYNC.rev=st.rev; }
-    else if(SYNC.backend==='room'){ await fetch(JB+'/'+roomId(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); SYNC.rev=payload.rev; }
+    else if(SYNC.backend==='room'){
+      // users'ı KORU: önce odayı oku, cfg/grid güncelle, kullanıcıları olduğu gibi yaz.
+      let cur={}; try{ cur=await (await fetch(JB+'/'+roomId(),{cache:'no-store'})).json(); }catch(e){}
+      const merged={cfg:payload.cfg,grid:payload.grid,by:payload.by,rev:(cur.rev||SYNC.rev||0)+1,users:cur.users||[]};
+      await fetch(JB+'/'+roomId(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(merged)}); SYNC.rev=merged.rev; }
   }catch(e){}
 }
 function applyState(st){ if(!st||!st.cfg)return;
@@ -441,31 +445,44 @@ async function cloudInit(){
     if(r.ok){ const st=await r.json(); SYNC.on=true; SYNC.backend='server'; SYNC.me=getUser(); setSyncBadge();
       if(st&&st.cfg){ SYNC.rev=st.rev; applyState(st); return true; } SYNC.rev=st?st.rev:0; return false; }
   }catch(e){}
-  // 2) Ortak oda (#room / kayıtlı) var mı?
+  // 2) Ortak oda (#room / kayıtlı) var mı? -> ADMIN GİRİŞİ (kullanıcılar odanın verisinde)
   if(roomId()){ try{ const r=await fetch(JB+'/'+roomId(),{cache:'no-store'}); const st=r.ok?await r.json():null;
-    SYNC.on=true; SYNC.backend='room'; SYNC.me=myName(); setSyncBadge();
-    if(st&&st.cfg){ SYNC.rev=st.rev||0; applyState(st); return true; } SYNC.rev=0; return false;
+    SYNC.on=true; SYNC.backend='room';
+    const users=(st&&st.users)||[];
+    if(users.length){
+      const me=users.find(x=>x.u===getUser()&&x.p===getAuth());
+      if(!me){ SYNC.me=''; setSyncBadge(); requireLogin(); return 'need-login'; }   // giriş ekranı
+      SYNC.me=me.u; SYNC.admin=!!me.admin;
+    } else { SYNC.me=myName(); }
+    setSyncBadge();
+    if(st&&st.cfg){ SYNC.rev=st.rev||0; applyState(st); return true; } SYNC.rev=(st&&st.rev)||0; return false;
   }catch(e){} }
   // 3) Yerel
   SYNC.on=false; SYNC.backend='local'; setSyncBadge(); return false;
 }
-// ---- ÜCRETSİZ ortak oda (jsonblob) ----
+// ---- ÜCRETSİZ ortak oda (jsonblob) + ADMIN girişi ----
 async function createRoom(){
-  if(!getMyNameOnce()) return;
-  try{ const payload={cfg:readCfg(),grid:(LAST&&LAST.grid)||null,by:myName(),rev:1};
+  const u=(prompt('Yönetici KULLANICI ADI belirleyin (örn. admin):','admin')||'').trim(); if(!u)return;
+  const p=(prompt('Yönetici ŞİFRESİ belirleyin:','')||'').trim(); if(!p){ alert('Şifre boş olamaz'); return; }
+  try{ const payload={cfg:readCfg(),grid:(LAST&&LAST.grid)||null,by:u,rev:1,users:[{u,p,admin:true}]};
     const r=await fetch(JB,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const id=(r.headers.get('Location')||'').split('/').pop();
     if(!id) throw new Error('oda kimliği alınamadı');
-    localStorage.setItem('anestezi_room',id);
+    localStorage.setItem('anestezi_room',id); localStorage.setItem('anestezi_user',u); localStorage.setItem('anestezi_auth',p);
     const url=location.origin+location.pathname+'#room='+id;
     history.replaceState(null,'',url);
-    SYNC.on=true; SYNC.backend='room'; SYNC.rev=1; setSyncBadge();
+    SYNC.on=true; SYNC.backend='room'; SYNC.me=u; SYNC.admin=true; SYNC.rev=1; setSyncBadge();
     if(!SYNC.pollStarted){ SYNC.pollStarted=true; setInterval(cloudPoll,2500); }
     const ok=navigator.clipboard&&navigator.clipboard.writeText;
-    if(ok) navigator.clipboard.writeText(url).then(()=>flash('🟢 Ortak oda kuruldu, link kopyalandı — arkadaşınıza gönderin')).catch(()=>prompt('Ortak oda linki (kopyalayıp gönderin):',url));
+    if(ok) navigator.clipboard.writeText(url).then(()=>flash('🟢 Ortak oda kuruldu, link kopyalandı — arkadaşınıza gönderin (giriş bilgisini de verin)')).catch(()=>prompt('Ortak oda linki:',url));
     else prompt('Ortak oda linki (kopyalayıp gönderin):',url);
-  }catch(e){ alert('Oda oluşturulamadı: '+e.message); }
+  }catch(e){ alert('Oda oluşturulamadı (ağınız jsonblob.com erişimini engelliyor olabilir): '+e.message); }
 }
+// odanın güncel users listesini getir (Ayarlar + giriş için)
+async function roomUsers(){ try{ const st=await (await fetch(JB+'/'+roomId(),{cache:'no-store'})).json(); return st&&st.users||[]; }catch(e){ return []; } }
+// odanın users'ını güncelle (cfg/grid korunur)
+async function roomSaveUsers(users){ const st=await (await fetch(JB+'/'+roomId(),{cache:'no-store'})).json();
+  st.users=users; st.rev=(st.rev||0)+1; await fetch(JB+'/'+roomId(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(st)}); SYNC.rev=st.rev; }
 function getMyNameOnce(){
   let n=localStorage.getItem('anestezi_name');
   if(!n){ n=(prompt('Adınız (kimin değiştirdiği görünsün diye):','')||'').trim(); if(!n) return false; localStorage.setItem('anestezi_name',n); SYNC.me=n; }
@@ -482,6 +499,14 @@ async function doLogin(){
   const pw=(document.getElementById('loginPw').value||'').trim();
   const err=document.getElementById('loginErr');
   if(!usr){ err.textContent='Kullanıcı adı girin'; return; }
+  // ORTAK ODA modu: kullanıcılar odanın bulut verisinde -> orada doğrula
+  if(SYNC.backend==='room'){
+    const users=await roomUsers(); const me=users.find(x=>x.u===usr&&x.p===pw);
+    if(me){ localStorage.setItem('anestezi_user',usr); localStorage.setItem('anestezi_auth',pw);
+      SYNC.me=usr; SYNC.admin=!!me.admin; document.getElementById('loginOverlay').style.display='none'; err.textContent=''; initApp(); }
+    else err.textContent='Kullanıcı adı veya şifre hatalı';
+    return;
+  }
   try{ const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:usr,password:pw})});
     const j=await r.json().catch(()=>({}));
     if(r.ok&&j.ok){ localStorage.setItem('anestezi_user',usr); localStorage.setItem('anestezi_auth',pw);
@@ -497,7 +522,14 @@ async function openSettings(){
   ov.style.display='flex';
   document.getElementById('setMsg').textContent='';
   document.getElementById('setNewPw').value='';
-  // yönetici bölümü + kullanıcı listesi
+  // ORTAK ODA modu: kullanıcılar odanın verisinden
+  if(SYNC.backend==='room'){
+    document.getElementById('setWho').textContent='Giriş: '+SYNC.me+(SYNC.admin?' (yönetici)':'');
+    const ab=document.getElementById('setAdminBox'); ab.style.display=SYNC.admin?'block':'none';
+    if(SYNC.admin){ renderUsers(await roomUsers()); }
+    return;
+  }
+  // SUNUCU modu: /api/users
   try{ const j=await (await fetch('/api/users',{headers:authHeaders()})).json();
     SYNC.admin=!!j.admin;
     document.getElementById('setWho').textContent='Giriş: '+(j.me||SYNC.me)+(j.admin?' (yönetici)':'');
@@ -516,6 +548,12 @@ function renderUsers(users){
 async function changeMyPw(){
   const np=(document.getElementById('setNewPw').value||'').trim(); const m=document.getElementById('setMsg');
   if(np.length<3){ m.style.color='var(--err)'; m.textContent='Şifre en az 3 karakter olmalı'; return; }
+  if(SYNC.backend==='room'){
+    try{ const us=await roomUsers(); const me=us.find(x=>x.u===SYNC.me); if(me){me.p=np; await roomSaveUsers(us);
+      localStorage.setItem('anestezi_auth',np); m.style.color='var(--ok)'; m.textContent='Şifreniz değiştirildi ✓'; document.getElementById('setNewPw').value=''; }
+    }catch(e){ m.style.color='var(--err)'; m.textContent='Kaydedilemedi (ağ?)'; }
+    return;
+  }
   try{ const r=await fetch('/api/changepw',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({newPass:np})});
     const j=await r.json();
     if(r.ok){ localStorage.setItem('anestezi_auth',np); m.style.color='var(--ok)'; m.textContent='Şifreniz değiştirildi ✓'; document.getElementById('setNewPw').value=''; }
@@ -524,6 +562,15 @@ async function changeMyPw(){
 }
 async function userAction(action,u,p,admin){
   const m=document.getElementById('setMsg');
+  if(SYNC.backend==='room'){
+    if(!SYNC.admin){ m.style.color='var(--err)'; m.textContent='Yalnız yönetici'; return; }
+    try{ let us=await roomUsers();
+      if(action==='add'){ if(us.some(x=>x.u===u)){ m.style.color='var(--err)'; m.textContent='Bu kullanıcı adı var'; return; } us.push({u,p,admin:!!admin}); }
+      else if(action==='remove'){ if(u===SYNC.me){ m.style.color='var(--err)'; m.textContent='Kendinizi silemezsiniz'; return; } us=us.filter(x=>x.u!==u); }
+      await roomSaveUsers(us); renderUsers(us); m.style.color='var(--ok)'; m.textContent='Kaydedildi ✓';
+    }catch(e){ m.style.color='var(--err)'; m.textContent='Kaydedilemedi (ağ?)'; }
+    return;
+  }
   try{ const r=await fetch('/api/users',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action,u,p,admin})});
     const j=await r.json();
     if(r.ok){ renderUsers(j.users); m.style.color='var(--ok)'; m.textContent='Kaydedildi ✓'; }
@@ -682,9 +729,7 @@ function importFromHash(){
 }
 // URL'de #room=<id> varsa ortak odaya katıl (linke tıklayan arkadaş)
 function importRoomFromHash(){ const m=(location.hash||'').match(/[#&]room=([^&]+)/);
-  if(m){ localStorage.setItem('anestezi_room', m[1]);
-    if(!localStorage.getItem('anestezi_name')){ const n=(prompt('Adınız (kimin değiştirdiği görünsün diye):','')||'').trim(); if(n) localStorage.setItem('anestezi_name',n); }
-    return true; } return false; }
+  if(m){ localStorage.setItem('anestezi_room', m[1]); return true; } return false; }
 importRoomFromHash();
 importFromHash();
 initApp();
