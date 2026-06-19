@@ -58,11 +58,24 @@
   .muted{color:var(--muted)}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
   @media print{
-    body{background:#fff;color:#000;font-size:10px}
-    header,.panel.noprint,.toolbar{display:none!important}
-    table.grid th,table.grid td{border-color:#999;color:#000!important}
-    td.cell{color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .M,.N24,.N16,.NI,.HT,.RT,.YI,.UCI,.OFF{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{ size:A4 landscape; margin:6mm; }
+    *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+    body{background:#fff;color:#000;font-size:9px}
+    header,.panel.noprint,.toolbar,.note{display:none!important}
+    .wrap{padding:0;max-width:none}
+    .panel{border:none;background:#fff;padding:0;margin:0 0 6px;box-shadow:none}
+    .panel h2{color:#000;font-size:13px;margin:0 0 5px}
+    .gridwrap{overflow:visible;border:1px solid #999;border-radius:0}
+    table.grid{font-size:6px;width:100%;table-layout:fixed}
+    table.grid th,table.grid td{border:1px solid #aaa;padding:0 1px;min-width:0;overflow:hidden;white-space:nowrap;letter-spacing:-0.3px}
+    table.grid thead th{background:#e5e7eb!important;color:#000!important;position:static;font-size:6px}
+    table.grid th.wknd{background:#fde68a!important}
+    table.grid th.name,table.grid td.name{position:static;width:46px;min-width:46px;background:#fff!important;color:#000!important;font-size:7px}
+    /* renkli hücreler ekrandaki gibi (beyaz yazı + renkli zemin) korunur */
+    .tot{background:#f3f4f6!important;color:#000!important}
+    .tot.bad{color:#b91c1c!important} .tot.good{color:#15803d!important}
+    .legend{font-size:8px;margin-top:5px;gap:6px}
+    .warns{font-size:9px;margin-top:6px}
   }
 </style>
 </head>
@@ -132,14 +145,15 @@
 
   <div class="toolbar noprint">
     <button onclick="generate()" style="font-size:15px">⚙️ Liste Oluştur</button>
-    <button class="sec" onclick="exportCSV()">⬇️ Excel (CSV)</button>
+    <button class="sec" onclick="exportXLS()">⬇️ Excel (renkli)</button>
+    <button class="sec" onclick="exportCSV()">⬇️ CSV</button>
     <button class="sec" onclick="window.print()">🖨️ Yazdır / PDF</button>
   </div>
 
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v27</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v28</b>
   </div>
 </div>
 
@@ -374,6 +388,43 @@ function exportCSV(){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download=`anestezi_${MONTHS[r.month]}_${r.year}.csv`; a.click();
+}
+// Renkli-biçimli Excel: HTML tablo -> .xls (Excel renklerle açar). Hücre renkleri ekrandakiyle aynı.
+const XLS_BG={M:'#1d4ed8',N24:'#dc2626',N16:'#ea580c',NI:'#64748b',HT:'#cbd5e1',RT:'#7c3aed',YI:'#16a34a',UCI:'#0d9488',OFF:'#db2777','':'#ffffff'};
+const XLS_DARK={M:1,N24:1,N16:1,NI:1,RT:1,YI:1,UCI:1,OFF:1};   // beyaz yazı gereken koyu zeminler
+function exportXLS(){
+  if(!LAST){alert('Önce liste oluşturun.');return;}
+  const r=LAST;
+  const th='border:1px solid #999;padding:3px 5px;text-align:center;mso-number-format:"\\@"';
+  let h='<table style="border-collapse:collapse;font-family:Calibri,Arial;font-size:11px">';
+  h+=`<tr><td colspan="${r.days.length+10}" style="font-size:15px;font-weight:bold;padding:6px">${MONTHS[r.month]} ${r.year} — Nöbet / Vardiya Listesi</td></tr>`;
+  h+=`<tr><th style="${th};background:#334155;color:#fff">Personel</th>`;
+  r.days.forEach(d=>{ h+=`<th style="${th};background:${d.weekend||d.holiday?'#b45309':'#334155'};color:#fff">${d.day} ${d.dowName}</th>`; });
+  ['Hedef','Toplam','Fark','M','N24','N16','Nİ','Ü.İ','HSn'].forEach(x=>h+=`<th style="${th};background:#0b1220;color:#fff">${x}</th>`);
+  h+='</tr>';
+  r.totals.forEach(t=>{ const g=r.grid[t.name];
+    h+=`<tr><td style="${th};text-align:left;font-weight:bold">${t.name}</td>`;
+    r.days.forEach(d=>{ const c=g[d.day]||''; h+=`<td style="${th};background:${XLS_BG[c]};color:${XLS_DARK[c]?'#fff':'#000'};font-weight:bold">${CODE_LABEL[c]}</td>`; });
+    const fc=t.fark===0?'#15803d':'#b91c1c';
+    h+=`<td style="${th}">${t.target}</td><td style="${th}">${t.hours}</td><td style="${th};color:${fc};font-weight:bold">${t.fark}</td>`;
+    h+=`<td style="${th}">${t.mesai}</td><td style="${th}">${t.n24}</td><td style="${th}">${t.n16}</td><td style="${th}">${t.ni}</td><td style="${th}">${t.uci}</td><td style="${th}">${t.weekendNobet}</td></tr>`;
+  });
+  // günlük özet satırları
+  function dc(day){let nob=0,gun=0;r.totals.forEach(t=>{const c=r.grid[t.name][day];if(c==='N24'||c==='N16')nob++;if(!t.noNobet&&(c==='M'||c==='N24'))gun++;});return {nob,gun};}
+  h+=`<tr><td style="${th};text-align:left;font-weight:bold;background:#fef9c3">Gündüz (08-17)</td>`;
+  r.days.forEach(d=>{const c=dc(d.day);const need=d.workday?(d.isTueThu?3:2):2;h+=`<td style="${th};background:${c.gun<need?'#fecaca':'#dcfce7'};font-weight:bold">${c.gun}</td>`;});
+  h+=`<td colspan="9" style="${th}"></td></tr>`;
+  h+=`<tr><td style="${th};text-align:left;font-weight:bold;background:#fef9c3">Nöbetçi</td>`;
+  r.days.forEach(d=>{const c=dc(d.day);h+=`<td style="${th};background:${c.nob<2?'#fecaca':'#dcfce7'};font-weight:bold">${c.nob}</td>`;});
+  h+=`<td colspan="9" style="${th}"></td></tr>`;
+  h+='</table>';
+  const html='<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8">'
+    +'<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'
+    +'<x:Name>'+MONTHS[r.month]+' '+r.year+'</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>'
+    +'</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>'+h+'</body></html>';
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['﻿'+html],{type:'application/vnd.ms-excel'}));
+  a.download=`anestezi_${MONTHS[r.month]}_${r.year}.xls`; a.click();
 }
 
 // Bağlantıdan içe aktarma: URL'de #cfg=<URI-kodlu JSON> varsa yapılandırmayı yükler
