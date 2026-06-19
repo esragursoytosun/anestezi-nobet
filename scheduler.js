@@ -156,6 +156,8 @@
       return {
         idx: idx, name: p.name, noNobet: !!p.noNobet, startNI: !!p.startNI,
         YI: YI, offReq: offReq, thursdays: thursdays,
+        // GÜN-BAZLI TERCİHLER: o günlerde sadece gündüz (nöbet yok) / sadece N16 (24s yok)
+        onlyDay: new Set(p.onlyDay || []), onlyN16: new Set(p.onlyN16 || []),
         target: target, assign: {}, nobetDays: [], weekendNobet: 0, hours: 0, lastNobet: -99,
         lockedOff: new Set(), mustMesai: new Set()
       };
@@ -198,6 +200,8 @@
     function eligibleForNobet(P, dd, addHours, strict) {
       var d = dd.day, cur = P.assign[d];
       if (P.noNobet) return false;
+      if (P.onlyDay.has(d)) return false;              // o gün SADECE GÜNDÜZ istiyor -> nöbet yok (mesai olabilir)
+      if (P.onlyN16.has(d) && addHours === 24) return false;  // o gün SADECE N16 -> 24s verme (N16 olabilir)
       if (P.lockedOff.has(d)) return false;            // izin sonrası hafta sonu -> nöbet yok
       if (P.offReq.has(d)) return false;               // boş gün isteği -> o güne nöbet yazma
       if (cur === 'YI' || cur === 'OFF' || cur === 'UCI') return false;

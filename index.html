@@ -167,6 +167,7 @@
             <th style="width:74px">Aya N.İ<br>başla</th>
             <th>Yıllık izin (başlangıç – bitiş)</th>
             <th>Boş gün isteği (gün no: 5,12,20)</th>
+            <th>Gün tercihi<br><span class="muted" style="font-weight:400">sadece gündüz / sadece N16</span></th>
             <th style="width:34px"></th>
           </tr>
         </thead>
@@ -179,7 +180,8 @@
       • <b>Aya N.İ başla</b>: önceki ayın son nöbetçisi; ayın 1. günü nöbet izinli (dinlenme) başlar, o gün nöbet/mesai almaz.<br>
       • <b>Yıllık izin</b> çalışma saatinden düşülür. Tek gün için sadece başlangıç tarihini seç.<br>
       • <b>Ücretli izin</b> otomatik eklenir: 176 saat dolunca kalan iş günleri ücretli izin olur (boş hücre kalmaz, 176 aşılmaz). Ayrıca yıllık izne çıkan kişi izinden 4 iş günü önce nöbet tutar, izinden önceki 2 iş günü ücretli izinli olur.<br>
-      • <b>Boş gün isteği</b> mümkünse dikkate alınır (zorunlu değil).
+      • <b>Boş gün isteği</b> mümkünse dikkate alınır (zorunlu değil).<br>
+      • <b>Gün tercihi</b>: "sadece gündüz" günlerinde o kişiye nöbet verilmez (yalnız gündüz mesaisi). "sadece N16" günlerinde nöbet 24s yerine 16s (N16-08) olur.
     </div>
     <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
       <button class="sec sm" onclick="addPerson()">+ Personel ekle</button>
@@ -203,7 +205,7 @@
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v37</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v38</b>
   </div>
 </div>
 
@@ -286,6 +288,10 @@ function addPerson(name){
     <td class="chk"><input type="checkbox" class="p-startni" /></td>
     <td>${yiCellHtml()}</td>
     <td><input type="text" class="p-off" placeholder="5,12,20" style="min-width:130px" /></td>
+    <td><div style="display:flex;flex-direction:column;gap:3px">
+      <input type="text" class="p-onlyday" placeholder="sadece gündüz: 7,8" title="Bu günlerde nöbet verilmez, sadece gündüz mesaisi olabilir" style="min-width:130px" />
+      <input type="text" class="p-onlyn16" placeholder="sadece N16: 12" title="Bu günlerde nöbet 24s değil, 16s (N16-08) olur" style="min-width:130px" />
+    </div></td>
     <td style="white-space:nowrap">
       <button class="sm sec" onclick="moveRow(this,-1)" title="Yukarı">↑</button>
       <button class="sm sec" onclick="moveRow(this,1)" title="Aşağı">↓</button>
@@ -320,6 +326,8 @@ function readCfg(){
     // birebir geri yüklenir -> izin tarihleri yenilemede ASLA kaybolmaz.
     yiRanges: rangesOf(tr),
     offReq:  parseDays(tr.querySelector('.p-off').value),
+    onlyDay: parseDays(tr.querySelector('.p-onlyday').value),
+    onlyN16: parseDays(tr.querySelector('.p-onlyn16').value),
   })).filter(p=>p.name!=='?');
   return {
     year: parseInt(document.getElementById('year').value,10),
@@ -362,6 +370,8 @@ function applyCfg(c){
     tr.querySelector('.yi-list').innerHTML = ranges.map(r=>yiRangeHtml(r.s,r.e)).join('');
     updateYiX(cell);
     tr.querySelector('.p-off').value=(p.offReq||[]).join(',');
+    tr.querySelector('.p-onlyday').value=(p.onlyDay||[]).join(',');
+    tr.querySelector('.p-onlyn16').value=(p.onlyN16||[]).join(',');
   });
   updateDateBounds();
 }
