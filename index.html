@@ -181,7 +181,8 @@
       • <b>Yıllık izin</b> çalışma saatinden düşülür. Tek gün için sadece başlangıç tarihini seç.<br>
       • <b>Ücretli izin</b> otomatik eklenir: 176 saat dolunca kalan iş günleri ücretli izin olur (boş hücre kalmaz, 176 aşılmaz). Ayrıca yıllık izne çıkan kişi izinden 4 iş günü önce nöbet tutar, izinden önceki 2 iş günü ücretli izinli olur.<br>
       • <b>Boş gün isteği</b> mümkünse dikkate alınır (zorunlu değil).<br>
-      • <b>Gün tercihi</b>: "sadece gündüz" günlerinde o kişiye nöbet verilmez (yalnız gündüz mesaisi). "sadece N16" günlerinde nöbet 24s yerine 16s (N16-08) olur.
+      • <b>Gün tercihi</b>: "sadece gündüz" günlerinde o kişiye nöbet verilmez (yalnız gündüz mesaisi). "sadece N16" günlerinde nöbet 24s yerine 16s (N16-08) olur.<br>
+      • <b>Aylık sayfalar</b>: Ay/yıl seçince o ayın listesi ayrı kaydedilir; listenin üstündeki 🗂️ sekmelerden aylar arasında geçebilir, eski ayları silebilirsiniz. (Yeni aya geçince personel korunur, izin/tercih alanları temizlenir.)
     </div>
     <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
       <button class="sec sm" onclick="addPerson()">+ Personel ekle</button>
@@ -202,10 +203,11 @@
     <button id="logoutBtn" class="sec sm" style="display:none;align-self:center" onclick="leaveRoomOrLogout()">Çıkış</button>
   </div>
 
+  <div id="monthTabs" class="noprint" style="display:none;align-items:center;gap:6px;flex-wrap:wrap;margin:14px 0 0"></div>
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v38</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v39</b>
   </div>
 </div>
 
@@ -386,8 +388,57 @@ function flash(msg){
   document.body.appendChild(d);setTimeout(()=>d.remove(),1500);
 }
 
-document.getElementById('month').addEventListener('change',()=>{updateDateBounds();fillHolidays();});
-document.getElementById('year').addEventListener('change',updateDateBounds);
+// ============== AYLIK SAYFALAR — her ay ayrı kaydolur, aylar arası geçiş ==============
+// Yerel depo (her tarayıcıda): anestezi_months = { 'YIL-AY': {cfg, grid} }.
+// Ay/yıl seçici değişince eski ay kaydolur, seçilen ay yüklenir. Üstteki sekmelerden de geçilir.
+let activeKey=null;
+function ymKey(y,m){ return y+'-'+m; }
+function monthKey(){ return ymKey(document.getElementById('year').value, document.getElementById('month').value); }
+function keyLabel(k){ const [y,m]=k.split('-'); return (MONTHS[+m]||'?')+' '+y; }
+function loadMonths(){ try{ return JSON.parse(localStorage.getItem('anestezi_months')||'{}'); }catch(e){ return {}; } }
+function saveMonths(obj){ try{ localStorage.setItem('anestezi_months', JSON.stringify(obj)); }catch(e){} }
+function storeActiveMonth(){ if(!activeKey)activeKey=monthKey();
+  const obj=loadMonths(); obj[activeKey]={cfg:readCfg(), grid:(LAST&&LAST.grid)||null}; saveMonths(obj); refreshMonthTabs(); }
+function refreshMonthTabs(){ const bar=document.getElementById('monthTabs'); if(!bar)return;
+  const obj=loadMonths(); const keys=Object.keys(obj).sort((a,b)=>{const[ay,am]=a.split('-').map(Number),[by,bm]=b.split('-').map(Number);return ay-by||am-bm;});
+  if(activeKey&&!keys.includes(activeKey)) keys.push(activeKey);
+  if(keys.length<=1){ bar.style.display='none'; return; }
+  bar.style.display='flex';
+  bar.innerHTML='<span class="muted" style="font-size:13px">🗂️ Kayıtlı aylar:</span>'+keys.map(k=>{
+    const act=k===activeKey;
+    return `<span style="display:inline-flex;align-items:center;border:1px solid ${act?'var(--accent)':'var(--line)'};border-radius:7px;overflow:hidden">
+      <button class="sm" style="border:0;border-radius:0;${act?'background:var(--accent);color:#fff':'background:transparent'}" onclick="gotoMonth('${k}')">${keyLabel(k)}</button>
+      <button class="sm" title="Bu ayı sil" style="border:0;border-radius:0;background:transparent;color:var(--muted);padding:4px 7px" onclick="delMonth('${k}')">✕</button>
+    </span>`;
+  }).join('');
+}
+function gotoMonth(k){ if(k===activeKey)return; const [y,m]=k.split('-');
+  document.getElementById('year').value=y; document.getElementById('month').value=m; onPeriodChange(); }
+function delMonth(k){ const obj=loadMonths(); if(!obj[k]&&k!==activeKey)return;
+  if(!confirm(keyLabel(k)+' ayının kayıtlı listesi silinsin mi?'))return;
+  delete obj[k]; saveMonths(obj);
+  if(k===activeKey){ const rest=Object.keys(obj); if(rest.length){ gotoMonth(rest.sort()[rest.length-1]); return; } }
+  refreshMonthTabs();
+}
+function seedNewMonth(){ // yeni ay: personeli koru, aya özel alanları temizle, o ayın tatillerini doldur
+  const cfg=readCfg();
+  cfg.personnel.forEach(p=>{ p.leaveYI=[]; p.yiRanges=[]; p.offReq=[]; p.onlyDay=[]; p.onlyN16=[]; });
+  cfg.holidays=[];
+  applyCfg(cfg); fillHolidays();
+}
+function onPeriodChange(){
+  const obj=loadMonths();
+  if(activeKey){ const oldCfg=readCfg(); const [oy,om]=activeKey.split('-'); oldCfg.year=+oy; oldCfg.month=+om;
+    obj[activeKey]={cfg:oldCfg, grid:(LAST&&LAST.grid)||null}; saveMonths(obj); }
+  const nk=monthKey(); activeKey=nk;
+  if(obj[nk]){ applyCfg(obj[nk].cfg); LAST=Scheduler.buildSchedule(readCfg());
+    if(obj[nk].grid){ LAST.grid=obj[nk].grid; recomputeTotals(LAST); } render(LAST); saveCfgQuiet(); }
+  else { seedNewMonth(); generate(); }
+  storeActiveMonth(); cloudSave();
+}
+function saveCfgQuiet(){ try{ localStorage.setItem('anestezi_cfg', JSON.stringify(readCfg())); }catch(e){} }
+document.getElementById('month').addEventListener('change',onPeriodChange);
+document.getElementById('year').addEventListener('change',onPeriodChange);
 
 let LAST=null;
 function generate(){
@@ -396,6 +447,7 @@ function generate(){
   LAST=Scheduler.buildSchedule(cfg);
   render(LAST);
   saveCfg();
+  storeActiveMonth();
   cloudSave();
 }
 
@@ -438,6 +490,7 @@ function applyState(st){ if(!st||!st.cfg)return;
   try{ applyCfg(st.cfg); LAST=Scheduler.buildSchedule(readCfg());
     if(st.grid){ LAST.grid=st.grid; const re=Scheduler.recompute(LAST); LAST.totals=re.totals; LAST.warnings=re.warnings; }
     render(LAST); localStorage.setItem('anestezi_cfg',JSON.stringify(readCfg()));
+    activeKey=monthKey(); storeActiveMonth();
   }catch(e){} }
 async function cloudPoll(){ if(!SYNC.on||SYNC.editing)return;
   try{
@@ -599,6 +652,8 @@ function initApp(){
     if(loaded==='need-login') return;                 // giriş ekranı açık, bekle
     if(!loaded){ loadCfg(); if(!document.getElementById('holidays').value.trim()) fillHolidays(); generate(); }
     if(SYNC.on && !SYNC.pollStarted){ SYNC.pollStarted=true; setInterval(cloudPoll,2500); }
+    if(!activeKey) activeKey=monthKey();
+    refreshMonthTabs();
   });
 }
 function render(r){
@@ -651,7 +706,7 @@ function editCell(td){
   td.textContent=''; td.appendChild(sel); sel.focus();
   SYNC.editing=true;
   let done=false;
-  sel.addEventListener('change',()=>{done=true; LAST.grid[name][d]=sel.value; recomputeTotals(LAST); render(LAST); SYNC.editing=false; cloudSave();});
+  sel.addEventListener('change',()=>{done=true; LAST.grid[name][d]=sel.value; recomputeTotals(LAST); render(LAST); SYNC.editing=false; storeActiveMonth(); cloudSave();});
   sel.addEventListener('blur',()=>{ if(!done){ SYNC.editing=false; render(LAST); } });
 }
 // Elle düzenleme sonrası: ÜRETİMLE AYNI doğrulayıcıyı (Scheduler.recompute -> analyze)
