@@ -214,11 +214,14 @@
       if (!pool.length) return null;
       pool.sort(function (a, b) {
         if (dd.weekend || dd.holiday) { if (a.weekendNobet !== b.weekendNobet) return a.weekendNobet - b.weekendNobet; }
-        if (a.nobetDays.length !== b.nobetDays.length) return a.nobetDays.length - b.nobetDays.length;
+        // İLERLEME HIZINA göre: hedefinin oransal olarak en GERİSİNDE olan önce gelsin.
+        // Böylece herkes aya yayılı şekilde, hedefini ~AY SONUNA doğru BİRLİKTE doldurur;
+        // kimse erken dolup ay sonunda boş (kümeli) kalmaz. (Hedefi küçük olan az nöbet alır.)
+        var pa = a.hours / (a.target || 1), pb = b.hours / (b.target || 1);
+        if (Math.abs(pa - pb) > 0.0001) return pa - pb;
         // nöbetleri aya YAY: nöbeti en eski olan (ya da hiç tutmamış) önce gelsin
         if (a.lastNobet !== b.lastNobet) return a.lastNobet - b.lastNobet;
-        var ra = a.target - a.hours, rb = b.target - b.hours;
-        if (ra !== rb) return rb - ra;
+        if (a.nobetDays.length !== b.nobetDays.length) return a.nobetDays.length - b.nobetDays.length;
         return a.idx - b.idx;
       });
       return pool[0];
