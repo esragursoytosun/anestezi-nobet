@@ -143,6 +143,17 @@
       }
     }
     function addMesai(P, day) { P.assign[day] = 'M'; P.hours += 8; }
+    // Gündüz 08-17'de FİİLEN bulunanlar: M8-17 + N08-08 (24s). N16-08 günüzü KAPSAMAZ.
+    // Sorumlu (noNobet) sayılmaz. (Kural 5)
+    function daytimeCount(day) {
+      var c = 0;
+      for (var i = 0; i < people.length; i++) {
+        var P = people[i];
+        if (!P.noNobet && (P.assign[day] === 'M' || P.assign[day] === 'N24')) c++;
+      }
+      return c;
+    }
+    function dayNeed(dd) { return dd.isTueThu ? 3 : 2; }
 
     // ---- 0.5) YILLIK İZİN ÖNCESİ DÜZEN ----
     // izinden 4 iş günü önce NÖBET; izinden hemen önceki 2 iş günü UCI.
@@ -325,7 +336,13 @@
           // taşınacak mesai yok (kişi çok nöbetli): bir 24s nöbeti 16s'e indir (8s açılır),
           // bu seride bir ücretli izin gününü mesaiye çevir -> saat 176 sabit, boşluk kırılır.
           var n24 = -1;
-          for (var q = 0; q < workdayNums.length; q++) { if (P.assign[workdayNums[q]] === 'N24') { n24 = workdayNums[q]; break; } }
+          for (var q = 0; q < workdayNums.length; q++) {
+            var dq = workdayNums[q];
+            if (P.assign[dq] !== 'N24') continue;
+            // N24->N16 indirimi o günün gündüz minimumunu BOZMAMALI (N24 sayılır, N16 sayılmaz).
+            if (daytimeCount(dq) - 1 < dayNeed(days[dq - 1])) continue;
+            n24 = dq; break;
+          }
           if (n24 > 0) { P.assign[n24] = 'N16'; P.hours -= 8; P.assign[mid] = 'M'; P.hours += 8; continue; }
           return;
         }
@@ -340,6 +357,60 @@
       return best;
     }
     people.forEach(fixAbsence);
+
+    // ---- 2.7) GÜNDÜZ MİNİMUMU SON GARANTİ (kural 5 — "kesinlikle olmalı") ----
+    // Önceki adımlar (fixAbsence taşımaları/indirmeleri, kapsama N16 atamaları) gündüz
+    // sayısını minimumun altına düşürmüş olabilir. Burada günü gün kontrol edip:
+    //   1) saat-korumalı TAKAS: bugün UCI olan biri, FAZLASI olan bir günden M taşıyarak
+    //      bugüne M olur (toplam saat değişmez, kimsede >3 boş seri açılmaz).
+    //   2) olmazsa bugünün N16 nöbetçisini N24'e YÜKSELT (günüzü kapsar -> sayılır);
+    //      saat aşarsa aynı kişinin başka bir M'sini UCI yapıp dengele.
+    // İkisi de mümkün değilse: gerçek kapasite darboğazı -> net uyarı.
+    days.forEach(function (dd) {
+      if (!dd.workday) return;
+      var need = dayNeed(dd);
+      for (var guard = 0; guard < 60 && daytimeCount(dd.day) < need; guard++) {
+        var done = false;
+        // STRATEJİ 1 — saat-korumalı takas
+        for (var pi = 0; pi < people.length && !done; pi++) {
+          var P = people[pi];
+          if (P.noNobet || P.assign[dd.day] !== 'UCI') continue;
+          if (P.offReq.has(dd.day) || P.lockedOff.has(dd.day)) continue;
+          for (var m = 0; m < workdayNums.length && !done; m++) {
+            var dm = workdayNums[m];
+            if (dm === dd.day || P.assign[dm] !== 'M' || P.mustMesai.has(dm)) continue;
+            if (daytimeCount(dm) - 1 < dayNeed(days[dm - 1])) continue;  // donör günü koru
+            P.assign[dm] = 'UCI'; P.assign[dd.day] = 'M';                // saat sabit (8->0, 0->8)
+            if (longestAbsentRun(P) > 3) { P.assign[dm] = 'M'; P.assign[dd.day] = 'UCI'; continue; }
+            done = true;
+          }
+        }
+        if (done) continue;
+        // STRATEJİ 2 — N16 nöbetçiyi N24'e yükselt (gerekirse başka M'yi UCI yaparak dengele)
+        for (var qi = 0; qi < people.length && !done; qi++) {
+          var Q = people[qi];
+          if (Q.noNobet || Q.assign[dd.day] !== 'N16') continue;
+          var ok = (Q.hours + 8 <= Q.target);
+          if (!ok) {
+            for (var mm = 0; mm < workdayNums.length; mm++) {
+              var dx = workdayNums[mm];
+              if (dx === dd.day || Q.assign[dx] !== 'M' || Q.mustMesai.has(dx)) continue;
+              if (daytimeCount(dx) - 1 < dayNeed(days[dx - 1])) continue;
+              Q.assign[dx] = 'UCI'; Q.hours -= 8;
+              if (longestAbsentRun(Q) > 3) { Q.assign[dx] = 'M'; Q.hours += 8; continue; }
+              ok = true; break;
+            }
+          }
+          if (!ok) continue;
+          Q.assign[dd.day] = 'N24'; Q.hours += 8;
+          done = true;
+        }
+        if (done) continue;
+        warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüz mesaisinde en az ' + need +
+          ' kişi sağlanamadı (kapasite yetersiz).');
+        break;
+      }
+    });
 
     // ---- 3) YILLIK İZİN DÖNÜŞÜ doğrulaması ----
     people.forEach(function (P) {
