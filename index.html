@@ -84,6 +84,18 @@
       <div><label>Resmi tatil günleri (virgülle gün no: 1,30)</label>
         <input type="text" id="holidays" placeholder="ör. 30" style="min-width:160px" /></div>
     </div>
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:13px">
+      <label style="margin:0;color:var(--txt);font-weight:600;font-size:12px">Dağıtım seçenekleri</label>
+      <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
+        <input type="checkbox" id="optWeekendN16" checked style="width:auto" />
+        Hafta sonu nöbetini N16-08'e indirip boşlukları mesaiyle kır <span class="muted">(az kişide kümeleri çözer)</span></label>
+      <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
+        <input type="checkbox" id="optPreLeaveWed" checked style="width:auto" />
+        Pazartesi-izinde izin-öncesi nöbet Salı yerine Çarşamba olabilsin <span class="muted">(gerekirse)</span></label>
+      <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
+        <input type="checkbox" id="optDenseBlock" checked style="width:auto" />
+        Sık nöbet engeli: 3 nöbet 5 günden az aralıkta verilmesin <span class="muted">(nöbetleri aya yayar)</span></label>
+    </div>
   </div>
 
   <div class="panel noprint">
@@ -129,7 +141,7 @@
   <div id="output"></div>
 </div>
 
-<script src="scheduler.js?v=18"></script>
+<script src="scheduler.js?v=19"></script>
 <script>
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DEFAULT_NAMES = Array.from({length:14},(_,i)=>'Personel '+(i+1));
@@ -226,6 +238,11 @@ function readCfg(){
     year: parseInt(document.getElementById('year').value,10),
     month: parseInt(document.getElementById('month').value,10),
     holidays: parseDays(document.getElementById('holidays').value),
+    options: {
+      weekendN16: document.getElementById('optWeekendN16').checked,
+      preLeaveWed: document.getElementById('optPreLeaveWed').checked,
+      denseBlock:  document.getElementById('optDenseBlock').checked
+    },
     personnel
   };
 }
@@ -243,6 +260,10 @@ function loadCfg(){
     document.getElementById('year').value=c.year;
     document.getElementById('month').value=c.month;
     document.getElementById('holidays').value=(c.holidays||[]).join(',');
+    var o=c.options||{};
+    document.getElementById('optWeekendN16').checked = o.weekendN16!==false;
+    document.getElementById('optPreLeaveWed').checked = o.preLeaveWed!==false;
+    document.getElementById('optDenseBlock').checked = o.denseBlock!==false;
     document.getElementById('pbody').innerHTML='';
     const y=c.year, m=c.month;
     (c.personnel||[]).forEach(p=>{

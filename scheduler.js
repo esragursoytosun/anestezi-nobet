@@ -42,6 +42,12 @@
     var holidays = new Set(config.holidays || []);
     var warnings = [];
 
+    // ---- AYARLANABİLİR SEÇENEKLER (UI'dan; hepsi varsayılan AÇIK) ----
+    var opts = config.options || {};
+    var OPT_WEEKEND_N16 = opts.weekendN16 !== false;  // hafta sonu N24->N16 indirip boşluğa mesai (küme kır)
+    var OPT_PRELEAVE_WED = opts.preLeaveWed !== false; // Pzt-izinde izin-öncesi nöbet Salı->Çarşamba esneyebilsin
+    var OPT_DENSE_BLOCK = opts.denseBlock !== false;   // "3 nöbet 5 günden az" sık-nöbet engeli
+
     // ---- gün meta ----
     var days = [];
     for (var d = 1; d <= nDays; d++) {
@@ -136,9 +142,11 @@
         // "3 ardarda nöbet" (sık nöbet) engeli: önceki 4 günde zaten 2 nöbet varsa
         // bu 3.'yü REDDET -> nöbetler aya yayılır, kişi erken dolup ay sonu boş kalmaz.
         // Sadece strict'te; coverage darboğazında non-strict bunu görmezden gelir (gerekirse).
-        var near = 0;
-        for (var k2 = Math.max(1, d - 4); k2 <= d - 1; k2++) if (P.assign[k2] === 'N24' || P.assign[k2] === 'N16') near++;
-        if (near >= 2) return false;
+        if (OPT_DENSE_BLOCK) {
+          var near = 0;
+          for (var k2 = Math.max(1, d - 4); k2 <= d - 1; k2++) if (P.assign[k2] === 'N24' || P.assign[k2] === 'N16') near++;
+          if (near >= 2) return false;
+        }
       }
       return true;
     }
@@ -186,7 +194,7 @@
             return [3, 2].some(function (ni) {
               var nd = wprev[ni];
               if (nd === undefined || P.assign[nd] !== '' || P.hours + 24 > P.target) return false;
-              if (!allowMon && days[nd - 1].dow === 1) return false;   // Pazartesi'yi ilk turda atla
+              if (!allowMon && OPT_PRELEAVE_WED && days[nd - 1].dow === 1) return false;   // Pzt'yi ilk turda atla (Salı->Çarşamba esnekliği)
               placeNobet(P, days[nd - 1], 'N24');           // ertesi gün N.İ (bitişikse)
               // nöbet ile izin arası TÜM günler (HAFTA SONU DAHİL): nöbet yazılmaz, boş iş günleri ücretli izin
               for (var g2 = nd + 1; g2 < bs; g2++) {
@@ -365,8 +373,10 @@
           // sonu/tatilde indirim serbest (yine 2 nöbetçi kalır). Önce iş-günü-dışını tercih et.
           for (var dq2 = 1; dq2 <= nDays; dq2++) {
             if (P.assign[dq2] !== 'N24') continue;
-            if (days[dq2 - 1].workday && daytimeCount(dq2) - 1 < dayNeed(days[dq2 - 1])) continue;
-            if (!days[dq2 - 1].workday) { n24 = dq2; break; }   // hafta sonu/tatil: en güvenli, öncele
+            var isWd = days[dq2 - 1].workday;
+            if (!isWd && !OPT_WEEKEND_N16) continue;             // seçenek kapalı: hafta sonu N16'ya inme
+            if (isWd && daytimeCount(dq2) - 1 < dayNeed(days[dq2 - 1])) continue;
+            if (!isWd) { n24 = dq2; break; }                    // hafta sonu/tatil: en güvenli, öncele
             if (n24 < 0) n24 = dq2;                              // iş günü adayı (yedek)
           }
           if (n24 > 0) { P.assign[n24] = 'N16'; P.hours -= 8; P.assign[mid] = 'M'; P.hours += 8; continue; }
