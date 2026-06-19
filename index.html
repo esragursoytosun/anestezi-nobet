@@ -193,16 +193,17 @@
     <button class="sec" onclick="exportXLS()">⬇️ Excel (renkli)</button>
     <button class="sec" onclick="exportCSV()">⬇️ CSV</button>
     <button class="sec" onclick="window.print()">🖨️ Yazdır / PDF</button>
-    <button class="sec" onclick="shareLink()" title="Mevcut listeyi link olarak kopyala, arkadaşına gönder">🔗 Paylaş</button>
+    <button class="sec" onclick="shareLink()" title="Mevcut listeyi link olarak kopyala (anlık görüntü)">🔗 Paylaş</button>
+    <button id="roomBtn" class="sec" style="display:none" onclick="createRoom()" title="Kurulumsuz ortak oda: değişiklikler bulutta kalır, ikiniz de canlı görürsünüz">👥 Ortak oda kur</button>
     <span id="syncBadge" style="margin-left:auto;align-self:center;font-size:13px;font-weight:600;color:#94a3b8">⚪ Yerel</span>
     <button id="settingsBtn" class="sec sm" style="display:none;align-self:center" onclick="openSettings()">⚙️ Ayarlar</button>
-    <button id="logoutBtn" class="sec sm" style="display:none;align-self:center" onclick="logout()">Çıkış</button>
+    <button id="logoutBtn" class="sec sm" style="display:none;align-self:center" onclick="leaveRoomOrLogout()">Çıkış</button>
   </div>
 
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v35</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v36</b>
   </div>
 </div>
 
@@ -388,45 +389,91 @@ function generate(){
   cloudSave();
 }
 
-// ============== ORTAK / CANLI SENKRON + PAROLA GİRİŞİ (Utopya benzeri) ==============
-// /api/state ile ortak durum: iki kişi aynı anda çalışır, ~2.5sn poll ile canlı senkron.
-// /api/* parola korumalı (X-Auth). Sunucu yoksa (GitHub Pages) otomatik localStorage moduna düşer.
-const SYNC={on:false,rev:-1,me:'',admin:false,editing:false,pollStarted:false};
+// ============== ORTAK / CANLI SENKRON — 3 mod ==============
+//  backend='server' : kendi Render sunucumuz (/api/state, parola korumalı)
+//  backend='room'   : ÜCRETSİZ kurulumsuz ortak oda (jsonblob.com) — değişiklik bulutta kalır,
+//                     ikiniz de görürsünüz; link bilen erişir (şifresiz). GitHub Pages'te bile çalışır.
+//  backend='local'  : sunucu/oda yok -> yalnız bu tarayıcı (localStorage).
+// İstemci ~2.5sn poll eder; rev artınca (arkadaş kaydetti) ekran kendiliğinden güncellenir.
+const JB='https://jsonblob.com/api/jsonBlob';
+const SYNC={on:false,backend:'local',rev:-1,me:'',admin:false,editing:false,pollStarted:false};
 function getUser(){ return localStorage.getItem('anestezi_user')||''; }
 function getAuth(){ return localStorage.getItem('anestezi_auth')||''; }
 function authHeaders(extra){ return Object.assign({'X-User':getUser(),'X-Auth':getAuth()}, extra||{}); }
+function roomId(){ return localStorage.getItem('anestezi_room')||''; }
+function myName(){ return SYNC.me || localStorage.getItem('anestezi_name') || 'ben'; }
 function setSyncBadge(){ const b=document.getElementById('syncBadge'); if(b){
-    b.textContent=SYNC.on?('🟢 '+(SYNC.me||'')+' (canlı)'):'⚪ Yerel';
-    b.style.color=SYNC.on?'#4ade80':'#94a3b8';
-    b.title=SYNC.on?'Giriş: '+SYNC.me+' · değişiklikler ortak/canlı':'Sunucu yok — yalnız bu tarayıcıda'; }
-  const show=SYNC.on?'inline-block':'none';
-  const lo=document.getElementById('logoutBtn'); if(lo) lo.style.display=show;
-  const se=document.getElementById('settingsBtn'); if(se) se.style.display=show; }
-function cloudSaveNow(){ if(!SYNC.on||!LAST)return;
-  fetch('/api/state',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),
-    body:JSON.stringify({cfg:readCfg(),grid:LAST.grid,by:SYNC.me})})
-    .then(r=>{ if(r.status===401){requireLogin();return null;} return r.json(); })
-    .then(st=>{ if(st&&st.rev!=null)SYNC.rev=st.rev; }).catch(()=>{}); }
+    if(SYNC.backend==='server'){ b.textContent='🟢 '+(SYNC.me||'')+' (canlı)'; }
+    else if(SYNC.backend==='room'){ b.textContent='🟢 Ortak oda (canlı)'; }
+    else { b.textContent='⚪ Yerel'; }
+    b.style.color=SYNC.on?'#4ade80':'#94a3b8'; }
+  const lo=document.getElementById('logoutBtn'); if(lo){ lo.style.display=SYNC.on?'inline-block':'none'; lo.textContent=SYNC.backend==='room'?'Odadan çık':'Çıkış'; }
+  const se=document.getElementById('settingsBtn'); if(se) se.style.display=(SYNC.backend==='server')?'inline-block':'none';
+  const cr=document.getElementById('roomBtn'); if(cr) cr.style.display=(SYNC.backend==='local')?'inline-block':'none'; }
 let _saveT=null;
-function cloudSave(){ if(!SYNC.on)return; clearTimeout(_saveT); _saveT=setTimeout(cloudSaveNow,600); }
+function cloudSave(){ if(!SYNC.on)return; clearTimeout(_saveT); _saveT=setTimeout(cloudSaveNow,700); }
+async function cloudSaveNow(){ if(!SYNC.on||!LAST)return;
+  const payload={cfg:readCfg(),grid:LAST.grid,by:myName(),rev:(SYNC.rev||0)+1};
+  try{
+    if(SYNC.backend==='server'){ const r=await fetch('/api/state',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
+      if(r.status===401){requireLogin();return;} const st=await r.json(); if(st&&st.rev!=null)SYNC.rev=st.rev; }
+    else if(SYNC.backend==='room'){ await fetch(JB+'/'+roomId(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); SYNC.rev=payload.rev; }
+  }catch(e){}
+}
 function applyState(st){ if(!st||!st.cfg)return;
   try{ applyCfg(st.cfg); LAST=Scheduler.buildSchedule(readCfg());
     if(st.grid){ LAST.grid=st.grid; const re=Scheduler.recompute(LAST); LAST.totals=re.totals; LAST.warnings=re.warnings; }
     render(LAST); localStorage.setItem('anestezi_cfg',JSON.stringify(readCfg()));
   }catch(e){} }
 async function cloudPoll(){ if(!SYNC.on||SYNC.editing)return;
-  try{ const r=await fetch('/api/state',{cache:'no-store',headers:authHeaders()});
-    if(r.status===401){ requireLogin(); return; }
-    const st=await r.json();
-    if(st&&st.rev>SYNC.rev){ const other=st.by!==SYNC.me; SYNC.rev=st.rev; if(other){ applyState(st); flash((st.by||'Arkadaşınız')+' güncelledi ↻'); } }
+  try{
+    let st;
+    if(SYNC.backend==='server'){ const r=await fetch('/api/state',{cache:'no-store',headers:authHeaders()});
+      if(r.status===401){ requireLogin(); return; } st=await r.json(); }
+    else if(SYNC.backend==='room'){ const r=await fetch(JB+'/'+roomId(),{cache:'no-store'}); if(!r.ok)return; st=await r.json(); }
+    else return;
+    if(st&&(st.rev||0)>SYNC.rev){ const other=st.by!==myName(); SYNC.rev=st.rev||0; if(other){ applyState(st); flash((st.by||'Arkadaşınız')+' güncelledi ↻'); } }
   }catch(e){} }
 async function cloudInit(){
+  // 1) Kendi sunucumuz (Render) var mı?
   try{ const r=await fetch('/api/state',{cache:'no-store',headers:authHeaders()});
-    if(r.status===401){ SYNC.on=true; SYNC.me=''; setSyncBadge(); requireLogin(); return 'need-login'; }
-    const st=await r.json(); SYNC.on=true; SYNC.me=getUser(); setSyncBadge();
-    if(st&&st.cfg){ SYNC.rev=st.rev; applyState(st); return true; }
-    SYNC.rev=st?st.rev:0; return false;
-  }catch(e){ SYNC.on=false; setSyncBadge(); return false; }
+    if(r.status===401){ SYNC.on=true; SYNC.backend='server'; SYNC.me=''; setSyncBadge(); requireLogin(); return 'need-login'; }
+    if(r.ok){ const st=await r.json(); SYNC.on=true; SYNC.backend='server'; SYNC.me=getUser(); setSyncBadge();
+      if(st&&st.cfg){ SYNC.rev=st.rev; applyState(st); return true; } SYNC.rev=st?st.rev:0; return false; }
+  }catch(e){}
+  // 2) Ortak oda (#room / kayıtlı) var mı?
+  if(roomId()){ try{ const r=await fetch(JB+'/'+roomId(),{cache:'no-store'}); const st=r.ok?await r.json():null;
+    SYNC.on=true; SYNC.backend='room'; SYNC.me=myName(); setSyncBadge();
+    if(st&&st.cfg){ SYNC.rev=st.rev||0; applyState(st); return true; } SYNC.rev=0; return false;
+  }catch(e){} }
+  // 3) Yerel
+  SYNC.on=false; SYNC.backend='local'; setSyncBadge(); return false;
+}
+// ---- ÜCRETSİZ ortak oda (jsonblob) ----
+async function createRoom(){
+  if(!getMyNameOnce()) return;
+  try{ const payload={cfg:readCfg(),grid:(LAST&&LAST.grid)||null,by:myName(),rev:1};
+    const r=await fetch(JB,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const id=(r.headers.get('Location')||'').split('/').pop();
+    if(!id) throw new Error('oda kimliği alınamadı');
+    localStorage.setItem('anestezi_room',id);
+    const url=location.origin+location.pathname+'#room='+id;
+    history.replaceState(null,'',url);
+    SYNC.on=true; SYNC.backend='room'; SYNC.rev=1; setSyncBadge();
+    if(!SYNC.pollStarted){ SYNC.pollStarted=true; setInterval(cloudPoll,2500); }
+    const ok=navigator.clipboard&&navigator.clipboard.writeText;
+    if(ok) navigator.clipboard.writeText(url).then(()=>flash('🟢 Ortak oda kuruldu, link kopyalandı — arkadaşınıza gönderin')).catch(()=>prompt('Ortak oda linki (kopyalayıp gönderin):',url));
+    else prompt('Ortak oda linki (kopyalayıp gönderin):',url);
+  }catch(e){ alert('Oda oluşturulamadı: '+e.message); }
+}
+function getMyNameOnce(){
+  let n=localStorage.getItem('anestezi_name');
+  if(!n){ n=(prompt('Adınız (kimin değiştirdiği görünsün diye):','')||'').trim(); if(!n) return false; localStorage.setItem('anestezi_name',n); SYNC.me=n; }
+  return true;
+}
+function leaveRoomOrLogout(){
+  if(SYNC.backend==='room'){ localStorage.removeItem('anestezi_room'); location.href=location.origin+location.pathname; }
+  else { localStorage.removeItem('anestezi_user'); localStorage.removeItem('anestezi_auth'); location.reload(); }
 }
 // ---- Kullanıcı adı + şifre girişi ----
 function requireLogin(){ const o=document.getElementById('loginOverlay'); if(o){o.style.display='flex'; const i=document.getElementById('loginUser'); if(i)i.focus();} }
@@ -633,6 +680,12 @@ function importFromHash(){
     return true;
   }catch(e){ return false; }
 }
+// URL'de #room=<id> varsa ortak odaya katıl (linke tıklayan arkadaş)
+function importRoomFromHash(){ const m=(location.hash||'').match(/[#&]room=([^&]+)/);
+  if(m){ localStorage.setItem('anestezi_room', m[1]);
+    if(!localStorage.getItem('anestezi_name')){ const n=(prompt('Adınız (kimin değiştirdiği görünsün diye):','')||'').trim(); if(n) localStorage.setItem('anestezi_name',n); }
+    return true; } return false; }
+importRoomFromHash();
 importFromHash();
 initApp();
 </script>
