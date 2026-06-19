@@ -360,12 +360,14 @@
           // taşınacak mesai yok (kişi çok nöbetli): bir 24s nöbeti 16s'e indir (8s açılır),
           // bu seride bir ücretli izin gününü mesaiye çevir -> saat 176 sabit, boşluk kırılır.
           var n24 = -1;
-          for (var q = 0; q < workdayNums.length; q++) {
-            var dq = workdayNums[q];
-            if (P.assign[dq] !== 'N24') continue;
-            // N24->N16 indirimi o günün gündüz minimumunu BOZMAMALI (N24 sayılır, N16 sayılmaz).
-            if (daytimeCount(dq) - 1 < dayNeed(days[dq - 1])) continue;
-            n24 = dq; break;
+          // TÜM günleri tara (hafta sonu/tatil DAHİL): N24'ü N16'ya indirip açılan 8 saati
+          // boşluğa mesai olarak koyarız. Gündüz min YALNIZCA iş gününde geçerli -> hafta
+          // sonu/tatilde indirim serbest (yine 2 nöbetçi kalır). Önce iş-günü-dışını tercih et.
+          for (var dq2 = 1; dq2 <= nDays; dq2++) {
+            if (P.assign[dq2] !== 'N24') continue;
+            if (days[dq2 - 1].workday && daytimeCount(dq2) - 1 < dayNeed(days[dq2 - 1])) continue;
+            if (!days[dq2 - 1].workday) { n24 = dq2; break; }   // hafta sonu/tatil: en güvenli, öncele
+            if (n24 < 0) n24 = dq2;                              // iş günü adayı (yedek)
           }
           if (n24 > 0) { P.assign[n24] = 'N16'; P.hours -= 8; P.assign[mid] = 'M'; P.hours += 8; continue; }
           return;
