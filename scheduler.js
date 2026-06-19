@@ -451,8 +451,9 @@
           done = true;
         }
         if (done) continue;
-        warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüz mesaisinde en az ' + need +
-          ' kişi sağlanamadı (kapasite yetersiz).');
+        // NOT: burada uyarı BASMA — sonraki adımlar (ikinci fixAbsence, dengeleme) günü
+        // tamamlayabiliyor. Gündüz eksiği YALNIZCA en sonda, FİNAL gridden kontrol edilir
+        // (aksi halde bayat/yanlış uyarı kalıyordu).
         break;
       }
     });
@@ -530,6 +531,12 @@
     days.forEach(function (dd) {
       var nob = people.filter(function (P) { return P.assign[dd.day] === 'N24' || P.assign[dd.day] === 'N16'; }).length;
       if (nob < 2) warnings.push(dd.day + '. gün (' + dd.dowName + '): sadece ' + nob + ' nöbetçi (2 gerekli).');
+      // GÜNDÜZ eksiği: FİNAL grid'den kontrol (iş gününde >=need; need=Sal/Per 3, diğer 2).
+      if (dd.workday) {
+        var need = dayNeed(dd), have = daytimeCount(dd.day);
+        if (have < need) warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüzde ' + have +
+          ' kişi (en az ' + need + ' olmalı).');
+      }
     });
 
     // ---- ÖNERİ: kırılamayan boşluk kümeleri kapasite darboğazını gösterir ----
