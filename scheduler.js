@@ -466,6 +466,36 @@
     // fazlası N24->N16 ile kırılabilir (hafta sonuna dokunmadan).
     people.forEach(fixAbsence);
 
+    // ---- 2.9) GÜNDÜZ DAĞILIMINI DENGELE ----
+    // Bazı günlerde gündüz çok kalabalık (ör. ay sonu 5 kişi), bazıları minimumda kalabiliyor.
+    // Mesaiyi (M) EN KALABALIK iş gününden EN SEYREK iş gününe taşı (saat sabit): taşınan
+    // gün minimumun altına düşmez, kişi hedef günde boşta (UCI) olur, kümesi bozulmaz.
+    // Her taşıma fark'ı (max-min) 2 azaltır -> terminal. Dağılım minimuma yaklaşır.
+    for (var bpass = 0; bpass < 400; bpass++) {
+      // İş günlerini gündüz sayısına göre ÇOKtan AZa sırala; en kalabalıktan başla.
+      var order = workdayNums.slice().sort(function (a, b) { return daytimeCount(b) - daytimeCount(a); });
+      var moved = false;
+      for (var oi = 0; oi < order.length && !moved; oi++) {
+        var H = order[oi], hc = daytimeCount(H), hn = dayNeed(days[H - 1]);
+        if (hc - hn < 2) break;                         // en kalabalık gün bile fazla değil -> bitti
+        for (var pb = 0; pb < people.length && !moved; pb++) {
+          var P = people[pb];
+          if (P.noNobet || P.assign[H] !== 'M' || P.mustMesai.has(H)) continue;
+          // P'nin BOŞTA (UCI) olduğu, H'dan en az 2 SEYREK bir güne taşı (denge sağlasın)
+          for (var li = 0; li < workdayNums.length && !moved; li++) {
+            var L = workdayNums[li];
+            if (L === H || P.assign[L] !== 'UCI') continue;
+            if (P.offReq.has(L) || P.lockedOff.has(L)) continue;
+            if (daytimeCount(L) >= hc - 1) continue;     // L yeterince seyrek değilse atla
+            P.assign[H] = 'UCI'; P.assign[L] = 'M';      // takas (saat sabit)
+            if (longestAbsentRun(P) <= 3) moved = true;
+            else { P.assign[H] = 'M'; P.assign[L] = 'UCI'; }
+          }
+        }
+      }
+      if (!moved) break;
+    }
+
     // ---- 3) YILLIK İZİN DÖNÜŞÜ doğrulaması ----
     people.forEach(function (P) {
       returnDays(P).forEach(function (d) {
