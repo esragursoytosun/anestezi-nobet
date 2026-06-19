@@ -151,12 +151,13 @@
     <button class="sec" onclick="exportXLS()">⬇️ Excel (renkli)</button>
     <button class="sec" onclick="exportCSV()">⬇️ CSV</button>
     <button class="sec" onclick="window.print()">🖨️ Yazdır / PDF</button>
+    <span id="syncBadge" style="margin-left:auto;align-self:center;font-size:13px;font-weight:600;color:#94a3b8">⚪ Yerel</span>
   </div>
 
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v29</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v30</b>
   </div>
 </div>
 
@@ -270,35 +271,34 @@ function daysToRange(arr,y,m){ // gün dizisi -> {s,e} ISO (bitişik varsayımı
   const mn=Math.min(...arr), mx=Math.max(...arr);
   return {s:dayToISO(y,m,mn), e:dayToISO(y,m,mx)};
 }
+function applyCfg(c){
+  document.getElementById('year').value=c.year;
+  document.getElementById('month').value=c.month;
+  document.getElementById('holidays').value=(c.holidays||[]).join(',');
+  var o=c.options||{};
+  document.getElementById('optPreLeaveWed').checked = o.preLeaveWed!==false;
+  document.getElementById('optDenseBlock').checked = o.denseBlock!==false;
+  document.getElementById('pbody').innerHTML='';
+  const y=c.year, m=c.month;
+  (c.personnel||[]).forEach(p=>{
+    addPerson(p.name);
+    const tr=document.querySelector('#pbody tr:last-child');
+    tr.querySelector('.p-sorumlu').checked=!!(p.noNobet);
+    tr.querySelector('.p-startni').checked=!!p.startNI;
+    tr.querySelector('.p-offday').value = (p.offDay!=null? String(p.offDay) : (p.noThursday?'4':''));
+    if(p.yiStart!==undefined){
+      tr.querySelector('.p-yi-s').value=p.yiStart||''; tr.querySelector('.p-yi-e').value=p.yiEnd||'';
+    }else{
+      const yi=daysToRange(p.leaveYI,y,m); tr.querySelector('.p-yi-s').value=yi.s; tr.querySelector('.p-yi-e').value=yi.e;
+    }
+    tr.querySelector('.p-off').value=(p.offReq||[]).join(',');
+  });
+  updateDateBounds();
+}
 function loadCfg(){
   const raw=localStorage.getItem('anestezi_cfg');
   if(!raw){resetNames();return;}
-  try{
-    const c=JSON.parse(raw);
-    document.getElementById('year').value=c.year;
-    document.getElementById('month').value=c.month;
-    document.getElementById('holidays').value=(c.holidays||[]).join(',');
-    var o=c.options||{};
-    document.getElementById('optPreLeaveWed').checked = o.preLeaveWed!==false;
-    document.getElementById('optDenseBlock').checked = o.denseBlock!==false;
-    document.getElementById('pbody').innerHTML='';
-    const y=c.year, m=c.month;
-    (c.personnel||[]).forEach(p=>{
-      addPerson(p.name);
-      const tr=document.querySelector('#pbody tr:last-child');
-      tr.querySelector('.p-sorumlu').checked=!!(p.noNobet);
-      tr.querySelector('.p-startni').checked=!!p.startNI;
-      tr.querySelector('.p-offday').value = (p.offDay!=null? String(p.offDay) : (p.noThursday?'4':''));
-      // Ham ISO tarih varsa birebir geri yükle; yoksa eski (gün-no) biçimden türet.
-      if(p.yiStart!==undefined){
-        tr.querySelector('.p-yi-s').value=p.yiStart||''; tr.querySelector('.p-yi-e').value=p.yiEnd||'';
-      }else{
-        const yi=daysToRange(p.leaveYI,y,m); tr.querySelector('.p-yi-s').value=yi.s; tr.querySelector('.p-yi-e').value=yi.e;
-      }
-      tr.querySelector('.p-off').value=(p.offReq||[]).join(',');
-    });
-    updateDateBounds();
-  }catch(e){resetNames();}
+  try{ applyCfg(JSON.parse(raw)); }catch(e){resetNames();}
 }
 function flash(msg){
   const d=document.createElement('div');d.textContent=msg;
@@ -316,6 +316,39 @@ function generate(){
   LAST=Scheduler.buildSchedule(cfg);
   render(LAST);
   saveCfg();
+  cloudSave();
+}
+
+// ====================== ORTAK / CANLI SENKRON (Utopya benzeri) ======================
+// /api/state ile ortak durum: iki kişi aynı anda çalışır, ~2.5sn poll ile canlı senkron.
+// Sunucu yoksa (GitHub Pages / file://) otomatik localStorage moduna düşer.
+const SYNC={on:false,rev:-1,me:'u'+Math.random().toString(36).slice(2,7),editing:false};
+function setSyncBadge(){ const b=document.getElementById('syncBadge'); if(!b)return;
+  b.textContent=SYNC.on?'🟢 Ortak (canlı)':'⚪ Yerel';
+  b.style.color=SYNC.on?'#4ade80':'#94a3b8';
+  b.title=SYNC.on?'Değişiklikler sunucuya kaydolur, arkadaşınızla canlı paylaşılır':'Sunucu yok — yalnız bu tarayıcıda';
+}
+function cloudSaveNow(){ if(!SYNC.on||!LAST)return;
+  fetch('/api/state',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({cfg:readCfg(),grid:LAST.grid,by:SYNC.me})})
+    .then(r=>r.json()).then(st=>{ if(st&&st.rev!=null)SYNC.rev=st.rev; }).catch(()=>{}); }
+let _saveT=null;
+function cloudSave(){ if(!SYNC.on)return; clearTimeout(_saveT); _saveT=setTimeout(cloudSaveNow,600); }
+function applyState(st){ if(!st||!st.cfg)return;
+  try{ applyCfg(st.cfg); LAST=Scheduler.buildSchedule(readCfg());
+    if(st.grid){ LAST.grid=st.grid; const re=Scheduler.recompute(LAST); LAST.totals=re.totals; LAST.warnings=re.warnings; }
+    render(LAST); localStorage.setItem('anestezi_cfg',JSON.stringify(readCfg()));
+  }catch(e){} }
+async function cloudPoll(){ if(!SYNC.on||SYNC.editing)return;
+  try{ const st=await(await fetch('/api/state',{cache:'no-store'})).json();
+    if(st&&st.rev>SYNC.rev){ const other=st.by!==SYNC.me; SYNC.rev=st.rev; if(other){ applyState(st); flash('Arkadaşınız güncelledi ↻'); } }
+  }catch(e){} }
+async function cloudInit(){
+  try{ const st=await(await fetch('/api/state',{cache:'no-store'})).json();
+    SYNC.on=true; setSyncBadge();
+    if(st&&st.cfg){ SYNC.rev=st.rev; applyState(st); return true; }
+    SYNC.rev=st?st.rev:0; return false;
+  }catch(e){ SYNC.on=false; setSyncBadge(); return false; }
 }
 function render(r){
   const out=document.getElementById('output');
@@ -365,9 +398,10 @@ function editCell(td){
   sel.style.cssText='width:100%;font-size:11px;padding:1px;color-scheme:dark';
   EDIT_CODES.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=CODE_LABEL[c]||'(boş)';if(c===cur)o.selected=true;sel.appendChild(o);});
   td.textContent=''; td.appendChild(sel); sel.focus();
+  SYNC.editing=true;
   let done=false;
-  sel.addEventListener('change',()=>{done=true; LAST.grid[name][d]=sel.value; recomputeTotals(LAST); render(LAST);});
-  sel.addEventListener('blur',()=>{ if(!done) render(LAST); });
+  sel.addEventListener('change',()=>{done=true; LAST.grid[name][d]=sel.value; recomputeTotals(LAST); render(LAST); SYNC.editing=false; cloudSave();});
+  sel.addEventListener('blur',()=>{ if(!done){ SYNC.editing=false; render(LAST); } });
 }
 // Elle düzenleme sonrası: ÜRETİMLE AYNI doğrulayıcıyı (Scheduler.recompute -> analyze)
 // kullanır. TEK doğruluk kaynağı -> elle düzenleme ve otomatik liste analizi hep birebir aynı.
@@ -442,10 +476,15 @@ function importFromHash(){
     return true;
   }catch(e){ return false; }
 }
-importFromHash();
-loadCfg();
-if(!document.getElementById('holidays').value.trim()) fillHolidays();
-generate();
+const _imported=importFromHash();
+cloudInit().then(loadedFromCloud=>{
+  if(!loadedFromCloud){
+    loadCfg();
+    if(!document.getElementById('holidays').value.trim()) fillHolidays();
+    generate();                       // generate() ortak boşsa cloudSaveNow ile ilk durumu yazar (cloudSave)
+  }
+  if(SYNC.on) setInterval(cloudPoll, 2500);   // canlı senkron (arkadaşın değişiklikleri ~2.5sn'de)
+});
 </script>
 </body>
 </html>

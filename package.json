@@ -1,0 +1,13 @@
+{
+  "name": "anestezi-nobet",
+  "version": "1.0.0",
+  "description": "Anestezi nöbet/vardiya planlayıcı — ortak/canlı (Node sunucu + MongoDB/dosya)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "mongodb": "^6.12.0"
+  }
+}
