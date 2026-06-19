@@ -466,6 +466,20 @@
       if (nob < 2) warnings.push(dd.day + '. gün (' + dd.dowName + '): sadece ' + nob + ' nöbetçi (2 gerekli).');
     });
 
+    // ---- ÖNERİ: kırılamayan boşluk kümeleri kapasite darboğazını gösterir ----
+    // Boş günler (NI+UCI) matematiksel olarak sabittir; çok izin + az kişi olunca
+    // bazı kişilerde >3 üst üste birikir ve taşımak yalnız kümeyi başkasına kaydırır.
+    // Bu durumda eyleme dönük öneri ver (kullanıcı: "gerekirse yeni tahmin/öneri versin").
+    var clusterCount = warnings.filter(function (w) { return /üst üste izinli\/boşta/.test(w); }).length;
+    var coverGap = warnings.filter(function (w) { return /sağlanamadı|nöbetçi atanamadı/.test(w); }).length;
+    if (clusterCount > 0 || coverGap > 0) {
+      var nNobet = people.filter(function (P) { return !P.noNobet; }).length;
+      warnings.push('💡 ÖNERİ: Bu ay ' + nNobet + ' nöbetçi kişi var; bu izin yoğunluğu için kapasite sınırda. ' +
+        'Kaçınılmaz boş günler kümeleniyor (taşımak yalnızca başka kişiye kaydırır, toplamı azaltmaz). ' +
+        'Çözüm: çakışan yıllık izinleri farklı haftalara yayın, ya da o ay 1 kişi daha ekleyin ' +
+        '(çoğunlukla +1 kişi tüm bu uyarıları giderir).');
+    }
+
     var grid = {};
     people.forEach(function (P) { grid[P.name] = P.assign; });
     return { year: year, month: month, nDays: nDays, days: days, grid: grid, totals: totals, warnings: warnings,
