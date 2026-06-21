@@ -419,10 +419,20 @@
             if (onDays.length > 1) { var ideal = nDays / onDays.length; for (var q = 1; q < onDays.length; q++) { var gap = onDays[q] - onDays[q - 1]; if (gap < ideal) spacing += (ideal - gap); } }
           }
         }
+        // gündüz min (sert) + DAĞILIM ŞEKİLLENDİRME (ekstra gün = normal ort + 1..2, aşırı yığma yok)
+        var normVals = [], extras = [];
         for (var k = 0; k < workdayNums.length; k++) { var dn = workdayNums[k], dday = days[dn - 1], need = dayNeed(dday), g = daytimeCount(dn);
           if (g < need) s += (need - g) * 55;
-          else if (dday.isExtra && g > need) s -= Math.min(g - need, 4) * 6;   // EKSTRA günde min üstü fazlalık ÖDÜL -> fazlalık bu günlere yığılsın
+          if (dday.isExtra) extras.push(g); else normVals.push(g);
         }
+        if (normVals.length) {
+          var navg = 0; for (var n1 = 0; n1 < normVals.length; n1++) navg += normVals[n1]; navg /= normVals.length;
+          for (var n2 = 0; n2 < normVals.length; n2++) s += Math.abs(normVals[n2] - navg) * 4;   // normal günler DENGELİ (birini min'e düşürüp diğerini şişirme yok)
+          for (var e1 = 0; e1 < extras.length; e1++) { var ge = extras[e1];
+            if (ge < navg + 1) s += (navg + 1 - ge) * 8;          // ekstra gün EN AZ normal+1 olsun
+            else if (ge > navg + 2) s += (ge - (navg + 2)) * 8;   // ama normal+2'yi GEÇMESİN (aşırı yığma yok)
+          }
+        } else { for (var e2 = 0; e2 < extras.length; e2++) { var need2 = P.daytimeExtra; if (extras[e2] > need2) s -= Math.min(extras[e2] - need2, 2) * 4; } }
         // ADALET cezaları: kişinin nöbet/hafta-sonu sayısı, hedef-oranlı ADİL paydan ne kadar sapıyor.
         for (var f = 0; f < ncArr.length; f++) {
           var fairNc = totNc * wArr[f] / sumW, fairWk = totWk * wArr[f] / sumW;
@@ -568,14 +578,14 @@
     var totNc = 0, totWk = 0, sumW = 0, arr = [];
     (r.totals || []).forEach(function (t) { if (t.noNobet) return; var nc = (t.nl || 0) + (t.ns || 0), w = t.target || 1; arr.push({ nc: nc, wk: t.weekendNobet || 0, w: w }); totNc += nc; totWk += t.weekendNobet || 0; sumW += w; });
     arr.forEach(function (a) { s += Math.abs(a.nc - totNc * a.w / sumW) * 4 + Math.abs(a.wk - totWk * a.w / sumW) * 6; });
-    // EKSTRA gündüz günlerinde min üstü fazlalık ödül (fazlalık o günlere yığılsın)
+    // EKSTRA gündüz: normal günlerin ortalaması + 1..2 olsun (aşırı yığma değil)
     var prof = r.profile || {};
-    (r.days || []).forEach(function (dd) {
-      if (!dd.workday || !dd.isExtra) return;
-      var g = 0; (r.totals || []).forEach(function (t) { if (!t.noNobet && coversDaytime((r.grid[t.name] || {})[dd.day], prof)) g++; });
-      var need = dd.isExtra ? (prof.daytimeExtra || 0) : (prof.daytimeMin || 0);
-      if (g > need) s -= Math.min(g - need, 4) * 3;
-    });
+    function dcount(day) { var g = 0; (r.totals || []).forEach(function (t) { if (!t.noNobet && coversDaytime((r.grid[t.name] || {})[day], prof)) g++; }); return g; }
+    var nv = [], ex = [];
+    (r.days || []).forEach(function (dd) { if (!dd.workday) return; (dd.isExtra ? ex : nv).push(dcount(dd.day)); });
+    if (nv.length) { var na = 0; nv.forEach(function (x) { na += x; }); na /= nv.length;
+      nv.forEach(function (x) { s += Math.abs(x - na) * 2; });
+      ex.forEach(function (g) { if (g < na + 1) s += (na + 1 - g) * 5; else if (g > na + 2) s += (g - (na + 2)) * 5; }); }
     return s;
   }
   function sigOf(r) {
