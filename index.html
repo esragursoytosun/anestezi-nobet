@@ -1,827 +1,561 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Anestezi Nöbet & Vardiya Planlayıcı</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nöbet Planlama Asistanı</title>
 <style>
-  :root{
-    --bg:#0f172a; --panel:#1e293b; --panel2:#334155; --line:#475569;
-    --txt:#e2e8f0; --muted:#94a3b8; --accent:#6366f1; --accent2:#818cf8;
-    --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
-    --c-M:#1d4ed8; --c-N24:#dc2626; --c-N16:#ea580c; --c-NI:#64748b;
-    --c-HT:#475569; --c-RT:#7c3aed; --c-YI:#16a34a; --c-UCI:#0d9488; --c-OFF:#db2777;
-  }
+  :root{ --bg:#0f172a; --panel:#1e293b; --panel2:#334155; --line:#475569; --txt:#e2e8f0; --muted:#94a3b8;
+    --accent:#6366f1; --accent2:#818cf8; --ok:#22c55e; --err:#ef4444; --warn:#f59e0b; --inset:#0b1220;
+    --c-M:#1d4ed8; --c-NL:#dc2626; --c-NS:#ea580c; --c-NI:#64748b; --c-HT:#475569;
+    --c-RT:#7c3aed; --c-YI:#16a34a; --c-UCI:#0d9488; --c-OFF:#db2777; }
   *{box-sizing:border-box}
-  body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
-  header{background:linear-gradient(135deg,#4338ca,#6366f1);padding:18px 24px;display:flex;align-items:center;gap:14px}
-  header h1{margin:0;font-size:20px;font-weight:700}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,"Segoe UI",Roboto,sans-serif;padding:0 0 60px}
+  header{background:linear-gradient(135deg,#4338ca,#6366f1);padding:16px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:20px;margin:0}
   header .sub{color:#c7d2fe;font-size:13px}
-  .wrap{padding:20px 24px;max-width:100%}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:18px}
-  .panel h2{margin:0 0 12px;font-size:15px;color:var(--accent2);display:flex;align-items:center;gap:8px}
-  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
-  label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
-  input,select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 10px;font-size:13px;color-scheme:dark}
-  input[type=text]{min-width:120px}
-  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer}
-  button:hover{background:var(--accent2)}
-  button.sec{background:var(--panel2);border:1px solid var(--line)}
-  button.sm{padding:5px 10px;font-size:12px}
-  button.danger{background:#7f1d1d}
-  table{border-collapse:collapse;width:100%}
-  .ptbl th,.ptbl td{border:1px solid var(--line);padding:6px;text-align:left;font-size:12px;vertical-align:middle}
-  .ptbl th{background:var(--panel2);color:var(--muted);font-weight:600;text-align:center}
-  .ptbl td.chk{text-align:center}
-  .ptbl .p-name{width:120px}
-  .daterange{display:flex;align-items:center;gap:4px}
-  .daterange input[type=date]{padding:5px 6px;font-size:11px;width:128px}
-  .note{font-size:12px;color:var(--muted);background:#0b1220;border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin-top:10px}
-  .gridwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
-  table.grid{border-collapse:collapse;font-size:11px;white-space:nowrap}
-  table.grid th,table.grid td{border:1px solid #334155;padding:3px 4px;text-align:center;min-width:30px}
-  table.grid th.name,table.grid td.name{position:sticky;left:0;background:var(--panel);text-align:left;min-width:120px;z-index:2;font-weight:600}
-  table.grid thead th{background:var(--panel2);color:var(--muted);position:sticky;top:0;z-index:1}
-  table.grid th.wknd{background:#3b2f1a}
-  td.cell{font-weight:700;color:#fff}
-  .M{background:var(--c-M)} .N24{background:var(--c-N24)} .N16{background:var(--c-N16)}
-  .NI{background:var(--c-NI)} .HT{background:var(--c-HT);color:#94a3b8} .RT{background:var(--c-RT)}
-  .YI{background:var(--c-YI)} .UCI{background:var(--c-UCI)} .OFF{background:var(--c-OFF)}
-  .tot{background:#0b1220;font-weight:700}
-  .tot.bad{color:var(--err)} .tot.good{color:var(--ok)}
-  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:12px}
-  .legend span{display:inline-flex;align-items:center;gap:6px}
-  .sw{width:16px;height:16px;border-radius:4px;display:inline-block}
-  .warns{background:#1f1305;border:1px solid #92400e;border-radius:10px;padding:12px;margin-top:14px;font-size:13px}
-  .warns.ok{background:#052e16;border-color:#166534;color:#86efac}
-  .warns ul{margin:6px 0 0;padding-left:18px}
+  .wrap{max-width:1500px;margin:18px auto;padding:0 16px;display:flex;flex-direction:column;gap:16px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+  .panel h2{margin:0 0 12px;font-size:16px;color:var(--accent2);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
+  input,select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 9px;font-size:13px;color-scheme:dark}
+  input[type=number]{width:74px} input[type=date]{width:135px} input[type=text]{width:100%}
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+  .chk{display:inline-flex;align-items:center;gap:6px;color:var(--txt);font-size:13px;cursor:pointer}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s,transform .05s}
+  button:hover{background:var(--accent2)} button:active{transform:translateY(1px)}
+  button.sec{background:var(--panel2);border:1px solid var(--line)} button.sm{padding:5px 9px;font-size:12px;font-weight:500;background:var(--panel2);border:1px solid var(--line)}
+  button.danger{background:var(--err);border:0}
   .muted{color:var(--muted)}
-  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .note{background:var(--inset);border:1px dashed var(--line);border-radius:8px;padding:8px 12px;font-size:12.5px;color:var(--muted)}
+  /* ---- sade kural paneli ---- */
+  .keycards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:12px}
+  .kc{background:var(--inset);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .kc .t{font-size:12px;color:var(--muted);margin-bottom:6px}
+  details.adv{background:var(--inset);border:1px solid var(--line);border-radius:10px;padding:0 12px;margin-top:6px}
+  details.adv>summary{cursor:pointer;padding:11px 0;font-weight:600;color:#a5b4fc;list-style:none}
+  details.adv>summary::-webkit-details-marker{display:none}
+  details.adv>summary::before{content:'▸ ';color:var(--accent2)} details.adv[open]>summary::before{content:'▾ '}
+  .advgrp{padding:4px 0 14px;border-top:1px solid var(--line)} .advgrp h4{margin:12px 0 4px;font-size:12px;color:#a5b4fc;text-transform:uppercase;letter-spacing:.4px}
+  .help{font-size:11.5px;color:var(--muted);margin:0 0 10px;line-height:1.5}
+  .fld .hint{font-size:11px;color:var(--muted);margin-top:2px;max-width:200px}
+  .advgrp .row{align-items:flex-start} .fld{display:flex;flex-direction:column}
+  .shiftrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+  .shiftrow .sw{width:18px;height:18px}
+  /* ---- personel (CSS grid — sütunlar kesin hizalı) ---- */
+  .pwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+  .pgrid{min-width:1040px}
+  .phead,.prow{display:grid;grid-template-columns:30px 150px 78px 78px 112px 300px 112px 180px 40px;align-items:center;gap:8px;padding:7px 8px}
+  .phead{background:var(--inset);color:var(--muted);font-size:11px;font-weight:600;line-height:1.2;position:sticky;top:0;z-index:1}
+  .phead>div,.prow>.ctr{display:flex;justify-content:center;align-items:center;text-align:center}
+  .prow{border-top:1px solid var(--line)}
+  .prow input[type=text],.prow select{width:100%}
+  .prow input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+  .prow .num{color:var(--muted)} .prow .pref{display:flex;flex-direction:column;gap:4px}
+  .prow .pref input{font-size:11px}
+  .daterange{display:flex;align-items:center;gap:4px;margin-bottom:4px}
+  .daterange span{color:var(--muted)} .daterange input[type=date]{width:122px;min-width:0;padding:5px 6px}
+  /* ---- toolbar ---- */
+  .toolbar{position:sticky;top:0;z-index:5;background:rgba(15,23,42,.92);backdrop-filter:blur(6px);padding:12px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--line)}
+  button.save{background:var(--ok);color:#06240f;font-weight:800;padding:10px 22px;font-size:15px;box-shadow:0 2px 8px rgba(34,197,94,.35)}
+  button.save:hover{background:#16a34a;color:#fff}
+  /* ---- alternatif şerit ---- */
+  .altbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 12px;padding:10px;border:1px dashed var(--accent);border-radius:10px}
+  .altbtn{border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:var(--txt);padding:6px 11px;font-size:12px;cursor:pointer}
+  .altbtn.act{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .altbtn.star::after{content:' ★';color:#fde047}
+  .altcard{border:1px solid var(--line);border-radius:10px;margin:0 0 12px;overflow:hidden}
+  .altcard>.ah{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--inset);cursor:pointer}
+  .altcard>.ah .badge{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--panel2)}
+  .altcard>.ah .badge.ok{background:#052e16;color:#86efac} .altcard>.ah .badge.bad{background:#3a0d0d;color:#fca5a5}
+  /* ---- ızgara ---- */
+  .gridwrap{overflow:auto;border:1px solid var(--line);border-radius:8px}
+  table.grid{border-collapse:collapse;font-size:11px;width:100%}
+  table.grid th,table.grid td{border:1px solid #334155;padding:3px 4px;text-align:center;min-width:30px}
+  table.grid th.name,table.grid td.name{text-align:left;position:sticky;left:0;background:var(--panel);min-width:110px;z-index:2;font-weight:600}
+  table.grid thead th{background:var(--inset);color:var(--muted);position:sticky;top:0;z-index:1}
+  th.wknd{background:#3b2f1a}
+  table.grid td[data-d]{font-weight:700;color:#fff;cursor:pointer;transition:filter .1s}
+  table.grid td[data-d]:hover{filter:brightness(1.25)}
+  td.M{background:var(--c-M)} td.NL{background:var(--c-NL)} td.NS{background:var(--c-NS)}
+  td.NI{background:var(--c-NI)} td.HT{background:var(--c-HT);color:#94a3b8} td.RT{background:var(--c-RT)}
+  td.YI{background:var(--c-YI)} td.UCI{background:var(--c-UCI)} td.OFF{background:var(--c-OFF)}
+  .tot{background:var(--inset);font-weight:600} .tot.bad{color:var(--err)} .tot.good{color:var(--ok)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:15px;height:15px;border-radius:4px;display:inline-block;border:1px solid rgba(255,255,255,.15)}
+  .warns{margin-top:12px;background:#1f1305;border:1px solid #92400e;border-radius:10px;padding:12px 14px;font-size:13px}
+  .warns.ok{background:#052e16;border-color:#166534;color:#86efac} .warns ul{margin:6px 0 0;padding-left:18px}
+  .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
+  /* ===== YAZDIRMA — anestezi ile birebir ===== */
   @media print{
     @page{ size:A4 landscape; margin:6mm; }
     *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
     body{background:#fff;color:#000;font-size:9px}
-    header,.panel.noprint,.toolbar,.note{display:none!important}
-    .wrap{padding:0;max-width:none}
+    header,.toolbar,.note,.altbar,#rulePanel,.noprint,button,.foot{display:none!important}
+    .wrap{padding:0;max-width:none;margin:0;gap:0}
     .panel{border:none;background:#fff;padding:0;margin:0 0 6px;box-shadow:none}
     .panel h2{color:#000;font-size:13px;margin:0 0 5px}
+    .altcard{border:0;margin:0} .altcard>.ah{display:none!important}
     .gridwrap{overflow:visible;border:1px solid #999;border-radius:0}
-    /* genişlik: 41 sütun fixed-layout ile %100'e sığar (taşan metin kırpılır, sayfa taşmaz).
-       yükseklik: tabloya sayfa yüksekliğinin ~%82'si verilir -> satırlar otomatik uzayıp
-       A4-yatay'ı DİKEYDE doldurur (kişi sayısından bağımsız, kendiliğinden uyarlanır). */
     table.grid{font-size:7px;width:100%;height:82vh;table-layout:fixed}
     table.grid th,table.grid td{border:1px solid #aaa;padding:2px 1px;min-width:0;overflow:hidden;white-space:nowrap;letter-spacing:-0.3px;vertical-align:middle}
     table.grid thead th{background:#e5e7eb!important;color:#000!important;position:static;font-size:7px}
     table.grid th.wknd{background:#fde68a!important}
-    table.grid th.name,table.grid td.name{position:static;width:46px;min-width:46px;background:#fff!important;color:#000!important;font-size:7px}
-    /* renkli hücreler ekrandaki gibi (beyaz yazı + renkli zemin) korunur */
-    .tot{background:#f3f4f6!important;color:#000!important}
-    .tot.bad{color:#b91c1c!important} .tot.good{color:#15803d!important}
-    .legend{font-size:8px;margin-top:5px;gap:6px}
-    .warns{font-size:9px;margin-top:6px}
+    table.grid th.name,table.grid td.name{position:static;width:60px;min-width:60px;background:#fff!important;color:#000!important;font-size:7px}
+    .tot{background:#f3f4f6!important;color:#000!important} .tot.bad{color:#b91c1c!important} .tot.good{color:#15803d!important}
+    .legend{font-size:8px;margin-top:5px;gap:6px} .warns{font-size:9px;margin-top:6px}
   }
+  .ovl{position:fixed;inset:0;background:rgba(8,12,24,.82);display:none;align-items:center;justify-content:center;z-index:50}
+  .ovl .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;width:340px;max-width:92%;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  .ovl h3{margin:6px 0 10px;color:var(--accent2);text-align:center}
+  .ovl input{width:100%;margin-bottom:10px}
+  .err{color:var(--err);font-size:13px;min-height:18px}
+  .who{font-size:12px;color:#c7d2fe}
+  .mgrbox{background:var(--inset);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px}
 </style>
 </head>
 <body>
-<div id="loginOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.92);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px;width:320px;max-width:90%;text-align:center">
-    <div style="font-size:30px">🔒</div>
-    <h2 style="margin:8px 0 4px;color:var(--accent2);font-size:17px">Giriş</h2>
-    <p style="color:var(--muted);font-size:13px;margin:0 0 14px">Kullanıcı adı ve şifrenizle girin.</p>
-    <input id="loginUser" type="text" placeholder="Kullanıcı adı" autocomplete="username" style="width:100%;margin-bottom:8px"
-      onkeydown="if(event.key==='Enter')document.getElementById('loginPw').focus()" />
-    <input id="loginPw" type="password" placeholder="Şifre" autocomplete="current-password" style="width:100%;margin-bottom:10px"
-      onkeydown="if(event.key==='Enter')doLogin()" />
-    <div id="loginErr" style="color:var(--err);font-size:13px;min-height:18px;margin-bottom:8px"></div>
-    <button onclick="doLogin()" style="width:100%">Giriş Yap</button>
-  </div>
-</div>
-
-<div id="settingsOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.92);z-index:1000;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 12px">
-  <div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;width:420px;max-width:95%">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <div style="font-size:22px">⚙️</div><h2 style="margin:0;color:var(--accent2);font-size:17px;flex:1">Ayarlar</h2>
-      <button class="sec sm" onclick="closeSettings()">Kapat</button>
-    </div>
-    <div id="setWho" class="muted" style="font-size:13px;margin-bottom:14px"></div>
-
-    <h3 style="font-size:14px;color:var(--txt);margin:0 0 8px">🔑 Şifremi değiştir</h3>
-    <div style="display:flex;gap:8px;margin-bottom:6px">
-      <input id="setNewPw" type="password" placeholder="Yeni şifre" style="flex:1" />
-      <button onclick="changeMyPw()">Değiştir</button>
-    </div>
-
-    <div id="setAdminBox" style="display:none;margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
-      <h3 style="font-size:14px;color:var(--txt);margin:0 0 8px">👥 Kullanıcılar (yönetici)</h3>
-      <div id="setUserList" style="font-size:13px;margin-bottom:10px"></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <input id="newUserName" type="text" placeholder="Kullanıcı adı" style="flex:1;min-width:110px" />
-        <input id="newUserPw" type="text" placeholder="Şifre" style="flex:1;min-width:90px" />
-        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);margin:0"><input type="checkbox" id="newUserAdmin" style="width:auto" /> yönetici</label>
-        <button class="sm" onclick="addUser()">+ Ekle</button>
-      </div>
-    </div>
-    <div id="setMsg" style="font-size:13px;min-height:18px;margin-top:12px"></div>
-  </div>
-</div>
-
+<!-- GİRİŞ -->
+<div class="ovl" id="loginOvl"><div class="box">
+  <div style="text-align:center;font-size:30px">🔒</div><h3>Giriş</h3>
+  <input type="text" id="logUser" placeholder="Kullanıcı adı" autocomplete="username">
+  <input type="password" id="logPw" placeholder="Şifre" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+  <div class="err" id="logErr"></div>
+  <button style="width:100%" onclick="doLogin()">Giriş Yap</button>
+</div></div>
+<!-- YÖNETİCİ ATA (admin) -->
+<div class="ovl" id="mgrOvl"><div class="box">
+  <h3>Birim Yöneticisi Ata</h3>
+  <div class="who" id="mgrUnitName" style="margin-bottom:8px"></div>
+  <input type="text" id="mgrUser" placeholder="Yönetici kullanıcı adı" autocomplete="off">
+  <input type="password" id="mgrPw" placeholder="Şifre belirle" autocomplete="new-password">
+  <div class="err" id="mgrErr"></div>
+  <div style="display:flex;gap:8px"><button style="flex:1" onclick="saveManager()">Kaydet</button><button class="sec" onclick="document.getElementById('mgrOvl').style.display='none'">Kapat</button></div>
+  <div class="mgrbox" id="mgrCur"></div>
+</div></div>
 <header>
-  <div style="font-size:28px">🩺</div>
-  <div>
-    <h1>Anestezi Nöbet &amp; Vardiya Planlayıcı</h1>
-    <div class="sub">Aylık liste otomatik oluşturulur · herkes tam 176 saat · fazla mesai yok</div>
+  <span style="font-size:26px">🩺</span>
+  <div><h1>Nöbet Planlama Asistanı</h1><div class="sub">Her birim kendi kurallarını ayarlar · akıllı dağıtım + alternatif listeler</div></div>
+  <div id="userBar" style="margin-left:auto;display:none;align-items:center;gap:10px">
+    <span class="who" id="whoTxt"></span>
+    <button class="sm" onclick="logout()">Çıkış</button>
   </div>
 </header>
 
 <div class="wrap">
+
+  <!-- ===== BİRİM / KURAL PROFİLİ ===== -->
+  <div class="panel noprint" id="rulePanel">
+    <h2>⚙️ Birim Seç / Kural Ayarları
+      <select id="profSel" style="margin-left:6px"></select>
+      <span id="localProfBtns">
+        <button class="sm" onclick="newProfile()">+ Yeni</button>
+        <button class="sm" onclick="renameProfile()">✎ Ad</button>
+        <button class="sm" onclick="dupProfile()">⧉ Kopya</button>
+        <button class="sm danger" onclick="delProfile()">Sil</button>
+      </span>
+      <span id="srvAdminBtns" style="display:none">
+        <button class="sm" onclick="srvAddUnit()">+ Birim</button>
+        <button class="sm" onclick="srvAssignManager()">👤 Yönetici ata</button>
+        <button class="sm" onclick="srvRenameUnit()">✎ Ad</button>
+        <button class="sm danger" onclick="srvDelUnit()">Birim sil</button>
+      </span>
+      <button class="sm sec" onclick="toggleRules()" style="margin-left:auto">▾ Gizle/Göster</button>
+    </h2>
+    <div class="body" id="ruleBody">
+      <!-- EN ÇOK KULLANILAN (sade) -->
+      <div class="keycards">
+        <div class="kc"><div class="t">Günde kaç nöbetçi (hafta içi)</div><input type="number" id="oncallPerDay"></div>
+        <div class="kc"><div class="t">Varsayılan nöbet</div><select id="defaultOncall"><option value="long">Uzun (24s gibi)</option><option value="short">Kısa (16s gibi)</option></select></div>
+        <div class="kc"><div class="t">Hafta içi gündüz min</div><input type="number" id="daytimeMin"></div>
+        <div class="kc"><div class="t">Hafta sonu/tatil nöbetçi</div><input type="number" id="weekendOncallPerDay"></div>
+      </div>
+      <div class="row" style="margin-bottom:6px">
+        <label class="chk"><input type="checkbox" id="weekendForceLong"> Hafta sonu/tatil hep uzun nöbet</label>
+        <label class="chk"><input type="checkbox" id="useShortOncall"> Kısa nöbet kullanılsın</label>
+        <label class="chk"><input type="checkbox" id="preLeaveOncall"> Yıllık izin öncesi nöbet koy</label>
+      </div>
+
+      <!-- GELİŞMİŞ (gizli) -->
+      <details class="adv">
+        <summary>Gelişmiş ayarlar (vardiya saatleri, ekstra gündüz, izin & boşluk, hedef)</summary>
+        <div class="advgrp">
+          <h4>Vardiya tipleri</h4>
+          <p class="help">Bu birimde kullanılan vardiyaların <b>saatini ve adını</b> belirleyin. <b>“Gündüzü kapsar”</b> işaretliyse o vardiya 08-17 gündüz sayısına dahil olur (örn. 24s nöbet gündüzü kapsar; 16s akşam nöbeti kapsamaz). Otomatik dağıtım bu 3 çekirdek vardiyayı kullanır.</p>
+          <div class="shiftrow"><i class="sw" style="background:var(--c-M)"></i>
+            <b style="min-width:96px">Gündüz mesai</b>
+            <div class="fld"><label>saat</label><input type="number" id="mesaiHours"></div>
+            <div class="fld"><label>etiket</label><input type="text" id="mesaiLabel" style="width:120px"></div>
+            <span class="hint">Sadece gündüz çalışma; hedefe sayar.</span></div>
+          <div class="shiftrow"><i class="sw" style="background:var(--c-NL)"></i>
+            <b style="min-width:96px">Uzun nöbet</b>
+            <div class="fld"><label>saat</label><input type="number" id="oncallLongHours"></div>
+            <div class="fld"><label>etiket</label><input type="text" id="oncallLongLabel" style="width:120px"></div>
+            <label class="chk"><input type="checkbox" id="oncallLongDaytime"> gündüzü kapsar</label>
+            <span class="hint">Tam gün nöbet (örn. 08-08, 24s).</span></div>
+          <div class="shiftrow"><i class="sw" style="background:var(--c-NS)"></i>
+            <b style="min-width:96px">Kısa nöbet</b>
+            <div class="fld"><label>saat</label><input type="number" id="oncallShortHours"></div>
+            <div class="fld"><label>etiket</label><input type="text" id="oncallShortLabel" style="width:120px"></div>
+            <label class="chk"><input type="checkbox" id="oncallShortDaytime"> gündüzü kapsar</label>
+            <span class="hint">Akşam/kısa nöbet (örn. 16-08, 16s).</span></div>
+          <h4 style="margin-top:14px">Özel vardiyalar (elle atanır)</h4>
+          <p class="help">İhtiyacınız olan başka bir vardiya tipini buradan <b>ekleyin</b> (örn. 12 saatlik gündüz, icap, yarım gün). Eklediğiniz vardiya; <b>ızgarada hücreye tıklayınca seçilebilir</b>, saatleri toplama, “gündüzü kapsar” ise gündüz sayısına ve lejanta dahil olur. <span class="muted">(Şimdilik elle atanır; otomatik dağıtıma katılması, kuralları netleşince eklenecek.)</span></p>
+          <div id="customShifts"></div>
+          <button type="button" class="sm sec" onclick="addCustomShift()">+ Vardiya tipi ekle</button>
+        </div>
+        <div class="advgrp">
+          <h4>Ekstra gündüz günleri</h4>
+          <p class="help">Belirli günlerde (örn. ameliyatların yoğun olduğu Salı/Perşembe) gündüzde <b>daha fazla kişi</b> gerekiyorsa, o günleri işaretleyin ve o günler için minimumu girin.</p>
+          <div class="row">
+            <div class="fld"><label>Bu günlerde gündüz min</label><input type="number" id="daytimeExtra"><span class="hint">İşaretli günlerde en az kaç kişi gündüzde olsun.</span></div>
+            <div class="fld"><label>Günler</label><div id="extraDays" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:5px"></div></div>
+          </div>
+        </div>
+        <div class="advgrp">
+          <h4>İzin & boşluk kuralları</h4>
+          <p class="help">Yıllık izne ayrılan kişiye <b>izinden hemen önce</b> nasıl davranılacağı ve kimsenin çok uzun süre boşta kalmaması.</p>
+          <div class="row">
+            <div class="fld"><label>İzinden kaç iş günü önce nöbet</label><input type="number" id="preLeaveDaysBefore"><span class="hint">İzin öncesi nöbet bu kadar gün önceye konur (tercih).</span></div>
+            <div class="fld"><label>…olmazsa kaç iş günü önce</label><input type="number" id="preLeaveDaysBeforeFallback"><span class="hint">Tercih edilen güne sığmazsa yedek mesafe.</span></div>
+            <div class="fld"><label>İzinden önce kaç iş günü boş</label><input type="number" id="preLeaveGap"><span class="hint">İzine girmeden önce bu kadar gün ücretli izin (dinlenme).</span></div>
+            <div class="fld"><label>Nöbet sonrası dinlenme (gün)</label><input type="number" id="postOncallRest"><span class="hint">Nöbetten sonra kaç gün N.İ (gelmez).</span></div>
+            <div class="fld"><label>Üst üste en fazla boş iş günü</label><input type="number" id="maxConsecutiveOff"><span class="hint">Kişi bu kadar günden fazla üst üste boşta kalmasın.</span></div>
+          </div>
+        </div>
+        <div class="advgrp">
+          <h4>Hedef & fizibilite</h4>
+          <p class="help">Aylık çalışma hedefi ve kapasite uyarısı.</p>
+          <div class="row">
+            <div class="fld"><label>Aylık hedef = (saat) × iş günü</label><input type="number" id="targetPerWorkday"><span class="hint">Her iş günü için bu kadar saat (örn. 8). Yıllık/haftalık izin günleri hedeften düşer.</span></div>
+            <div class="fld"><label>“Kapasite sınırda” uyarısı: altı (kişi)</label><input type="number" id="minStaffWarn"><span class="hint">Nöbetçi sayısı bunun altındaysa ve sorun çıkarsa “+1 kişi” notu verilir.</span></div>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- ===== AY ===== -->
   <div class="panel noprint">
     <h2>📅 Ay Ayarları</h2>
     <div class="row">
       <div><label>Ay</label><select id="month"></select></div>
-      <div><label>Yıl</label><input type="number" id="year" value="2026" style="width:90px" /></div>
-      <div><label>Resmi tatil günleri (virgülle gün no: 1,30)</label>
-        <input type="text" id="holidays" placeholder="ör. 30" style="min-width:160px" /></div>
-    </div>
-    <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:13px">
-      <label style="margin:0;color:var(--txt);font-weight:600;font-size:12px">Dağıtım seçenekleri</label>
-      <div class="muted" style="font-size:12px">✓ Hafta sonu ve resmi tatiller her zaman <b>2 kişi × N08-08 (24 saat)</b> — sabit kural.</div>
-      <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
-        <input type="checkbox" id="optPreLeaveWed" checked style="width:auto" />
-        Pazartesi-izinde izin-öncesi nöbet Salı yerine Çarşamba olabilsin <span class="muted">(gerekirse)</span></label>
-      <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
-        <input type="checkbox" id="optDenseBlock" checked style="width:auto" />
-        Sık nöbet engeli: 3 nöbet 5 günden az aralıkta verilmesin <span class="muted">(nöbetleri aya yayar)</span></label>
+      <div><label>Yıl</label><input type="number" id="year" value="2026" style="width:90px"></div>
+      <div style="flex:1;min-width:200px"><label>Resmi tatil günleri (virgülle gün no: 1,30)</label><input type="text" id="holidays" placeholder="örn. 1,30"></div>
     </div>
   </div>
 
+  <!-- ===== PERSONEL ===== -->
   <div class="panel noprint">
-    <h2>👥 Personel &amp; Talepler</h2>
-    <div class="gridwrap" style="border:none">
-      <table class="ptbl" id="ptbl">
-        <thead>
-          <tr>
-            <th style="width:26px">#</th>
-            <th>Ad Soyad</th>
-            <th style="width:80px">Sorumlu<br>(nöbet yok)</th>
-            <th style="width:96px">Haftalık<br>izin günü</th>
-            <th style="width:74px">Aya N.İ<br>başla</th>
-            <th>Yıllık izin (başlangıç – bitiş)</th>
-            <th>Boş gün isteği (gün no: 5,12,20)</th>
-            <th>Gün tercihi<br><span class="muted" style="font-weight:400">sadece gündüz / sadece N16</span></th>
-            <th style="width:34px"></th>
-          </tr>
-        </thead>
-        <tbody id="pbody"></tbody>
-      </table>
-    </div>
-    <div class="note">
-      • <b>Sorumlu</b> işaretli kişi nöbet tutmaz, yalnızca gündüz mesaisi yapar.<br>
-      • <b>Haftalık izin günü</b>: o kişi her hafta seçilen günde çalışmaz, o günler saatinden düşülür.<br>
-      • <b>Aya N.İ başla</b>: önceki ayın son nöbetçisi; ayın 1. günü nöbet izinli (dinlenme) başlar, o gün nöbet/mesai almaz.<br>
-      • <b>Yıllık izin</b> çalışma saatinden düşülür. Tek gün için sadece başlangıç tarihini seç.<br>
-      • <b>Ücretli izin</b> otomatik eklenir: 176 saat dolunca kalan iş günleri ücretli izin olur (boş hücre kalmaz, 176 aşılmaz). Ayrıca yıllık izne çıkan kişi izinden 4 iş günü önce nöbet tutar, izinden önceki 2 iş günü ücretli izinli olur.<br>
-      • <b>Boş gün isteği</b> mümkünse dikkate alınır (zorunlu değil).<br>
-      • <b>Gün tercihi</b>: "sadece gündüz" günlerinde o kişiye nöbet verilmez (yalnız gündüz mesaisi). "sadece N16" günlerinde nöbet 24s yerine 16s (N16-08) olur.<br>
-      • <b>Aylık sayfalar</b>: Ay/yıl seçince o ayın listesi ayrı kaydedilir; listenin üstündeki 🗂️ sekmelerden aylar arasında geçebilir, eski ayları silebilirsiniz. (Yeni aya geçince personel korunur, izin/tercih alanları temizlenir.)
-    </div>
-    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+    <h2>👥 Personel & Talepler</h2>
+    <div class="pwrap"><div class="pgrid">
+      <div class="phead">
+        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Sorumlu<br>(nöbet yok)</div><div>Aya N.İ<br>başla</div><div>Haftalık<br>izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün<br>isteği</div><div>Gün tercihi</div><div></div>
+      </div>
+      <div id="pbody"></div>
+    </div></div>
+    <div style="margin-top:10px;display:flex;gap:8px">
       <button class="sec sm" onclick="addPerson()">+ Personel ekle</button>
-      <button class="sec sm" onclick="saveCfg()">💾 Kaydet</button>
-      <button class="sec sm" onclick="resetNames()">↺ Varsayılan 14 isim</button>
+      <button class="sec sm" onclick="resetNames()">↺ Varsayılan 12 isim</button>
     </div>
+    <div class="note" style="margin-top:8px">💡 <b>Yıllık izin</b>: tarih aralığı (başlangıç–bitiş) seçin; isterseniz "+ izin ekle" ile birden çok dönem. İzin başka aylara taşsa bile yalnız bu ayın günleri sayılır.</div>
   </div>
 
   <div class="toolbar noprint">
-    <button onclick="generate()" style="font-size:15px">⚙️ Liste Oluştur</button>
-    <button class="sec" onclick="exportXLS()">⬇️ Excel (renkli)</button>
-    <button class="sec" onclick="exportCSV()">⬇️ CSV</button>
-    <button class="sec" onclick="window.print()">🖨️ Yazdır / PDF</button>
-    <button class="sec" onclick="shareLink()" title="Mevcut listeyi link olarak kopyala (anlık görüntü)">🔗 Paylaş</button>
-    <button id="roomBtn" class="sec" style="display:none" onclick="createRoom()" title="Kurulumsuz ortak oda: değişiklikler bulutta kalır, ikiniz de canlı görürsünüz">👥 Ortak oda kur</button>
-    <span id="syncBadge" style="margin-left:auto;align-self:center;font-size:13px;font-weight:600;color:#94a3b8">⚪ Yerel</span>
-    <button id="settingsBtn" class="sec sm" style="display:none;align-self:center" onclick="openSettings()">⚙️ Ayarlar</button>
-    <button id="logoutBtn" class="sec sm" style="display:none;align-self:center" onclick="leaveRoomOrLogout()">Çıkış</button>
+    <button class="save" onclick="saveAll()">💾 KAYDET</button>
+    <button onclick="generate()">⚙️ Liste Oluştur</button>
+    <span style="width:1px;height:24px;background:var(--line)"></span>
+    <button class="sec sm" onclick="exportXLS()">📊 Excel</button>
+    <button class="sec sm" onclick="exportCSV()">📄 CSV</button>
+    <button class="sec sm" onclick="window.print()">🖨️ Yazdır / PDF</button>
+    <label class="chk" style="margin-left:8px"><input type="checkbox" id="showAll" onchange="render(LAST)"> 🗂️ Tüm alternatifleri göster</label>
+    <span id="altInfo" class="muted" style="margin-left:auto;font-size:12px"></span>
   </div>
 
-  <div id="monthTabs" class="noprint" style="display:none;align-items:center;gap:6px;flex-wrap:wrap;margin:14px 0 0"></div>
   <div id="output"></div>
-
-  <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v43</b>
-  </div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v10</b> · anestezi sisteminden bağımsız</div>
 </div>
 
-<script src="scheduler.js?v=31"></script>
+<script src="asistan-scheduler.js?v=6"></script>
 <script>
-const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
-const DEFAULT_NAMES = Array.from({length:14},(_,i)=>'Personel '+(i+1));
-const CODE_LABEL = {M:'M8-17',N24:'N08-08',N16:'N16-08',NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UCI:'Ü.İ',OFF:'İ','':''};
-
+const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
+const pad=n=>String(n).padStart(2,'0');
 const msel=document.getElementById('month');
 MONTHS.forEach((m,i)=>{const o=document.createElement('option');o.value=i;o.textContent=m;if(i===6)o.selected=true;msel.appendChild(o);});
+const exWrap=document.getElementById('extraDays');
+[1,2,3,4,5,6,0].forEach(dw=>{const l=document.createElement('label');l.className='chk';l.innerHTML=`<input type="checkbox" data-dow="${dw}"> ${DOW[dw]}`;exWrap.appendChild(l);});
 
-const pad=n=>String(n).padStart(2,'0');
-function curYM(){return {y:parseInt(document.getElementById('year').value,10), m:parseInt(document.getElementById('month').value,10)};}
-function dayToISO(y,m,d){return `${y}-${pad(m+1)}-${pad(d)}`;}
-function rangeToDays(sISO,eISO){
-  if(!sISO) return [];
-  const {y,m}=curYM();
-  const s=new Date(sISO+'T00:00:00');
-  const e=eISO?new Date(eISO+'T00:00:00'):new Date(sISO+'T00:00:00');
-  const out=[];
-  for(let cur=new Date(s); cur<=e; cur.setDate(cur.getDate()+1)){
-    if(cur.getFullYear()===y && cur.getMonth()===m) out.push(cur.getDate());
-  }
-  return out;
-}
-function parseDays(s){ // resmi tatil için gün no
-  if(!s) return [];
-  return s.split(',').map(x=>parseInt(x.trim(),10)).filter(n=>!isNaN(n)&&n>=1&&n<=31);
-}
-function updateDateBounds(){
-  const {y,m}=curYM();
-  const last=Scheduler.daysInMonth(y,m);
-  const min=dayToISO(y,m,1), max=dayToISO(y,m,last);
-  document.querySelectorAll('#pbody input[type=date]').forEach(inp=>{inp.min=min;inp.max=max;});
-}
-// Türkiye sabit tarihli resmi tatilleri (ay -> gün). Dini bayramlar (Ramazan/Kurban) değişken, elle eklenir.
-function fixedHolidays(m){
-  return ({0:[1],3:[23],4:[1,19],6:[15],7:[30],9:[29]})[m] || [];
-}
-function fillHolidays(){
-  document.getElementById('holidays').value = fixedHolidays(curYM().m).join(',');
-}
+// ===== PROFİLLER =====
+const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel','oncallLongDaytime','useShortOncall',
+  'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','oncallPerDay','daytimeMin','daytimeExtra',
+  'weekendForceLong','weekendOncallPerDay','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
+  'postOncallRest','maxConsecutiveOff','targetPerWorkday','minStaffWarn'];
+let PROFILES=[], PROF_I=0;
+function loadProfiles(){ try{ PROFILES=JSON.parse(localStorage.getItem('asistan_profiles')||'null'); }catch(e){ PROFILES=null; }
+  if(!PROFILES||!PROFILES.length) PROFILES=[AsistanScheduler.defaultProfile()];
+  PROF_I=parseInt(localStorage.getItem('asistan_profi')||'0',10)||0; if(PROF_I>=PROFILES.length)PROF_I=0; }
+function saveProfiles(){ if(SRV.on)return; localStorage.setItem('asistan_profiles',JSON.stringify(PROFILES)); localStorage.setItem('asistan_profi',String(PROF_I)); }
+function curProfile(){ if(SRV.on){ if(!ACT)ACT={profile:AsistanScheduler.defaultProfile()}; if(!ACT.profile)ACT.profile=AsistanScheduler.defaultProfile(); return ACT.profile; } return PROFILES[PROF_I]; }
+function refreshProfSel(){ const s=document.getElementById('profSel');
+  if(SRV.on){ s.innerHTML=UNITS.map(u=>`<option value="${u.id}"${ACT&&u.id===ACT.id?' selected':''}>${u.name}${(u.managers&&u.managers.length)?' — 👤'+u.managers.join(','):''}</option>`).join(''); s.disabled=(SRV.role!=='admin'); return; }
+  s.disabled=false; s.innerHTML=PROFILES.map((p,i)=>`<option value="${i}"${i===PROF_I?' selected':''}>${p.name||('Profil '+(i+1))}</option>`).join(''); }
+function fillRuleForm(){ const p=curProfile();
+  RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; if(el.type==='checkbox')el.checked=!!p[f]; else el.value=p[f];});
+  exWrap.querySelectorAll('input[data-dow]').forEach(cb=>{cb.checked=(p.daytimeExtraDays||[]).indexOf(parseInt(cb.dataset.dow,10))>=0;});
+  renderCustomShifts(); }
+function readRuleForm(){ const p=curProfile();
+  RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return;
+    if(el.type==='checkbox')p[f]=el.checked; else if(el.type==='number')p[f]=parseFloat(el.value)||0; else p[f]=el.value;});
+  p.daytimeExtraDays=[...exWrap.querySelectorAll('input[data-dow]:checked')].map(cb=>parseInt(cb.dataset.dow,10));
+  readCustomShifts(); saveProfiles(); }
+// ---- ÖZEL VARDİYALAR ----
+const CUSTOM_COLORS=['#0891b2','#9333ea','#ca8a04','#be185d','#15803d','#b45309','#0369a1','#4d7c0f'];
+function customShiftsOf(){ return curProfile().customShifts||[]; }
+function renderCustomShifts(){ const box=document.getElementById('customShifts'); if(!box)return;
+  box.innerHTML=customShiftsOf().map((s,i)=>`<div class="shiftrow" data-i="${i}">
+    <i class="sw" style="background:${s.color||'#0891b2'}"></i>
+    <div class="fld"><label>etiket</label><input type="text" class="cs-label" value="${(s.label||'').replace(/"/g,'&quot;')}" style="width:130px"></div>
+    <div class="fld"><label>saat</label><input type="number" class="cs-hours" value="${s.hours||0}"></div>
+    <label class="chk"><input type="checkbox" class="cs-daytime" ${s.daytime?'checked':''}> gündüzü kapsar</label>
+    <button type="button" class="sm danger" onclick="rmCustomShift(${i})">Sil</button></div>`).join(''); }
+function readCustomShifts(){ const p=curProfile(); const rows=[...document.querySelectorAll('#customShifts .shiftrow')];
+  p.customShifts=rows.map((r,i)=>{ const old=(p.customShifts&&p.customShifts[i])||{};
+    return { code: old.code||('C'+Date.now().toString(36)+i), label:(r.querySelector('.cs-label').value||('Özel '+(i+1))),
+      hours:parseFloat(r.querySelector('.cs-hours').value)||0, daytime:r.querySelector('.cs-daytime').checked,
+      color: old.color||CUSTOM_COLORS[i%CUSTOM_COLORS.length] }; }); }
+function addCustomShift(){ const p=curProfile(); p.customShifts=p.customShifts||[]; const i=p.customShifts.length;
+  p.customShifts.push({code:'C'+Date.now().toString(36)+i, label:'Özel '+(i+1), hours:12, daytime:true, color:CUSTOM_COLORS[i%CUSTOM_COLORS.length]});
+  saveProfiles(); renderCustomShifts(); }
+function rmCustomShift(i){ const p=curProfile(); (p.customShifts||[]).splice(i,1); saveProfiles(); renderCustomShifts(); }
+document.getElementById('rulePanel').addEventListener('input',e=>{ if(e.target.closest('#ruleBody')) readRuleForm(); });
+document.getElementById('profSel').addEventListener('change',e=>{ if(SRV.on){ loadUnit(e.target.value); } else { PROF_I=parseInt(e.target.value,10); saveProfiles(); fillRuleForm(); } });
+function newProfile(){ const n=(prompt('Yeni birim adı (örn. Anestezi, Yenidoğan Yakın İzlem):','Yenidoğan Yakın İzlem')||'').trim(); if(!n)return; const p=AsistanScheduler.defaultProfile(); p.name=n; PROFILES.push(p); PROF_I=PROFILES.length-1; saveProfiles(); refreshProfSel(); fillRuleForm(); }
+function dupProfile(){ const p=JSON.parse(JSON.stringify(curProfile())); p.name=(p.name||'Profil')+' (kopya)'; PROFILES.push(p); PROF_I=PROFILES.length-1; saveProfiles(); refreshProfSel(); fillRuleForm(); }
+function delProfile(){ if(PROFILES.length<=1){alert('En az bir profil kalmalı.');return;} if(!confirm((curProfile().name||'Profil')+' silinsin mi?'))return; PROFILES.splice(PROF_I,1); PROF_I=0; saveProfiles(); refreshProfSel(); fillRuleForm(); }
+function renameProfile(){ const n=(prompt('Birim adı:',curProfile().name)||'').trim(); if(n){curProfile().name=n; saveProfiles(); refreshProfSel(); if(LAST)render(LAST);} }
+function toggleRules(){ document.getElementById('ruleBody').style.display=document.getElementById('ruleBody').style.display==='none'?'':'none'; }
 
-// ---- Yıllık izin: kişi başına ÇOKLU dönem (her biri başlangıç–bitiş) ----
-function yiRangeHtml(s,e){
-  return `<div class="daterange"><input type="date" class="p-yi-s" title="başlangıç" value="${s||''}"><span>–</span>`
-    +`<input type="date" class="p-yi-e" title="bitiş" value="${e||''}">`
-    +`<button type="button" class="sm sec yix" onclick="rmYi(this)" title="Bu dönemi sil" style="padding:2px 7px;display:none">×</button></div>`;
-}
-function yiCellHtml(){
-  return `<div class="yi-list">${yiRangeHtml('','')}</div>`
-    +`<button type="button" class="sm sec" onclick="addYi(this)" style="margin-top:4px">+ izin ekle</button>`;
-}
-function updateYiX(cell){ const list=cell.querySelector('.yi-list'); const multi=list.children.length>1;
-  list.querySelectorAll('.yix').forEach(x=>x.style.display=multi?'inline-block':'none'); }
-function addYi(btn){ const cell=btn.closest('td');
-  cell.querySelector('.yi-list').insertAdjacentHTML('beforeend', yiRangeHtml('',''));
-  updateDateBounds(); updateYiX(cell); }
-function rmYi(btn){ const cell=btn.closest('td'), row=btn.closest('.daterange'), list=cell.querySelector('.yi-list');
-  if(list.children.length>1) row.remove();
-  else { row.querySelector('.p-yi-s').value=''; row.querySelector('.p-yi-e').value=''; }
-  updateYiX(cell); }
-function rangesOf(tr){ return [...tr.querySelectorAll('.yi-list .daterange')]
-  .map(d=>({s:d.querySelector('.p-yi-s').value, e:d.querySelector('.p-yi-e').value})).filter(r=>r.s); }
-function leaveDaysOf(tr){ const set=new Set();
-  rangesOf(tr).forEach(r=>rangeToDays(r.s,r.e).forEach(d=>set.add(d)));
-  return [...set].sort((a,b)=>a-b); }
+// ===== TARİH / İZİN ARALIĞI (anestezi gibi) =====
+function curYM(){ return {y:parseInt(document.getElementById('year').value,10), m:parseInt(document.getElementById('month').value,10)}; }
+function dayToISO(y,m,d){ return `${y}-${pad(m+1)}-${pad(d)}`; }
+function rangeToDays(sISO,eISO){ if(!sISO)return []; const {y,m}=curYM();
+  const s=new Date(sISO+'T00:00:00'); const e=eISO?new Date(eISO+'T00:00:00'):new Date(sISO+'T00:00:00'); const out=[];
+  for(let cur=new Date(s);cur<=e;cur.setDate(cur.getDate()+1)){ if(cur.getFullYear()===y&&cur.getMonth()===m)out.push(cur.getDate()); } return out; }
+function updateDateBounds(){ const {y,m}=curYM(); const last=AsistanScheduler.daysInMonth(y,m);
+  const min=dayToISO(y,m,1),max=dayToISO(y,m,last); document.querySelectorAll('#pbody input[type=date]').forEach(inp=>{inp.min=min;inp.max=max;}); }
+function yiRangeHtml(s,e){ return `<div class="daterange"><input type="date" class="p-yi-s" value="${s||''}"><span>–</span>`
+  +`<input type="date" class="p-yi-e" value="${e||''}"><button type="button" class="sm danger yix" onclick="rmYi(this)" title="Sil" style="padding:2px 7px;display:none">×</button></div>`; }
+function yiCellHtml(){ return `<div class="yi-list">${yiRangeHtml('','')}</div><button type="button" class="sm sec" onclick="addYi(this)" style="margin-top:4px">+ izin ekle</button>`; }
+function updateYiX(cell){ const list=cell.querySelector('.yi-list'); const multi=list.children.length>1; list.querySelectorAll('.yix').forEach(x=>x.style.display=multi?'inline-block':'none'); }
+function addYi(btn){ const cell=btn.closest('.leave'); cell.querySelector('.yi-list').insertAdjacentHTML('beforeend',yiRangeHtml('','')); updateDateBounds(); updateYiX(cell); }
+function rmYi(btn){ const cell=btn.closest('.leave'),row=btn.closest('.daterange'),list=cell.querySelector('.yi-list');
+  if(list.children.length>1)row.remove(); else {row.querySelector('.p-yi-s').value='';row.querySelector('.p-yi-e').value='';} updateYiX(cell); }
+function rangesOf(tr){ return [...tr.querySelectorAll('.yi-list .daterange')].map(d=>({s:d.querySelector('.p-yi-s').value,e:d.querySelector('.p-yi-e').value})).filter(r=>r.s); }
+function leaveDaysOf(tr){ const set=new Set(); rangesOf(tr).forEach(r=>rangeToDays(r.s,r.e).forEach(d=>set.add(d))); return [...set].sort((a,b)=>a-b); }
+
+// ===== PERSONEL =====
 function addPerson(name){
-  const tb=document.getElementById('pbody');
-  const tr=document.createElement('tr');
-  tr.innerHTML=`
-    <td class="num"></td>
-    <td><input type="text" class="p-name" value="${name||''}" /></td>
-    <td class="chk"><input type="checkbox" class="p-sorumlu" /></td>
-    <td class="chk"><select class="p-offday">
-        <option value="">—</option><option value="1">Pzt</option><option value="2">Sal</option>
-        <option value="3">Çar</option><option value="4">Per</option><option value="5">Cum</option>
-      </select></td>
-    <td class="chk"><input type="checkbox" class="p-startni" /></td>
-    <td>${yiCellHtml()}</td>
-    <td><input type="text" class="p-off" placeholder="5,12,20" style="min-width:130px" /></td>
-    <td><div style="display:flex;flex-direction:column;gap:3px">
-      <input type="text" class="p-onlyday" placeholder="sadece gündüz: 7,8" title="Bu günlerde nöbet verilmez, sadece gündüz mesaisi olabilir" style="min-width:130px" />
-      <input type="text" class="p-onlyn16" placeholder="sadece N16: 12" title="Bu günlerde nöbet 24s değil, 16s (N16-08) olur" style="min-width:130px" />
-    </div></td>
-    <td style="white-space:nowrap">
-      <button class="sm sec" onclick="moveRow(this,-1)" title="Yukarı">↑</button>
-      <button class="sm sec" onclick="moveRow(this,1)" title="Aşağı">↓</button>
-      <button class="sm danger" onclick="this.closest('tr').remove();renumber()" title="Sil">✕</button>
-    </td>`;
-  tb.appendChild(tr);
-  renumber(); updateDateBounds();
+  const row=document.createElement('div'); row.className='prow';
+  row.innerHTML=`<div class="ctr num"></div>
+    <div><input type="text" class="p-name" value="${name||''}"></div>
+    <div class="ctr"><input type="checkbox" class="p-sorumlu" title="Bu kişi nöbet tutmaz, sadece gündüz mesai yapar"></div>
+    <div class="ctr"><input type="checkbox" class="p-startni" title="Önceki ayın son nöbetçisi: ayın 1. günü N.İ (dinlenme) başlar"></div>
+    <div><select class="p-offday"><option value="">—</option>${[1,2,3,4,5].map(d=>`<option value="${d}">${DOW[d]}</option>`).join('')}</select></div>
+    <div class="leave">${yiCellHtml()}</div>
+    <div><input type="text" class="p-off" placeholder="örn. 5,12" title="Bu günlere ne nöbet ne mesai yazılır (kesin boş)"></div>
+    <div class="pref">
+      <input type="text" class="p-onlyday" placeholder="sadece gündüz: 7,8" title="Bu günlerde nöbet verilmez, sadece gündüz">
+      <input type="text" class="p-onlyn16" placeholder="sadece kısa nöbet: 12" title="Bu günlerde uzun değil kısa nöbet"></div>
+    <div class="ctr"><button class="sm danger" onclick="this.closest('.prow').remove();renumber()" title="Sil">×</button></div>`;
+  document.getElementById('pbody').appendChild(row); renumber(); updateDateBounds();
 }
-function renumber(){[...document.querySelectorAll('#pbody tr')].forEach((tr,i)=>tr.querySelector('.num').textContent=i+1);}
-function moveRow(btn,dir){
-  const tr=btn.closest('tr');
-  if(dir<0 && tr.previousElementSibling) tr.parentNode.insertBefore(tr,tr.previousElementSibling);
-  if(dir>0 && tr.nextElementSibling) tr.parentNode.insertBefore(tr.nextElementSibling,tr);
-  renumber();
-}
-function resetNames(){
-  document.getElementById('pbody').innerHTML='';
-  DEFAULT_NAMES.forEach(n=>addPerson(n));
-  const trs=[...document.querySelectorAll('#pbody tr')];
-  if(trs[0]) trs[0].querySelector('.p-sorumlu').checked=true;   // örnek: 1. kişi sorumlu
-  if(trs[1]) trs[1].querySelector('.p-offday').value='4';       // örnek: 2. kişi Perşembe izinli
-}
-function readCfg(){
-  const personnel=[...document.querySelectorAll('#pbody tr')].map(tr=>({
-    name: tr.querySelector('.p-name').value.trim()||'?',
-    noNobet: tr.querySelector('.p-sorumlu').checked,
-    startNI: tr.querySelector('.p-startni').checked,
-    offDay: tr.querySelector('.p-offday').value===''? null : parseInt(tr.querySelector('.p-offday').value,10),
-    // ÇOKLU izin dönemi: tüm dönemlerin günleri birleştirilir (algoritma gün dizisi alır).
-    leaveYI: leaveDaysOf(tr),
-    // Ham (ISO) dönemler de saklanır: yeniden yüklemede aya bağlı filtreden ETKİLENMEDEN
-    // birebir geri yüklenir -> izin tarihleri yenilemede ASLA kaybolmaz.
-    yiRanges: rangesOf(tr),
-    offReq:  parseDays(tr.querySelector('.p-off').value),
-    onlyDay: parseDays(tr.querySelector('.p-onlyday').value),
-    onlyN16: parseDays(tr.querySelector('.p-onlyn16').value),
+function renumber(){ [...document.querySelectorAll('#pbody .prow')].forEach((r,i)=>r.querySelector('.num').textContent=i+1); }
+function resetNames(){ document.getElementById('pbody').innerHTML=''; for(let i=1;i<=12;i++)addPerson('Personel '+i); }
+function parseDays(s){ return (s||'').split(',').map(x=>parseInt(x.trim(),10)).filter(x=>x>=1&&x<=31); }
+function readPersonnel(){
+  return [...document.querySelectorAll('#pbody .prow')].map(r=>({
+    name:(r.querySelector('.p-name').value||'?').trim(),
+    noNobet:r.querySelector('.p-sorumlu').checked, startNI:r.querySelector('.p-startni').checked,
+    offDay:r.querySelector('.p-offday').value===''?null:parseInt(r.querySelector('.p-offday').value,10),
+    leaveYI:leaveDaysOf(r), yiRanges:rangesOf(r),
+    offReq:parseDays(r.querySelector('.p-off').value),
+    onlyDay:parseDays(r.querySelector('.p-onlyday').value), onlyN16:parseDays(r.querySelector('.p-onlyn16').value)
   })).filter(p=>p.name!=='?');
-  return {
-    year: parseInt(document.getElementById('year').value,10),
-    month: parseInt(document.getElementById('month').value,10),
-    holidays: parseDays(document.getElementById('holidays').value),
-    options: {
-      preLeaveWed: document.getElementById('optPreLeaveWed').checked,
-      denseBlock:  document.getElementById('optDenseBlock').checked
-    },
-    personnel
-  };
 }
-function saveCfg(){ localStorage.setItem('anestezi_cfg', JSON.stringify(readCfg())); storeActiveMonth();
-  // ORTAK/CANLI modda değişikliği ANINDA sunucuya da yaz (yalnız localStorage'da kalmasın ->
-  // yenilemede sunucudaki eski hal geri gelip silmesin). LAST yoksa önce listeyi kur.
-  if(SYNC.on){ if(!LAST){ try{ LAST=Scheduler.buildSchedule(readCfg()); }catch(e){} } cloudSaveNow(); }
-  flash(SYNC.on?'Kaydedildi ✓ (ortak)':'Kaydedildi ✓'); }
-function daysToRange(arr,y,m){ // gün dizisi -> {s,e} ISO (bitişik varsayımı)
-  if(!arr||!arr.length) return {s:'',e:''};
-  const mn=Math.min(...arr), mx=Math.max(...arr);
-  return {s:dayToISO(y,m,mn), e:dayToISO(y,m,mx)};
-}
-function applyCfg(c){
-  document.getElementById('year').value=c.year;
-  document.getElementById('month').value=c.month;
-  document.getElementById('holidays').value=(c.holidays||[]).join(',');
-  var o=c.options||{};
-  document.getElementById('optPreLeaveWed').checked = o.preLeaveWed!==false;
-  document.getElementById('optDenseBlock').checked = o.denseBlock!==false;
+function applyPersonnel(list){
   document.getElementById('pbody').innerHTML='';
-  const y=c.year, m=c.month;
-  (c.personnel||[]).forEach(p=>{
-    addPerson(p.name);
-    const tr=document.querySelector('#pbody tr:last-child');
-    tr.querySelector('.p-sorumlu').checked=!!(p.noNobet);
-    tr.querySelector('.p-startni').checked=!!p.startNI;
-    tr.querySelector('.p-offday').value = (p.offDay!=null? String(p.offDay) : (p.noThursday?'4':''));
-    // İzin dönemleri: yeni çoklu (yiRanges) -> eski tek (yiStart/yiEnd) -> en eski (leaveYI gün dizisi)
-    let ranges = (p.yiRanges && p.yiRanges.length) ? p.yiRanges
-      : (p.yiStart ? [{s:p.yiStart,e:p.yiEnd}] : []);
-    if(!ranges.length && p.leaveYI && p.leaveYI.length){ const yi=daysToRange(p.leaveYI,y,m); ranges=[{s:yi.s,e:yi.e}]; }
-    if(!ranges.length) ranges=[{s:'',e:''}];
-    const cell=tr.querySelector('.yi-list').closest('td');
-    tr.querySelector('.yi-list').innerHTML = ranges.map(r=>yiRangeHtml(r.s,r.e)).join('');
-    updateYiX(cell);
-    tr.querySelector('.p-off').value=(p.offReq||[]).join(',');
-    tr.querySelector('.p-onlyday').value=(p.onlyDay||[]).join(',');
-    tr.querySelector('.p-onlyn16').value=(p.onlyN16||[]).join(',');
+  (list||[]).forEach(p=>{ addPerson(p.name); const r=document.querySelector('#pbody .prow:last-child');
+    r.querySelector('.p-sorumlu').checked=!!p.noNobet; r.querySelector('.p-startni').checked=!!p.startNI;
+    r.querySelector('.p-offday').value=p.offDay!=null?String(p.offDay):'';
+    let ranges=(p.yiRanges&&p.yiRanges.length)?p.yiRanges:[]; if(!ranges.length)ranges=[{s:'',e:''}];
+    r.querySelector('.yi-list').innerHTML=ranges.map(x=>yiRangeHtml(x.s,x.e)).join(''); updateYiX(r.querySelector('.leave'));
+    r.querySelector('.p-off').value=(p.offReq||[]).join(','); r.querySelector('.p-onlyday').value=(p.onlyDay||[]).join(','); r.querySelector('.p-onlyn16').value=(p.onlyN16||[]).join(',');
   });
   updateDateBounds();
 }
-function loadCfg(){
-  const raw=localStorage.getItem('anestezi_cfg');
-  if(!raw){resetNames();return;}
-  try{ applyCfg(JSON.parse(raw)); }catch(e){resetNames();}
-}
-function flash(msg){
-  const d=document.createElement('div');d.textContent=msg;
-  d.style.cssText='position:fixed;bottom:20px;right:20px;background:#16a34a;color:#fff;padding:10px 16px;border-radius:8px;z-index:99';
-  document.body.appendChild(d);setTimeout(()=>d.remove(),1500);
-}
+document.getElementById('month').addEventListener('change',updateDateBounds);
+document.getElementById('year').addEventListener('change',updateDateBounds);
 
-// ============== AYLIK SAYFALAR — her ay ayrı kaydolur, aylar arası geçiş ==============
-// Yerel depo (her tarayıcıda): anestezi_months = { 'YIL-AY': {cfg, grid} }.
-// Ay/yıl seçici değişince eski ay kaydolur, seçilen ay yüklenir. Üstteki sekmelerden de geçilir.
-let activeKey=null;
-function ymKey(y,m){ return y+'-'+m; }
-function monthKey(){ return ymKey(document.getElementById('year').value, document.getElementById('month').value); }
-function keyLabel(k){ const [y,m]=k.split('-'); return (MONTHS[+m]||'?')+' '+y; }
-function loadMonths(){ try{ return JSON.parse(localStorage.getItem('anestezi_months')||'{}'); }catch(e){ return {}; } }
-function saveMonths(obj){ try{ localStorage.setItem('anestezi_months', JSON.stringify(obj)); }catch(e){} }
-function storeActiveMonth(){ if(!activeKey)activeKey=monthKey();
-  const obj=loadMonths(); obj[activeKey]={cfg:readCfg(), grid:(LAST&&LAST.grid)||null}; saveMonths(obj); refreshMonthTabs(); }
-function refreshMonthTabs(){ const bar=document.getElementById('monthTabs'); if(!bar)return;
-  const obj=loadMonths(); const keys=Object.keys(obj).sort((a,b)=>{const[ay,am]=a.split('-').map(Number),[by,bm]=b.split('-').map(Number);return ay-by||am-bm;});
-  if(activeKey&&!keys.includes(activeKey)) keys.push(activeKey);
-  if(keys.length<=1){ bar.style.display='none'; return; }
-  bar.style.display='flex';
-  bar.innerHTML='<span class="muted" style="font-size:13px">🗂️ Kayıtlı aylar:</span>'+keys.map(k=>{
-    const act=k===activeKey;
-    return `<span style="display:inline-flex;align-items:center;border:1px solid ${act?'var(--accent)':'var(--line)'};border-radius:7px;overflow:hidden">
-      <button class="sm" style="border:0;border-radius:0;${act?'background:var(--accent);color:#fff':'background:transparent'}" onclick="gotoMonth('${k}')">${keyLabel(k)}</button>
-      <button class="sm" title="Bu ayı sil" style="border:0;border-radius:0;background:transparent;color:var(--muted);padding:4px 7px" onclick="delMonth('${k}')">✕</button>
-    </span>`;
-  }).join('');
-}
-function gotoMonth(k){ if(k===activeKey)return; const [y,m]=k.split('-');
-  document.getElementById('year').value=y; document.getElementById('month').value=m; onPeriodChange(); }
-function delMonth(k){ const obj=loadMonths(); if(!obj[k]&&k!==activeKey)return;
-  if(!confirm(keyLabel(k)+' ayının kayıtlı listesi silinsin mi?'))return;
-  delete obj[k]; saveMonths(obj);
-  if(k===activeKey){ const rest=Object.keys(obj); if(rest.length){ gotoMonth(rest.sort()[rest.length-1]); return; } }
-  refreshMonthTabs();
-}
-function seedNewMonth(){ // yeni ay: personeli koru, aya özel alanları temizle, o ayın tatillerini doldur
-  const cfg=readCfg();
-  cfg.personnel.forEach(p=>{ p.leaveYI=[]; p.yiRanges=[]; p.offReq=[]; p.onlyDay=[]; p.onlyN16=[]; });
-  cfg.holidays=[];
-  applyCfg(cfg); fillHolidays();
-}
-function onPeriodChange(){
-  const obj=loadMonths();
-  if(activeKey){ const oldCfg=readCfg(); const [oy,om]=activeKey.split('-'); oldCfg.year=+oy; oldCfg.month=+om;
-    obj[activeKey]={cfg:oldCfg, grid:(LAST&&LAST.grid)||null}; saveMonths(obj); }
-  const nk=monthKey(); activeKey=nk;
-  if(obj[nk]){ applyCfg(obj[nk].cfg); LAST=Scheduler.buildSchedule(Object.assign({__attempts:1},readCfg()));
-    if(obj[nk].grid){ LAST.grid=obj[nk].grid; recomputeTotals(LAST); } ALTS=[LAST]; ALT_I=0; render(LAST); saveCfgQuiet(); }
-  else { seedNewMonth(); generate(); }
-  storeActiveMonth(); cloudSave();
-}
-function saveCfgQuiet(){ try{ localStorage.setItem('anestezi_cfg', JSON.stringify(readCfg())); }catch(e){} }
-document.getElementById('month').addEventListener('change',onPeriodChange);
-document.getElementById('year').addEventListener('change',onPeriodChange);
+// ===== KAYDET =====
+function readCfg(){ return { year:parseInt(document.getElementById('year').value,10), month:parseInt(document.getElementById('month').value,10),
+  holidays:parseDays(document.getElementById('holidays').value), profile:curProfile(), personnel:readPersonnel() }; }
+function saveAll(){ readRuleForm();
+  if(SRV.on){ if(!ACT){flash('Önce birim seçin/ekleyin');return;} const cfg={year:parseInt(document.getElementById('year').value,10),month:parseInt(document.getElementById('month').value,10),holidays:parseDays(document.getElementById('holidays').value),personnel:readPersonnel()}; ACT.cfg=cfg;
+    fetch('/api/asistan/unit?id='+encodeURIComponent(ACT.id),{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({profile:ACT.profile,cfg})})
+      .then(r=>{ if(r.status===401){location.reload();return;} flash('Kaydedildi ✓ (sunucu)'); }).catch(()=>flash('Kaydedilemedi (ağ?)')); return; }
+  localStorage.setItem('asistan_cfg',JSON.stringify({year:document.getElementById('year').value,month:document.getElementById('month').value,holidays:document.getElementById('holidays').value,personnel:readPersonnel()})); flash('Kaydedildi ✓'); }
+function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem('asistan_cfg')||'null'); if(c){ document.getElementById('year').value=c.year; document.getElementById('month').value=c.month; document.getElementById('holidays').value=c.holidays||''; applyPersonnel(c.personnel); return true; } }catch(e){} return false; }
+function flash(m){ const d=document.createElement('div'); d.textContent=m; d.style.cssText='position:fixed;bottom:20px;right:20px;background:#16a34a;color:#fff;padding:10px 16px;border-radius:8px;z-index:99'; document.body.appendChild(d); setTimeout(()=>d.remove(),1500); }
 
-let LAST=null;
-// Multi-start'ın ürettiği alternatif listeler (Alternatif 1..N) ve seçili olanın indeksi.
-let ALTS=[], ALT_I=0;
-function generate(){
-  const cfg=readCfg();
-  if(!cfg.personnel.length){alert('En az 1 personel ekleyin.');return;}
-  LAST=Scheduler.buildSchedule(cfg);
-  ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0;     // alternatifleri yakala
-  render(LAST);
-  saveCfg();
-  storeActiveMonth();
-  cloudSave();
-}
-// Alternatif listeyi seç: o listeyi aktif yap, çiz, kaydet/senkronize et.
-function pickAlt(i){
-  if(!ALTS[i]) return;
-  ALT_I=i; LAST=ALTS[i];
-  render(LAST); saveCfgQuiet(); storeActiveMonth(); cloudSave();
-  flash('Alternatif '+(i+1)+' seçildi ✓');
-}
-
-// ============== ORTAK / CANLI SENKRON — 3 mod ==============
-//  backend='server' : kendi Render sunucumuz (/api/state, parola korumalı)
-//  backend='room'   : ÜCRETSİZ kurulumsuz ortak oda (jsonblob.com) — değişiklik bulutta kalır,
-//                     ikiniz de görürsünüz; link bilen erişir (şifresiz). GitHub Pages'te bile çalışır.
-//  backend='local'  : sunucu/oda yok -> yalnız bu tarayıcı (localStorage).
-// İstemci ~2.5sn poll eder; rev artınca (arkadaş kaydetti) ekran kendiliğinden güncellenir.
-const JB='https://jsonblob.com/api/jsonBlob';
-const SYNC={on:false,backend:'local',rev:-1,me:'',admin:false,editing:false,pollStarted:false};
-function getUser(){ return localStorage.getItem('anestezi_user')||''; }
-function getAuth(){ return localStorage.getItem('anestezi_auth')||''; }
-function authHeaders(extra){ return Object.assign({'X-User':getUser(),'X-Auth':getAuth()}, extra||{}); }
-function roomId(){ return localStorage.getItem('anestezi_room')||''; }
-function myName(){ return SYNC.me || localStorage.getItem('anestezi_name') || 'ben'; }
-function setSyncBadge(){ const b=document.getElementById('syncBadge'); if(b){
-    if(SYNC.backend==='server'){ b.textContent='🟢 '+(SYNC.me||'')+' (canlı)'; }
-    else if(SYNC.backend==='room'){ b.textContent='🟢 Ortak oda (canlı)'; }
-    else { b.textContent='⚪ Yerel'; }
-    b.style.color=SYNC.on?'#4ade80':'#94a3b8'; }
-  const lo=document.getElementById('logoutBtn'); if(lo){ lo.style.display=SYNC.on?'inline-block':'none'; lo.textContent=SYNC.backend==='room'?'Odadan çık':'Çıkış'; }
-  const se=document.getElementById('settingsBtn'); if(se) se.style.display=(SYNC.backend==='server')?'inline-block':'none';
-  const cr=document.getElementById('roomBtn'); if(cr) cr.style.display=(SYNC.backend==='local')?'inline-block':'none'; }
-let _saveT=null;
-function cloudSave(){ if(!SYNC.on)return; clearTimeout(_saveT); _saveT=setTimeout(cloudSaveNow,700); }
-async function cloudSaveNow(){ if(!SYNC.on||!LAST)return;
-  const payload={cfg:readCfg(),grid:LAST.grid,by:myName(),rev:(SYNC.rev||0)+1};
-  try{
-    if(SYNC.backend==='server'){ const r=await fetch('/api/state',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
-      if(r.status===401){requireLogin();return;} const st=await r.json(); if(st&&st.rev!=null)SYNC.rev=st.rev; }
-    else if(SYNC.backend==='room'){
-      // users'ı KORU: önce odayı oku, cfg/grid güncelle, kullanıcıları olduğu gibi yaz.
-      let cur={}; try{ cur=await (await fetch(JB+'/'+roomId(),{cache:'no-store'})).json(); }catch(e){}
-      const merged={cfg:payload.cfg,grid:payload.grid,by:payload.by,rev:(cur.rev||SYNC.rev||0)+1,users:cur.users||[]};
-      await fetch(JB+'/'+roomId(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(merged)}); SYNC.rev=merged.rev; }
-  }catch(e){}
-}
-function applyState(st){ if(!st||!st.cfg)return;
-  try{ applyCfg(st.cfg); LAST=Scheduler.buildSchedule(Object.assign({__attempts:1},readCfg()));
-    if(st.grid){ LAST.grid=st.grid; const re=Scheduler.recompute(LAST); LAST.totals=re.totals; LAST.warnings=re.warnings; }
-    ALTS=[LAST]; ALT_I=0; render(LAST); localStorage.setItem('anestezi_cfg',JSON.stringify(readCfg()));
-    activeKey=monthKey(); storeActiveMonth();
-  }catch(e){} }
-async function cloudPoll(){ if(!SYNC.on||SYNC.editing)return;
-  try{
-    let st;
-    if(SYNC.backend==='server'){ const r=await fetch('/api/state',{cache:'no-store',headers:authHeaders()});
-      if(r.status===401){ requireLogin(); return; } st=await r.json(); }
-    else if(SYNC.backend==='room'){ const r=await fetch(JB+'/'+roomId(),{cache:'no-store'}); if(!r.ok)return; st=await r.json(); }
-    else return;
-    if(st&&(st.rev||0)>SYNC.rev){ const other=st.by!==myName(); SYNC.rev=st.rev||0; if(other){ applyState(st); flash((st.by||'Arkadaşınız')+' güncelledi ↻'); } }
-  }catch(e){} }
-async function cloudInit(){
-  // 1) Kendi sunucumuz (Render) var mı?
-  try{ const r=await fetch('/api/state',{cache:'no-store',headers:authHeaders()});
-    if(r.status===401){ SYNC.on=true; SYNC.backend='server'; SYNC.me=''; setSyncBadge(); requireLogin(); return 'need-login'; }
-    if(r.ok){ const st=await r.json(); SYNC.on=true; SYNC.backend='server'; SYNC.me=getUser(); setSyncBadge();
-      if(st&&st.cfg){ SYNC.rev=st.rev; applyState(st); return true; } SYNC.rev=st?st.rev:0; return false; }
-  }catch(e){}
-  // 2) Ortak oda (#room / kayıtlı) var mı? -> ADMIN GİRİŞİ (kullanıcılar odanın verisinde)
-  if(roomId()){ try{ const r=await fetch(JB+'/'+roomId(),{cache:'no-store'}); const st=r.ok?await r.json():null;
-    SYNC.on=true; SYNC.backend='room';
-    const users=(st&&st.users)||[];
-    if(users.length){
-      const me=users.find(x=>x.u===getUser()&&x.p===getAuth());
-      if(!me){ SYNC.me=''; setSyncBadge(); requireLogin(); return 'need-login'; }   // giriş ekranı
-      SYNC.me=me.u; SYNC.admin=!!me.admin;
-    } else { SYNC.me=myName(); }
-    setSyncBadge();
-    if(st&&st.cfg){ SYNC.rev=st.rev||0; applyState(st); return true; } SYNC.rev=(st&&st.rev)||0; return false;
-  }catch(e){} }
-  // 3) Yerel
-  SYNC.on=false; SYNC.backend='local'; setSyncBadge(); return false;
-}
-// ---- ÜCRETSİZ ortak oda (jsonblob) + ADMIN girişi ----
-async function createRoom(){
-  const u=(prompt('Yönetici KULLANICI ADI belirleyin (örn. admin):','admin')||'').trim(); if(!u)return;
-  const p=(prompt('Yönetici ŞİFRESİ belirleyin:','')||'').trim(); if(!p){ alert('Şifre boş olamaz'); return; }
-  try{ const payload={cfg:readCfg(),grid:(LAST&&LAST.grid)||null,by:u,rev:1,users:[{u,p,admin:true}]};
-    const r=await fetch(JB,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    const id=(r.headers.get('Location')||'').split('/').pop();
-    if(!id) throw new Error('oda kimliği alınamadı');
-    localStorage.setItem('anestezi_room',id); localStorage.setItem('anestezi_user',u); localStorage.setItem('anestezi_auth',p);
-    const url=location.origin+location.pathname+'#room='+id;
-    history.replaceState(null,'',url);
-    SYNC.on=true; SYNC.backend='room'; SYNC.me=u; SYNC.admin=true; SYNC.rev=1; setSyncBadge();
-    if(!SYNC.pollStarted){ SYNC.pollStarted=true; setInterval(cloudPoll,2500); }
-    const ok=navigator.clipboard&&navigator.clipboard.writeText;
-    if(ok) navigator.clipboard.writeText(url).then(()=>flash('🟢 Ortak oda kuruldu, link kopyalandı — arkadaşınıza gönderin (giriş bilgisini de verin)')).catch(()=>prompt('Ortak oda linki:',url));
-    else prompt('Ortak oda linki (kopyalayıp gönderin):',url);
-  }catch(e){ alert('Oda oluşturulamadı (ağınız jsonblob.com erişimini engelliyor olabilir): '+e.message); }
-}
-// odanın güncel users listesini getir (Ayarlar + giriş için)
-async function roomUsers(){ try{ const st=await (await fetch(JB+'/'+roomId(),{cache:'no-store'})).json(); return st&&st.users||[]; }catch(e){ return []; } }
-// odanın users'ını güncelle (cfg/grid korunur)
-async function roomSaveUsers(users){ const st=await (await fetch(JB+'/'+roomId(),{cache:'no-store'})).json();
-  st.users=users; st.rev=(st.rev||0)+1; await fetch(JB+'/'+roomId(),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(st)}); SYNC.rev=st.rev; }
-function getMyNameOnce(){
-  let n=localStorage.getItem('anestezi_name');
-  if(!n){ n=(prompt('Adınız (kimin değiştirdiği görünsün diye):','')||'').trim(); if(!n) return false; localStorage.setItem('anestezi_name',n); SYNC.me=n; }
-  return true;
-}
-function leaveRoomOrLogout(){
-  if(SYNC.backend==='room'){ localStorage.removeItem('anestezi_room'); location.href=location.origin+location.pathname; }
-  else { localStorage.removeItem('anestezi_user'); localStorage.removeItem('anestezi_auth'); location.reload(); }
-}
-// ---- Kullanıcı adı + şifre girişi ----
-function requireLogin(){ const o=document.getElementById('loginOverlay'); if(o){o.style.display='flex'; const i=document.getElementById('loginUser'); if(i)i.focus();} }
-async function doLogin(){
-  const usr=(document.getElementById('loginUser').value||'').trim();
-  const pw=(document.getElementById('loginPw').value||'').trim();
-  const err=document.getElementById('loginErr');
-  if(!usr){ err.textContent='Kullanıcı adı girin'; return; }
-  // ORTAK ODA modu: kullanıcılar odanın bulut verisinde -> orada doğrula
-  if(SYNC.backend==='room'){
-    const users=await roomUsers(); const me=users.find(x=>x.u===usr&&x.p===pw);
-    if(me){ localStorage.setItem('anestezi_user',usr); localStorage.setItem('anestezi_auth',pw);
-      SYNC.me=usr; SYNC.admin=!!me.admin; document.getElementById('loginOverlay').style.display='none'; err.textContent=''; initApp(); }
-    else err.textContent='Kullanıcı adı veya şifre hatalı';
-    return;
-  }
-  try{ const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:usr,password:pw})});
-    const j=await r.json().catch(()=>({}));
-    if(r.ok&&j.ok){ localStorage.setItem('anestezi_user',usr); localStorage.setItem('anestezi_auth',pw);
-      SYNC.me=usr; SYNC.admin=!!j.admin; document.getElementById('loginOverlay').style.display='none'; err.textContent=''; initApp(); }
-    else { err.textContent=(j&&j.error)||'Kullanıcı adı veya şifre hatalı'; }
-  }catch(e){ err.textContent='Sunucuya ulaşılamadı'; }
-}
-function logout(){ localStorage.removeItem('anestezi_user'); localStorage.removeItem('anestezi_auth'); location.reload(); }
-
-// ---- AYARLAR: şifre değiştir + (yönetici) kullanıcı yönetimi ----
-async function openSettings(){
-  const ov=document.getElementById('settingsOverlay'); if(!ov)return;
-  ov.style.display='flex';
-  document.getElementById('setMsg').textContent='';
-  document.getElementById('setNewPw').value='';
-  // ORTAK ODA modu: kullanıcılar odanın verisinden
-  if(SYNC.backend==='room'){
-    document.getElementById('setWho').textContent='Giriş: '+SYNC.me+(SYNC.admin?' (yönetici)':'');
-    const ab=document.getElementById('setAdminBox'); ab.style.display=SYNC.admin?'block':'none';
-    if(SYNC.admin){ renderUsers(await roomUsers()); }
-    return;
-  }
-  // SUNUCU modu: /api/users
-  try{ const j=await (await fetch('/api/users',{headers:authHeaders()})).json();
-    SYNC.admin=!!j.admin;
-    document.getElementById('setWho').textContent='Giriş: '+(j.me||SYNC.me)+(j.admin?' (yönetici)':'');
-    const adminBox=document.getElementById('setAdminBox'); adminBox.style.display=j.admin?'block':'none';
-    if(j.admin) renderUsers(j.users);
-  }catch(e){ document.getElementById('setWho').textContent='Giriş: '+SYNC.me; }
-}
-function closeSettings(){ const ov=document.getElementById('settingsOverlay'); if(ov)ov.style.display='none'; }
-function renderUsers(users){
-  const box=document.getElementById('setUserList');
-  box.innerHTML=(users||[]).map(u=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)">
-    <span style="flex:1">${u.u}${u.admin?' <span class="muted">(yönetici)</span>':''}</span>
-    ${u.u===SYNC.me?'':`<button class="sm danger" onclick="userAction('remove','${u.u}')">Sil</button>`}
-  </div>`).join('');
-}
-async function changeMyPw(){
-  const np=(document.getElementById('setNewPw').value||'').trim(); const m=document.getElementById('setMsg');
-  if(np.length<3){ m.style.color='var(--err)'; m.textContent='Şifre en az 3 karakter olmalı'; return; }
-  if(SYNC.backend==='room'){
-    try{ const us=await roomUsers(); const me=us.find(x=>x.u===SYNC.me); if(me){me.p=np; await roomSaveUsers(us);
-      localStorage.setItem('anestezi_auth',np); m.style.color='var(--ok)'; m.textContent='Şifreniz değiştirildi ✓'; document.getElementById('setNewPw').value=''; }
-    }catch(e){ m.style.color='var(--err)'; m.textContent='Kaydedilemedi (ağ?)'; }
-    return;
-  }
-  try{ const r=await fetch('/api/changepw',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({newPass:np})});
-    const j=await r.json();
-    if(r.ok){ localStorage.setItem('anestezi_auth',np); m.style.color='var(--ok)'; m.textContent='Şifreniz değiştirildi ✓'; document.getElementById('setNewPw').value=''; }
-    else { m.style.color='var(--err)'; m.textContent=j.error||'Hata'; }
-  }catch(e){ m.style.color='var(--err)'; m.textContent='Sunucuya ulaşılamadı'; }
-}
-async function userAction(action,u,p,admin){
-  const m=document.getElementById('setMsg');
-  if(SYNC.backend==='room'){
-    if(!SYNC.admin){ m.style.color='var(--err)'; m.textContent='Yalnız yönetici'; return; }
-    try{ let us=await roomUsers();
-      if(action==='add'){ if(us.some(x=>x.u===u)){ m.style.color='var(--err)'; m.textContent='Bu kullanıcı adı var'; return; } us.push({u,p,admin:!!admin}); }
-      else if(action==='remove'){ if(u===SYNC.me){ m.style.color='var(--err)'; m.textContent='Kendinizi silemezsiniz'; return; } us=us.filter(x=>x.u!==u); }
-      await roomSaveUsers(us); renderUsers(us); m.style.color='var(--ok)'; m.textContent='Kaydedildi ✓';
-    }catch(e){ m.style.color='var(--err)'; m.textContent='Kaydedilemedi (ağ?)'; }
-    return;
-  }
-  try{ const r=await fetch('/api/users',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action,u,p,admin})});
-    const j=await r.json();
-    if(r.ok){ renderUsers(j.users); m.style.color='var(--ok)'; m.textContent='Kaydedildi ✓'; }
-    else { m.style.color='var(--err)'; m.textContent=j.error||'Hata'; }
-  }catch(e){ m.style.color='var(--err)'; m.textContent='Sunucuya ulaşılamadı'; }
-}
-function addUser(){
-  const u=(document.getElementById('newUserName').value||'').trim();
-  const p=(document.getElementById('newUserPw').value||'').trim();
-  const ad=document.getElementById('newUserAdmin').checked;
-  if(!u||!p){ const m=document.getElementById('setMsg'); m.style.color='var(--err)'; m.textContent='Kullanıcı adı ve şifre girin'; return; }
-  userAction('add',u,p,ad); document.getElementById('newUserName').value=''; document.getElementById('newUserPw').value=''; document.getElementById('newUserAdmin').checked=false;
-}
-function initApp(){
-  cloudInit().then(loaded=>{
-    if(loaded==='need-login') return;                 // giriş ekranı açık, bekle
-    if(!loaded){ loadCfg(); if(!document.getElementById('holidays').value.trim()) fillHolidays(); generate(); }
-    if(SYNC.on && !SYNC.pollStarted){ SYNC.pollStarted=true; setInterval(cloudPoll,2500); }
-    if(!activeKey) activeKey=monthKey();
-    refreshMonthTabs();
-  });
+// ===== ÜRETİM + RENDER =====
+let LAST=null, ALTS=[], ALT_I=0;
+function codeLabel(c){ const p=curProfile(); const base={M:p.mesaiLabel,NL:p.oncallLongLabel,NS:p.oncallShortLabel,NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UCI:'Ü.İ',OFF:'İ','':''};
+  if(base[c]!==undefined)return base[c]; const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.label:''; }
+function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.color:null; }
+function generate(){ readRuleForm(); const cfg=readCfg(); if(!cfg.personnel.length){alert('En az 1 personel ekleyin.');return;}
+  LAST=AsistanScheduler.buildSchedule(cfg); ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0; render(LAST); if(!SRV.on)saveAll(); }
+function pickAlt(i){ if(!ALTS[i])return; ALT_I=i; LAST=ALTS[i]; render(LAST); }
+function warnCount(a){ return (a.warnings||[]).filter(x=>x.charAt(0)!=='💡').length; }
+// tek bir listenin tam ızgarası (özet + lejant + uyarılar)
+function gridHtml(r){
+  const p=curProfile(); let h=`<div class="gridwrap"><table class="grid"><thead><tr><th class="name">Personel</th>`;
+  r.days.forEach(d=>{ h+=`<th class="${d.weekend||d.holiday?'wknd':''}">${d.day}<br><span class="muted">${d.dowName}</span></th>`; });
+  h+=`<th class="tot">Hedef</th><th class="tot">Top.</th><th class="tot">Fark</th><th class="tot">${p.mesaiLabel}</th><th class="tot">${p.oncallLongLabel}</th><th class="tot">${p.oncallShortLabel}</th><th class="tot">Nİ</th><th class="tot">Ü.İ</th><th class="tot">HSn</th></tr></thead><tbody>`;
+  r.totals.forEach((t,ti)=>{ const g=r.grid[t.name]; h+=`<tr><td class="name">${t.name}</td>`;
+    r.days.forEach(d=>{ const c=g[d.day]||''; const cc=customColor(c);
+      h+=`<td class="${cc?'':c}" ${cc?`style="background:${cc}"`:''} data-ti="${ti}" data-d="${d.day}" onclick="editCell(this)">${codeLabel(c)}</td>`; });
+    const fc=t.fark===0?'good':'bad';
+    h+=`<td class="tot">${t.target}</td><td class="tot">${t.hours}</td><td class="tot ${fc}">${t.fark>0?'+':''}${t.fark}</td><td class="tot">${t.mesai}</td><td class="tot">${t.nl}</td><td class="tot">${t.ns}</td><td class="tot">${t.ni}</td><td class="tot">${t.uci}</td><td class="tot">${t.weekendNobet}</td></tr>`; });
+  function dc(day){let nob=0,gun=0;r.totals.forEach(t=>{const c=r.grid[t.name][day];if(c==='NL'||c==='NS')nob++;const cs=customShiftsOf().find(s=>s.code===c);const cd=(c==='M')||(c==='NL'&&p.oncallLongDaytime)||(c==='NS'&&p.oncallShortDaytime)||(cs&&cs.daytime);if(!t.noNobet&&cd)gun++;});return{nob,gun};}
+  h+=`<tr style="font-weight:700;border-top:2px solid var(--accent)"><td class="name">☀️ Gündüz</td>`;
+  r.days.forEach(d=>{const c=dc(d.day);const need=d.workday?(d.isExtra?p.daytimeExtra:p.daytimeMin):0;h+=`<td class="tot ${d.workday&&c.gun<need?'bad':'good'}">${c.gun}</td>`;});
+  h+=`<td class="tot" colspan="9"></td></tr><tr style="font-weight:700"><td class="name">🌙 Nöbetçi</td>`;
+  r.days.forEach(d=>{const c=dc(d.day);const need=(d.weekend||d.holiday)?p.weekendOncallPerDay:p.oncallPerDay;h+=`<td class="tot ${c.nob<need?'bad':'good'}">${c.nob}</td>`;});
+  h+=`<td class="tot" colspan="9"></td></tr></tbody></table></div>`;
+  h+=`<div class="legend">
+    <span><i class="sw" style="background:var(--c-M)"></i> ${p.mesaiLabel}</span>
+    <span><i class="sw" style="background:var(--c-NL)"></i> ${p.oncallLongLabel}</span>
+    <span><i class="sw" style="background:var(--c-NS)"></i> ${p.oncallShortLabel}</span>
+    <span><i class="sw" style="background:var(--c-NI)"></i> N.İ</span><span><i class="sw" style="background:var(--c-YI)"></i> Yıllık izin</span>
+    <span><i class="sw" style="background:var(--c-UCI)"></i> Ücretli izin</span><span><i class="sw" style="background:var(--c-HT)"></i> Hafta sonu</span>
+    <span><i class="sw" style="background:var(--c-RT)"></i> Resmi tatil</span><span><i class="sw" style="background:var(--c-OFF)"></i> Haftalık izin</span>`
+    +customShiftsOf().map(s=>`<span><i class="sw" style="background:${s.color}"></i> ${s.label}${s.daytime?' · gündüz':''}</span>`).join('')+`</div>`;
+  if(r.warnings.length){ h+=`<div class="warns"><b>⚠️ ${r.warnings.length} uyarı / not</b><ul>`+r.warnings.map(w=>`<li>${w}</li>`).join('')+`</ul></div>`; }
+  else h+=`<div class="warns ok"><b>✓ Liste hazır.</b> Herkes hedefini tuttu, her gün yeterli nöbetçi var, fazla mesai yok.</div>`;
+  return h;
 }
 function render(r){
-  const out=document.getElementById('output');
-  const title=`${MONTHS[r.month]} ${r.year}`;
-  let h=`<div class="panel"><h2>📋 ${title} Nöbet Listesi</h2>`;
-  // ---- ALTERNATİF LİSTELER: multi-start'ın ürettiği farklı (boşluk/dağılım) seçenekler ----
-  if(ALTS && ALTS.length>1){
-    h+=`<div class="noprint" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 10px;padding:8px;border:1px dashed var(--accent);border-radius:8px">
-      <span style="font-size:13px;font-weight:600">🔀 Alternatif listeler:</span>`+
-      ALTS.map((a,i)=>{ const w=(a.warnings||[]).filter(x=>x.charAt(0)!=='💡').length; const act=i===ALT_I;
-        return `<button class="sm" onclick="pickAlt(${i})" title="${w===0?'sorunsuz liste':w+' uyarı'}"
-          style="border:1px solid ${act?'var(--accent)':'var(--line)'};border-radius:7px;${act?'background:var(--accent);color:#fff':'background:transparent'}">
-          Alternatif ${i+1}${w===0?' ✓':' ('+w+')'}</button>`; }).join('')+
-      `<span class="muted" style="font-size:12px">— beğendiğinizi seçin (her biri farklı boşluk/dağılım). ✓ = sorunsuz.</span></div>`;
+  const out=document.getElementById('output'), p=curProfile();
+  const showAll=document.getElementById('showAll') && document.getElementById('showAll').checked;
+  const ai=document.getElementById('altInfo'); if(ai) ai.textContent=(ALTS.length>1?ALTS.length+' alternatif'+(LAST&&LAST.meta&&LAST.meta.tried?' ('+LAST.meta.tried+' deneme)':''):'');
+  let h=`<div class="panel"><h2>📋 ${MONTHS[r.month]} ${r.year} — ${p.name} Nöbet Listesi</h2>`;
+  if(showAll && ALTS.length>1){
+    // TÜM ALTERNATİFLER: her biri başlıklı kart, seçili olan vurgulu (yazdırınca yalnız seçili çıkar)
+    ALTS.forEach((a,i)=>{ const w=warnCount(a); const act=i===ALT_I;
+      h+=`<div class="altcard${act?'':' noprint'}" style="${act?'border-color:var(--accent)':''}">
+        <div class="ah" onclick="pickAlt(${i})">
+          <b>Alternatif ${i+1}${i===0?' ★':''}</b>
+          <span class="badge ${w===0?'ok':'bad'}">${w===0?'✓ sorunsuz':w+' uyarı'}</span>
+          ${act?'<span class="badge" style="background:var(--accent);color:#fff">● seçili (yazdırılır)</span>':'<button class="sm" onclick="event.stopPropagation();pickAlt('+i+')">Bunu seç</button>'}
+        </div>${gridHtml(a)}</div>`;
+    });
+  } else {
+    if(ALTS.length>1){
+      h+=`<div class="altbar noprint"><span style="font-size:13px;font-weight:600">🔀 Alternatifler:</span>`+
+        ALTS.map((a,i)=>{const w=warnCount(a);return `<button class="altbtn${i===ALT_I?' act':''}${i===0?' star':''}" onclick="pickAlt(${i})" title="${i===0?'önerilen':''}${w===0?' sorunsuz':' '+w+' uyarı'}">${i+1}${w===0?' ✓':' ('+w+')'}</button>`;}).join('')+
+        `<span class="muted" style="font-size:12px;margin-left:4px">★=önerilen · ✓=sorunsuz · "Tüm alternatifleri göster" ile hepsini görün</span></div>`;
+    }
+    h+=gridHtml(r);
   }
-  h+=`<div class="note noprint" style="margin:0 0 10px">✏️ <b>Taslak — elle düzenlenebilir:</b> herhangi bir hücreye tıklayıp vardiyayı değiştirin; saatler/uyarılar anında güncellenir. (Yeniden "Liste Oluştur" derseniz düzenlemeler sıfırlanır.)</div>
-    <div class="gridwrap"><table class="grid"><thead><tr><th class="name">Personel</th>`;
-  r.days.forEach(d=>{ h+=`<th class="${d.weekend||d.holiday?'wknd':''}">${d.day}<br><span class="muted">${d.dowName}</span></th>`; });
-  h+=`<th class="tot">Hedef</th><th class="tot">Top.</th><th class="tot">Fark</th><th class="tot">M</th><th class="tot">N24</th><th class="tot">N16</th><th class="tot">Nİ</th><th class="tot">Ü.İ</th><th class="tot">HSn</th></tr></thead><tbody>`;
-  r.totals.forEach((t,ti)=>{
-    const g=r.grid[t.name];
-    h+=`<tr><td class="name">${t.name}</td>`;
-    r.days.forEach(d=>{ const code=g[d.day]||''; h+=`<td class="cell ${code}" data-ti="${ti}" data-d="${d.day}" onclick="editCell(this)" title="Tıkla-değiştir">${CODE_LABEL[code]}</td>`; });
-    const fc=t.fark===0?'good':'bad';
-    h+=`<td class="tot">${t.target}</td><td class="tot">${t.hours}</td><td class="tot ${fc}">${t.fark>0?'+':''}${t.fark}</td>`;
-    h+=`<td class="tot">${t.mesai}</td><td class="tot">${t.n24}</td><td class="tot">${t.n16}</td><td class="tot">${t.ni}</td><td class="tot">${t.uci}</td><td class="tot">${t.weekendNobet}</td></tr>`;
-  });
-  // ---- GÜNLÜK ÖZET: o gün kaç kişi gündüzde / kaç nöbetçi (eksikse kırmızı) ----
-  function dayCounts(day){ let nob=0,gun=0; r.totals.forEach(t=>{const c=r.grid[t.name][day]; if(c==='N24'||c==='N16')nob++; if(!t.noNobet&&(c==='M'||c==='N24'))gun++;}); return {nob,gun}; }
-  h+=`<tr style="font-weight:700;border-top:2px solid var(--accent)"><td class="name">☀️ Gündüz (08-17)</td>`;
-  r.days.forEach(d=>{ const c=dayCounts(d.day); const need=d.workday?(d.isTueThu?3:2):2; h+=`<td class="tot ${c.gun<need?'bad':'good'}" title="en az ${need}">${c.gun}</td>`; });
-  h+=`<td class="tot" colspan="9"></td></tr>`;
-  h+=`<tr style="font-weight:700"><td class="name">🌙 Nöbetçi</td>`;
-  r.days.forEach(d=>{ const c=dayCounts(d.day); h+=`<td class="tot ${c.nob<2?'bad':'good'}" title="en az 2">${c.nob}</td>`; });
-  h+=`<td class="tot" colspan="9"></td></tr>`;
-  h+=`</tbody></table></div>`;
-  h+=`<div class="legend">
-    <span><i class="sw M"></i> M8-17 (8s)</span><span><i class="sw N24"></i> N08-08 (24s)</span>
-    <span><i class="sw N16"></i> N16-08 (16s)</span><span><i class="sw NI"></i> N.İ</span>
-    <span><i class="sw HT"></i> H.T</span><span><i class="sw RT"></i> R.T</span>
-    <span><i class="sw YI"></i> Yıllık izin</span><span><i class="sw UCI"></i> Ücretli izin</span>
-    <span><i class="sw OFF"></i> Haftalık izin</span></div>`;
-  if(r.warnings.length){
-    h+=`<div class="warns"><b>⚠️ ${r.warnings.length} uyarı / not</b><ul>`+r.warnings.map(w=>`<li>${w}</li>`).join('')+`</ul></div>`;
-  }else{
-    h+=`<div class="warns ok"><b>✓ Liste hazır.</b> Herkes tam hedefini tutturdu, her gün 2 nöbetçi var, fazla mesai yok.</div>`;
-  }
-  h+=`</div>`;
-  out.innerHTML=h;
+  h+=`</div>`; out.innerHTML=h;
 }
-// ---- ELLE DÜZENLEME: hücreye tıkla -> kodu değiştir -> totaller/uyarılar yeniden hesaplanır ----
-const EDIT_CODES=['M','N24','N16','NI','UCI','YI','HT','RT','OFF',''];
-function editCell(td){
-  if(!LAST || td.querySelector('select')) return;
-  const ti=+td.dataset.ti, d=+td.dataset.d, name=LAST.totals[ti].name, cur=LAST.grid[name][d]||'';
-  const sel=document.createElement('select');
-  sel.style.cssText='width:100%;font-size:11px;padding:1px;color-scheme:dark';
-  EDIT_CODES.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=CODE_LABEL[c]||'(boş)';if(c===cur)o.selected=true;sel.appendChild(o);});
-  td.textContent=''; td.appendChild(sel); sel.focus();
-  SYNC.editing=true;
-  let done=false;
-  sel.addEventListener('change',()=>{done=true; LAST.grid[name][d]=sel.value; recomputeTotals(LAST); ALTS=[LAST]; ALT_I=0; render(LAST); SYNC.editing=false; storeActiveMonth(); cloudSave();});
-  sel.addEventListener('blur',()=>{ if(!done){ SYNC.editing=false; render(LAST); } });
-}
-// Elle düzenleme sonrası: ÜRETİMLE AYNI doğrulayıcıyı (Scheduler.recompute -> analyze)
-// kullanır. TEK doğruluk kaynağı -> elle düzenleme ve otomatik liste analizi hep birebir aynı.
-function recomputeTotals(r){
-  const res=Scheduler.recompute(r);
-  r.totals=res.totals;
-  r.warnings=res.warnings;
-}
-function exportCSV(){
-  if(!LAST){alert('Önce liste oluşturun.');return;}
-  const r=LAST;
-  const head=['Personel'].concat(r.days.map(d=>d.day+' '+d.dowName)).concat(['Hedef','Toplam','Fark','M','N24','N16','Nİ','Ü.İ','HSnöb']);
-  const rows=[head];
-  r.totals.forEach(t=>{
-    const g=r.grid[t.name];
-    let row=[t.name].concat(r.days.map(d=>CODE_LABEL[g[d.day]||'']||''));
-    row=row.concat([t.target,t.hours,t.fark,t.mesai,t.n24,t.n16,t.ni,t.uci,t.weekendNobet]);
-    rows.push(row);
-  });
-  const csv='﻿'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
-  a.download=`anestezi_${MONTHS[r.month]}_${r.year}.csv`; a.click();
-}
-// Renkli-biçimli Excel: HTML tablo -> .xls (Excel renklerle açar). Hücre renkleri ekrandakiyle aynı.
-const XLS_BG={M:'#1d4ed8',N24:'#dc2626',N16:'#ea580c',NI:'#64748b',HT:'#cbd5e1',RT:'#7c3aed',YI:'#16a34a',UCI:'#0d9488',OFF:'#db2777','':'#ffffff'};
-const XLS_DARK={M:1,N24:1,N16:1,NI:1,RT:1,YI:1,UCI:1,OFF:1};   // beyaz yazı gereken koyu zeminler
-function exportXLS(){
-  if(!LAST){alert('Önce liste oluşturun.');return;}
-  const r=LAST;
-  const th='border:1px solid #999;padding:3px 5px;text-align:center;mso-number-format:"\\@"';
-  let h='<table style="border-collapse:collapse;font-family:Calibri,Arial;font-size:11px">';
-  h+=`<tr><td colspan="${r.days.length+10}" style="font-size:15px;font-weight:bold;padding:6px">${MONTHS[r.month]} ${r.year} — Nöbet / Vardiya Listesi</td></tr>`;
-  h+=`<tr><th style="${th};background:#334155;color:#fff">Personel</th>`;
-  r.days.forEach(d=>{ h+=`<th style="${th};background:${d.weekend||d.holiday?'#b45309':'#334155'};color:#fff">${d.day} ${d.dowName}</th>`; });
-  ['Hedef','Toplam','Fark','M','N24','N16','Nİ','Ü.İ','HSn'].forEach(x=>h+=`<th style="${th};background:#0b1220;color:#fff">${x}</th>`);
-  h+='</tr>';
-  r.totals.forEach(t=>{ const g=r.grid[t.name];
-    h+=`<tr><td style="${th};text-align:left;font-weight:bold">${t.name}</td>`;
-    r.days.forEach(d=>{ const c=g[d.day]||''; h+=`<td style="${th};background:${XLS_BG[c]};color:${XLS_DARK[c]?'#fff':'#000'};font-weight:bold">${CODE_LABEL[c]}</td>`; });
-    const fc=t.fark===0?'#15803d':'#b91c1c';
-    h+=`<td style="${th}">${t.target}</td><td style="${th}">${t.hours}</td><td style="${th};color:${fc};font-weight:bold">${t.fark}</td>`;
-    h+=`<td style="${th}">${t.mesai}</td><td style="${th}">${t.n24}</td><td style="${th}">${t.n16}</td><td style="${th}">${t.ni}</td><td style="${th}">${t.uci}</td><td style="${th}">${t.weekendNobet}</td></tr>`;
-  });
-  // günlük özet satırları
-  function dc(day){let nob=0,gun=0;r.totals.forEach(t=>{const c=r.grid[t.name][day];if(c==='N24'||c==='N16')nob++;if(!t.noNobet&&(c==='M'||c==='N24'))gun++;});return {nob,gun};}
-  h+=`<tr><td style="${th};text-align:left;font-weight:bold;background:#fef9c3">Gündüz (08-17)</td>`;
-  r.days.forEach(d=>{const c=dc(d.day);const need=d.workday?(d.isTueThu?3:2):2;h+=`<td style="${th};background:${c.gun<need?'#fecaca':'#dcfce7'};font-weight:bold">${c.gun}</td>`;});
-  h+=`<td colspan="9" style="${th}"></td></tr>`;
-  h+=`<tr><td style="${th};text-align:left;font-weight:bold;background:#fef9c3">Nöbetçi</td>`;
-  r.days.forEach(d=>{const c=dc(d.day);h+=`<td style="${th};background:${c.nob<2?'#fecaca':'#dcfce7'};font-weight:bold">${c.nob}</td>`;});
-  h+=`<td colspan="9" style="${th}"></td></tr>`;
-  h+='</table>';
-  const html='<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8">'
-    +'<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'
-    +'<x:Name>'+MONTHS[r.month]+' '+r.year+'</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>'
-    +'</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>'+h+'</body></html>';
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob(['﻿'+html],{type:'application/vnd.ms-excel'}));
-  a.download=`anestezi_${MONTHS[r.month]}_${r.year}.xls`; a.click();
+const EDIT_CODES=['M','NL','NS','NI','UCI','YI','HT','RT','OFF',''];
+function editCell(td){ if(!LAST||td.querySelector('select'))return;
+  const ti=+td.dataset.ti,d=+td.dataset.d,name=LAST.totals[ti].name,cur=LAST.grid[name][d]||'';
+  const sel=document.createElement('select'); sel.style.cssText='width:100%;font-size:11px';
+  EDIT_CODES.concat(customShiftsOf().map(s=>s.code)).forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=codeLabel(c)||'(boş)';if(c===cur)o.selected=true;sel.appendChild(o);});
+  td.textContent='';td.appendChild(sel);sel.focus();
+  sel.addEventListener('change',()=>{LAST.grid[name][d]=sel.value;const re=AsistanScheduler.recompute(LAST);LAST.totals=re.totals;LAST.warnings=re.warnings;ALTS=[LAST];ALT_I=0;if(document.getElementById('showAll'))document.getElementById('showAll').checked=false;render(LAST);});
+  sel.addEventListener('blur',()=>render(LAST));
 }
 
-// En basit paylaşım (kurulumsuz): mevcut listeyi #cfg= linki olarak kopyala.
-function shareLink(){
+// ===== DIŞA AKTARMA =====
+function exportCSV(){ if(!LAST){alert('Önce liste oluşturun.');return;} const r=LAST,p=curProfile();
+  const head=['Personel'].concat(r.days.map(d=>d.day+' '+d.dowName)).concat(['Hedef','Toplam','Fark',p.mesaiLabel,p.oncallLongLabel,p.oncallShortLabel,'Nİ','Üİ','HSn']);
+  const rows=[head]; r.totals.forEach(t=>{ const g=r.grid[t.name]; const row=[t.name].concat(r.days.map(d=>codeLabel(g[d.day]||'')));
+    row.push(t.target,t.hours,(t.fark>0?'+':'')+t.fark,t.mesai,t.nl,t.ns,t.ni,t.uci,t.weekendNobet); rows.push(row); });
+  const csv=rows.map(rw=>rw.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  dl(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),fname('csv')); }
+function exportXLS(){ if(!LAST){alert('Önce liste oluşturun.');return;} const r=LAST,p=curProfile();
+  const col={M:'#1d4ed8',NL:'#dc2626',NS:'#ea580c',NI:'#64748b',HT:'#475569',RT:'#7c3aed',YI:'#16a34a',UCI:'#0d9488',OFF:'#db2777'};
+  customShiftsOf().forEach(s=>{col[s.code]=s.color;});
+  let h='<table border="1" style="border-collapse:collapse;font-family:Arial;font-size:10px"><tr><th>Personel</th>';
+  r.days.forEach(d=>{h+=`<th style="background:${d.weekend||d.holiday?'#fde68a':'#e5e7eb'}">${d.day} ${d.dowName}</th>`;});
+  h+='<th>Hedef</th><th>Toplam</th><th>Fark</th><th>'+p.mesaiLabel+'</th><th>'+p.oncallLongLabel+'</th><th>'+p.oncallShortLabel+'</th><th>Nİ</th><th>Üİ</th><th>HSn</th></tr>';
+  r.totals.forEach(t=>{ const g=r.grid[t.name]; h+=`<tr><td style="font-weight:bold">${t.name}</td>`;
+    r.days.forEach(d=>{const c=g[d.day]||'';h+=`<td style="${col[c]?('background:'+col[c]+';color:#fff;font-weight:bold'):''};text-align:center">${codeLabel(c)}</td>`;});
+    h+=`<td align=center>${t.target}</td><td align=center>${t.hours}</td><td align=center>${(t.fark>0?'+':'')+t.fark}</td><td align=center>${t.mesai}</td><td align=center>${t.nl}</td><td align=center>${t.ns}</td><td align=center>${t.ni}</td><td align=center>${t.uci}</td><td align=center>${t.weekendNobet}</td></tr>`; });
+  h+='</table>'; dl(new Blob(['﻿<html><head><meta charset="utf-8"></head><body>'+h+'</body></html>'],{type:'application/vnd.ms-excel'}),fname('xls')); }
+function fname(ext){ const p=curProfile(); return (p.name||'liste').replace(/\s+/g,'_')+'_'+MONTHS[parseInt(document.getElementById('month').value,10)]+'_'+document.getElementById('year').value+'.'+ext; }
+function dl(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},100); }
+
+// ===== SUNUCU / ÇOK-KULLANICILI (birim-bazlı yönetici + izolasyon) =====
+const SRV={on:false,role:null,unitId:null,me:null}; let UNITS=[], ACT=null;
+function asHeaders(extra){ return Object.assign({'X-User':localStorage.getItem('asistan_user')||'','X-Auth':localStorage.getItem('asistan_auth')||''}, extra||{}); }
+function applyCfgServer(c){ if(c){ if(c.year!=null)document.getElementById('year').value=c.year; if(c.month!=null)document.getElementById('month').value=c.month; document.getElementById('holidays').value=(c.holidays||[]).join(','); applyPersonnel(c.personnel||[]); } else resetNames(); }
+async function asInit(){
   try{
-    const url=location.origin+location.pathname+'#cfg='+encodeURIComponent(JSON.stringify(readCfg()));
-    if(navigator.clipboard&&navigator.clipboard.writeText){
-      navigator.clipboard.writeText(url).then(()=>flash('🔗 Paylaşım linki kopyalandı — arkadaşınıza gönderin'))
-        .catch(()=>prompt('Bu linki kopyalayıp gönderin:',url));
-    } else prompt('Bu linki kopyalayıp gönderin:',url);
-  }catch(e){ alert('Önce liste oluşturun.'); }
+    const r=await fetch('/api/asistan/units',{cache:'no-store',headers:asHeaders()});
+    if(r.status===401){ SRV.on=true; document.getElementById('loginOvl').style.display='flex'; const i=document.getElementById('logUser'); if(i)i.focus(); return; }
+    if(r.ok){ const j=await r.json(); SRV.on=true; SRV.role=j.role; SRV.unitId=j.unitId; SRV.me=j.me; UNITS=j.units||[];
+      document.getElementById('loginOvl').style.display='none';
+      document.getElementById('userBar').style.display='flex';
+      document.getElementById('whoTxt').textContent='👤 '+SRV.me+(SRV.role==='admin'?' · admin':' · yönetici');
+      document.getElementById('localProfBtns').style.display='none';
+      document.getElementById('srvAdminBtns').style.display=(SRV.role==='admin')?'':'none';
+      if(UNITS.length){ await loadUnit((SRV.role!=='admin'&&SRV.unitId)?SRV.unitId:UNITS[0].id); }
+      else { ACT=null; refreshProfSel(); document.getElementById('output').innerHTML='<div class="panel"><div class="note">Henüz birim yok. '+(SRV.role==='admin'?'Üstten <b>+ Birim</b> ile ekleyin ve yönetici atayın.':'Yönetici sizi bir birime atamamış.')+'</div></div>'; }
+      return; }
+  }catch(e){}
+  SRV.on=false; localBoot();   // sunucu yok (dosyadan açıldı) -> yerel mod
 }
-// Bağlantıdan içe aktarma: URL'de #cfg=<URI-kodlu JSON> varsa yapılandırmayı yükler
-// (tek tıkla kurulum; isimler repoda değil yalnızca linkte taşınır). Sonra hash temizlenir.
-function importFromHash(){
-  const m=(location.hash||'').match(/[#&]cfg=([^&]+)/);
-  if(!m) return false;
-  try{
-    const json=decodeURIComponent(m[1]); JSON.parse(json);   // doğrula
-    localStorage.setItem('anestezi_cfg',json);
-    history.replaceState(null,'',location.pathname+location.search);
-    return true;
-  }catch(e){ return false; }
-}
-// URL'de #room=<id> varsa ortak odaya katıl (linke tıklayan arkadaş)
-function importRoomFromHash(){ const m=(location.hash||'').match(/[#&]room=([^&]+)/);
-  if(m){ localStorage.setItem('anestezi_room', m[1]); return true; } return false; }
-importRoomFromHash();
-importFromHash();
-initApp();
+function localBoot(){ loadProfiles(); refreshProfSel(); fillRuleForm(); if(!loadCfg())resetNames(); generate(); }
+async function doLogin(){ const u=(document.getElementById('logUser').value||'').trim(), p=document.getElementById('logPw').value||'';
+  const e=document.getElementById('logErr'); e.textContent='';
+  try{ const r=await fetch('/api/asistan/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const j=await r.json().catch(()=>({})); if(r.ok&&j.ok){ localStorage.setItem('asistan_user',u); localStorage.setItem('asistan_auth',p); asInit(); }
+    else e.textContent=(j&&j.error)||'Hatalı giriş'; }catch(err){ e.textContent='Sunucuya ulaşılamadı'; } }
+function logout(){ localStorage.removeItem('asistan_user'); localStorage.removeItem('asistan_auth'); location.reload(); }
+async function reloadUnits(){ try{ const r=await fetch('/api/asistan/units',{cache:'no-store',headers:asHeaders()}); const j=await r.json(); UNITS=j.units||[]; refreshProfSel(); }catch(e){} }
+async function loadUnit(id){ try{ const r=await fetch('/api/asistan/unit?id='+encodeURIComponent(id),{cache:'no-store',headers:asHeaders()});
+    if(r.status===401){location.reload();return;} if(!r.ok){flash('Birim yüklenemedi');return;}
+    const un=await r.json(); ACT={id:un.id,name:un.name,profile:un.profile||AsistanScheduler.defaultProfile(),cfg:un.cfg||null};
+    fillRuleForm(); applyCfgServer(ACT.cfg); refreshProfSel(); generate();
+  }catch(e){ flash('Birim yüklenemedi'); } }
+// Admin işlemleri
+async function srvAddUnit(){ const name=(prompt('Yeni birim adı (örn. Anestezi, Yenidoğan):','')||'').trim(); if(!name)return;
+  const prof=AsistanScheduler.defaultProfile(); prof.name=name;
+  const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'addUnit',name,profile:prof,cfg:null})});
+  const j=await r.json(); if(j.ok){ await reloadUnits(); await loadUnit(j.id); flash('Birim eklendi ✓'); } else alert(j.error||'Hata'); }
+function srvAssignManager(){ if(!ACT){alert('Önce bir birim seçin/ekleyin');return;}
+  document.getElementById('mgrUnitName').textContent='Birim: '+ACT.name; document.getElementById('mgrUser').value=''; document.getElementById('mgrPw').value=''; document.getElementById('mgrErr').textContent='';
+  const un=UNITS.find(u=>u.id===ACT.id); document.getElementById('mgrCur').textContent=(un&&un.managers&&un.managers.length)?('Mevcut yönetici: '+un.managers.join(', ')+' (yeni atama eskisini değiştirir)'):'Henüz yönetici atanmadı.';
+  document.getElementById('mgrOvl').style.display='flex'; }
+async function saveManager(){ const u=(document.getElementById('mgrUser').value||'').trim(), p=(document.getElementById('mgrPw').value||'').trim();
+  const e=document.getElementById('mgrErr'); if(!u||!p){e.textContent='Kullanıcı adı ve şifre gerekli';return;}
+  const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'setManager',id:ACT.id,username:u,password:p})});
+  const j=await r.json(); if(j.ok){ document.getElementById('mgrOvl').style.display='none'; await reloadUnits(); flash('Yönetici atandı ✓'); } else e.textContent=j.error||'Hata'; }
+async function srvDelUnit(){ if(!ACT)return; if(!confirm('“'+ACT.name+'” birimi ve yöneticisi kalıcı silinsin mi?'))return;
+  await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'delUnit',id:ACT.id})});
+  await reloadUnits(); if(UNITS.length)await loadUnit(UNITS[0].id); else { ACT=null; document.getElementById('output').innerHTML=''; refreshProfSel(); } flash('Birim silindi'); }
+async function srvRenameUnit(){ if(!ACT)return; const n=(prompt('Birim adı:',ACT.name)||'').trim(); if(!n)return;
+  await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'renameUnit',id:ACT.id,name:n})}); ACT.name=n; await reloadUnits(); }
+
+// ===== BAŞLAT =====
+asInit();
 </script>
 </body>
 </html>
