@@ -394,6 +394,134 @@
       }
     });
 
+    // ---- 2.99) YEREL ARAMA / TAVLAMA: küçük hamlelerle hata puanını düşür ----
+    // Greedy + geçişler yerel optimumda kalabiliyor (özellikle KÜME). Burada binlerce küçük
+    // hamle deneyip ceza puanını (fazla mesai + eksik saat + küme + gündüz) düşüreni kabul
+    // ederiz; yerel optimumdan kaçmak için kötü hamleyi de küçük olasılıkla kabul (tavlama).
+    // Hamleler KAPSAMAYI (gün başına nöbetçi) korur -> her gün 2 nöbetçi garantisi bozulmaz.
+    var LS_ITER = (config.__lsIter != null) ? config.__lsIter : 2500;
+    if (LS_ITER > 0) {
+      function penalty() {
+        var s = 0;
+        for (var i = 0; i < people.length; i++) {
+          var Pp = people[i], h = Pp.hours;
+          if (h > Pp.target) s += (h - Pp.target) * 7;                      // fazla mesai
+          else if (h < Pp.target && !Pp.noNobet) s += (Pp.target - h) * 7;  // eksik saat
+          var run = 0;
+          for (var d = 1; d <= nDays; d++) { var c = Pp.assign[d];
+            if (c === 'M' || isOncall(c)) run = 0;
+            else if (days[d - 1].workday && (c === 'NI' || c === 'UCI') && !Pp.lockedOff.has(d)) { run++; if (run > P.maxConsecutiveOff) s += 75; else if (run >= 2) s += run * run * 0.5; } }
+        }
+        for (var k = 0; k < workdayNums.length; k++) { var dn = workdayNums[k], need = dayNeed(days[dn - 1]), g = daytimeCount(dn); if (g < need) s += (need - g) * 55; }
+        return s;
+      }
+      function mFill() {           // eksik-saatli kişiye boş iş gününde M ekle (hedefe yaklaştır + küme kır)
+        var Pp = people[(rnd() * people.length) | 0];
+        if (Pp.hours + P.mesaiHours > Pp.target) return null;
+        var Us = []; for (var d = 1; d <= nDays; d++) if (days[d - 1].workday && Pp.assign[d] === 'UCI' && !Pp.lockedOff.has(d) && !Pp.offReq.has(d)) Us.push(d);
+        if (!Us.length) return null;
+        var dd = Us[(rnd() * Us.length) | 0]; Pp.assign[dd] = 'M'; Pp.hours += P.mesaiHours;
+        return function () { Pp.assign[dd] = 'UCI'; Pp.hours -= P.mesaiHours; };
+      }
+      function mDrain() {          // fazla-mesaili kişiden bir M çıkar (UCI)
+        var Pp = people[(rnd() * people.length) | 0];
+        if (Pp.hours <= Pp.target) return null;
+        var Ms = []; for (var d = 1; d <= nDays; d++) if (Pp.assign[d] === 'M' && !Pp.mustMesai.has(d)) Ms.push(d);
+        if (!Ms.length) return null;
+        var dd = Ms[(rnd() * Ms.length) | 0]; Pp.assign[dd] = 'UCI'; Pp.hours -= P.mesaiHours;
+        return function () { Pp.assign[dd] = 'M'; Pp.hours += P.mesaiHours; };
+      }
+      function mBreakCluster() {   // KÜMEYİ doğrudan hedefle: serinin ortasındaki UCI'yi M yap, dengelemek için dış M'yi UCI yap
+        var Pp = people[(rnd() * people.length) | 0], run = [], best = null;
+        for (var d = 1; d <= nDays; d++) { var c = Pp.assign[d];
+          if (c === 'M' || isOncall(c)) { if (run.length > P.maxConsecutiveOff && !best) best = run.slice(); run = []; }
+          else if (days[d - 1].workday && (c === 'NI' || c === 'UCI') && !Pp.lockedOff.has(d)) run.push(d); }
+        if (run.length > P.maxConsecutiveOff && !best) best = run.slice();
+        if (!best) return null;
+        var uci = best.filter(function (d) { return Pp.assign[d] === 'UCI' && !Pp.offReq.has(d); });
+        if (!uci.length) return null;
+        var d2 = uci[(rnd() * uci.length) | 0];
+        // bütçe açıksa (eksik saat) sadece UCI->M; değilse dış bir M'yi UCI yapıp dengele (saat sabit)
+        if (Pp.hours + P.mesaiHours <= Pp.target) { Pp.assign[d2] = 'M'; Pp.hours += P.mesaiHours; return function () { Pp.assign[d2] = 'UCI'; Pp.hours -= P.mesaiHours; }; }
+        var Ms = []; for (var d3 = 1; d3 <= nDays; d3++) if (Pp.assign[d3] === 'M' && !Pp.mustMesai.has(d3) && (d3 < best[0] || d3 > best[best.length - 1])) Ms.push(d3);
+        if (!Ms.length) return null;
+        var d1 = Ms[(rnd() * Ms.length) | 0]; Pp.assign[d1] = 'UCI'; Pp.assign[d2] = 'M';
+        return function () { Pp.assign[d1] = 'M'; Pp.assign[d2] = 'UCI'; };
+      }
+      function mDowngradeBreak() { // donör M yoksa: bir uzun nöbeti kısaya indir (saat açılır), açılanı kümeye M koy (anestezi tarzı)
+        if (!P.useShortOncall) return null;
+        var freed = P.oncallLongHours - P.oncallShortHours; if (freed < P.mesaiHours) return null;
+        var Pp = people[(rnd() * people.length) | 0], run = [], best = null;
+        for (var d = 1; d <= nDays; d++) { var c = Pp.assign[d];
+          if (c === 'M' || isOncall(c)) { if (run.length > P.maxConsecutiveOff && !best) best = run.slice(); run = []; }
+          else if (days[d - 1].workday && (c === 'NI' || c === 'UCI') && !Pp.lockedOff.has(d)) run.push(d); }
+        if (run.length > P.maxConsecutiveOff && !best) best = run.slice();
+        if (!best) return null;
+        var uci = best.filter(function (d) { return Pp.assign[d] === 'UCI' && !Pp.offReq.has(d); }); if (!uci.length) return null;
+        var NLs = []; for (var d4 = 1; d4 <= nDays; d4++) if (Pp.assign[d4] === 'NL' && days[d4 - 1].workday && !Pp.onlyN16.has(d4)) NLs.push(d4);
+        if (!NLs.length) return null;
+        var dOn = NLs[(rnd() * NLs.length) | 0], dM = uci[(rnd() * uci.length) | 0];
+        Pp.assign[dOn] = 'NS'; Pp.hours -= freed; Pp.assign[dM] = 'M'; Pp.hours += P.mesaiHours;
+        return function () { Pp.assign[dOn] = 'NL'; Pp.hours += freed; Pp.assign[dM] = 'UCI'; Pp.hours -= P.mesaiHours; };
+      }
+      function mRelocate() {       // bir kişinin M'sini başka boş iş gününe taşı (saat sabit) -> küme/gündüz
+        var Pp = people[(rnd() * people.length) | 0], Ms = [], Us = [];
+        for (var d = 1; d <= nDays; d++) { var c = Pp.assign[d];
+          if (c === 'M' && !Pp.mustMesai.has(d)) Ms.push(d);
+          else if (days[d - 1].workday && c === 'UCI' && !Pp.lockedOff.has(d) && !Pp.offReq.has(d)) Us.push(d); }
+        if (!Ms.length || !Us.length) return null;
+        var d1 = Ms[(rnd() * Ms.length) | 0], d2 = Us[(rnd() * Us.length) | 0];
+        Pp.assign[d1] = 'UCI'; Pp.assign[d2] = 'M';
+        return function () { Pp.assign[d1] = 'M'; Pp.assign[d2] = 'UCI'; };
+      }
+      function mType() {           // NL<->NS (saat ±) -> fazla mesai/gündüz
+        if (!P.useShortOncall) return null;
+        var Pp = people[(rnd() * people.length) | 0]; if (Pp.noNobet) return null;
+        var Os = []; for (var d = 1; d <= nDays; d++) if (isOncall(Pp.assign[d]) && days[d - 1].workday) Os.push(d);
+        if (!Os.length) return null;
+        var dd = Os[(rnd() * Os.length) | 0], cur = Pp.assign[dd], to = cur === 'NL' ? 'NS' : 'NL';
+        if (to === 'NL' && Pp.onlyN16.has(dd)) return null;
+        var dh = HOURS[to] - HOURS[cur]; Pp.assign[dd] = to; Pp.hours += dh;
+        return function () { Pp.assign[dd] = cur; Pp.hours -= dh; };
+      }
+      function mHandoff() {        // A'nın nöbetini B'ye devret (kapsama sabit) -> nöbet yükünü dağıt
+        var d = 1 + ((rnd() * nDays) | 0), As = [];
+        for (var i = 0; i < people.length; i++) if (isOncall(people[i].assign[d])) As.push(people[i]);
+        if (!As.length) return null;
+        var A = As[(rnd() * As.length) | 0], kind = A.assign[d], Bs = [];
+        for (var j = 0; j < people.length; j++) { var B = people[j];
+          if (B === A || B.noNobet || B.onlyDay.has(d)) continue;
+          if (kind === 'NL' && B.onlyN16.has(d)) continue;
+          if (B.lockedOff.has(d) || B.offReq.has(d)) continue;
+          var cell = B.assign[d]; if (!(cell === 'M' || cell === 'UCI' || cell === '')) continue;
+          if (d > 1 && isOncall(B.assign[d - 1])) continue;
+          if (d < nDays) { var nx = B.assign[d + 1]; if (!(nx === '' || nx === 'HT' || nx === 'RT' || nx === 'UCI' || nx === 'NI')) continue; }
+          Bs.push(B); }
+        if (!Bs.length) return null;
+        var Bsel = Bs[(rnd() * Bs.length) | 0];
+        var aNext = d < nDays ? A.assign[d + 1] : null, bCell = Bsel.assign[d], bNext = d < nDays ? Bsel.assign[d + 1] : null;
+        A.hours -= HOURS[kind]; A.assign[d] = 'UCI'; if (d < nDays && A.assign[d + 1] === 'NI') A.assign[d + 1] = 'UCI';
+        Bsel.hours += HOURS[kind] - HOURS[bCell]; Bsel.assign[d] = kind;
+        if (d < nDays) { var nb = Bsel.assign[d + 1]; if (nb === '' || nb === 'HT' || nb === 'RT' || nb === 'UCI') Bsel.assign[d + 1] = 'NI'; }
+        return function () { A.hours += HOURS[kind]; A.assign[d] = kind; if (d < nDays) A.assign[d + 1] = aNext;
+          Bsel.hours -= HOURS[kind] - HOURS[bCell]; Bsel.assign[d] = bCell; if (d < nDays) Bsel.assign[d + 1] = bNext; };
+      }
+      var cur = penalty();
+      for (var it = 0; it < LS_ITER && cur > 0; it++) {
+        var t = rnd(), undo;
+        if (t < 0.24) undo = mBreakCluster(); else if (t < 0.40) undo = mDowngradeBreak(); else if (t < 0.52) undo = mRelocate();
+        else if (t < 0.62) undo = mFill(); else if (t < 0.72) undo = mDrain(); else if (t < 0.88) undo = mHandoff(); else undo = mType();
+        if (!undo) continue;
+        var np = penalty();
+        if (np < cur) cur = np;
+        else if (np > cur) {
+          var T = 8 * (1 - it / LS_ITER);   // azalan sıcaklık
+          if (!(T > 0.01 && rnd() < Math.exp((cur - np) / T))) { undo(); continue; }
+          cur = np;
+        }
+      }
+    }
+
     var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });
     var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, noNobet: Pp.noNobet, lockedOff: Array.from(Pp.lockedOff) }; });
     var av = analyze(gridA, plist, days, nDays, P);
@@ -428,18 +556,24 @@
   }
   function buildSchedule(config) {
     if (config && config.__variant !== undefined) return buildOne(config);
-    var attempts = (config && config.__attempts) || 140;          // daha çok varyant -> daha çok alternatif
-    var maxAlts = (config && config.__maxAlts) || 12;             // gösterilecek belirgin farklı liste sayısı
-    if (attempts <= 1) { var c0 = {}; for (var k0 in config) c0[k0] = config[k0]; c0.__variant = 0; return buildOne(c0); }
-    var P = clampProfile(config.profile), cands = [];
-    for (var v = 0; v < attempts; v++) {
-      var c = {}; for (var k in config) c[k] = config[k]; c.__variant = v;
-      var r = buildOne(c); r.__score = scoreResult(r, P); r.__sig = sigOf(r); cands.push(r);
-    }
+    var attempts = (config && config.__attempts) || 80;            // Faz 1 çeşitlilik denemesi
+    var maxAlts = (config && config.__maxAlts) || 12;
+    var lsIter = (config && config.__lsIter != null) ? config.__lsIter : 4000;  // Faz 2 yerel arama bütçesi
+    function mk(v, ls) { var c = {}; for (var k in config) c[k] = config[k]; c.__variant = v; c.__lsIter = ls; return c; }
+    if (attempts <= 1) return buildOne(mk(0, 0));                  // senkron yolları: hızlı, LS yok
+    var P = clampProfile(config.profile);
+    // FAZ 1 — ÇEŞİTLİLİK: LS kapalı (hızlı), farklı rastgele tie-break'lerle aday üret.
+    var cands = [];
+    for (var v = 0; v < attempts; v++) { var r = buildOne(mk(v, 0)); r.__variant = v; r.__score = scoreResult(r, P); r.__sig = sigOf(r); cands.push(r); }
     cands.sort(function (a, b) { return a.__score - b.__score; });
-    var seen = {}, alts = [];
-    for (var i = 0; i < cands.length && alts.length < maxAlts; i++) if (!seen[cands[i].__sig]) { seen[cands[i].__sig] = 1; alts.push(cands[i]); }
-    var best = alts[0]; best.alternatives = alts; best.meta = best.meta || {}; best.meta.tried = attempts; best.meta.distinct = alts.length;
+    var seen = {}, picks = [];
+    for (var i = 0; i < cands.length && picks.length < maxAlts; i++) if (!seen[cands[i].__sig]) { seen[cands[i].__sig] = 1; picks.push(cands[i]); }
+    // FAZ 2 — CİLA: seçilen adayları YEREL ARAMA/TAVLAMA ile iyileştir (aynı variant -> aynı başlangıç + LS).
+    var alts = picks.map(function (pk) { var r = buildOne(mk(pk.__variant, lsIter)); r.__variant = pk.__variant; r.__score = scoreResult(r, P); r.__sig = sigOf(r); return r; });
+    alts.sort(function (a, b) { return a.__score - b.__score; });
+    var seen2 = {}, fin = [];
+    for (var j = 0; j < alts.length; j++) if (!seen2[alts[j].__sig]) { seen2[alts[j].__sig] = 1; fin.push(alts[j]); }
+    var best = fin[0]; best.alternatives = fin; best.meta = best.meta || {}; best.meta.tried = attempts; best.meta.distinct = fin.length;
     return best;
   }
   function recompute(result) {

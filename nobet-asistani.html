@@ -117,7 +117,7 @@
 
   <!-- ===== BİRİM / KURAL PROFİLİ ===== -->
   <div class="panel noprint" id="rulePanel">
-    <h2>⚙️ Birim / Kural Profili
+    <h2>⚙️ Birim Seç / Kural Ayarları
       <select id="profSel" style="margin-left:6px"></select>
       <button class="sm" onclick="newProfile()">+ Yeni</button>
       <button class="sm" onclick="renameProfile()">✎ Ad</button>
@@ -236,10 +236,10 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v5</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v6</b> · anestezi sisteminden bağımsız</div>
 </div>
 
-<script src="asistan-scheduler.js?v=3"></script>
+<script src="asistan-scheduler.js?v=4"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -291,10 +291,10 @@ function addCustomShift(){ const p=curProfile(); p.customShifts=p.customShifts||
 function rmCustomShift(i){ const p=curProfile(); (p.customShifts||[]).splice(i,1); saveProfiles(); renderCustomShifts(); }
 document.getElementById('rulePanel').addEventListener('input',e=>{ if(e.target.closest('#ruleBody')) readRuleForm(); });
 document.getElementById('profSel').addEventListener('change',e=>{ PROF_I=parseInt(e.target.value,10); saveProfiles(); fillRuleForm(); });
-function newProfile(){ const n=(prompt('Yeni profil (birim) adı:','Yenidoğan Yakın İzlem')||'').trim(); if(!n)return; const p=AsistanScheduler.defaultProfile(); p.name=n; PROFILES.push(p); PROF_I=PROFILES.length-1; saveProfiles(); refreshProfSel(); fillRuleForm(); }
+function newProfile(){ const n=(prompt('Yeni birim adı (örn. Anestezi, Yenidoğan Yakın İzlem):','Yenidoğan Yakın İzlem')||'').trim(); if(!n)return; const p=AsistanScheduler.defaultProfile(); p.name=n; PROFILES.push(p); PROF_I=PROFILES.length-1; saveProfiles(); refreshProfSel(); fillRuleForm(); }
 function dupProfile(){ const p=JSON.parse(JSON.stringify(curProfile())); p.name=(p.name||'Profil')+' (kopya)'; PROFILES.push(p); PROF_I=PROFILES.length-1; saveProfiles(); refreshProfSel(); fillRuleForm(); }
 function delProfile(){ if(PROFILES.length<=1){alert('En az bir profil kalmalı.');return;} if(!confirm((curProfile().name||'Profil')+' silinsin mi?'))return; PROFILES.splice(PROF_I,1); PROF_I=0; saveProfiles(); refreshProfSel(); fillRuleForm(); }
-function renameProfile(){ const n=(prompt('Profil (birim) adı:',curProfile().name)||'').trim(); if(n){curProfile().name=n; saveProfiles(); refreshProfSel(); if(LAST)render(LAST);} }
+function renameProfile(){ const n=(prompt('Birim adı:',curProfile().name)||'').trim(); if(n){curProfile().name=n; saveProfiles(); refreshProfSel(); if(LAST)render(LAST);} }
 function toggleRules(){ document.getElementById('ruleBody').style.display=document.getElementById('ruleBody').style.display==='none'?'':'none'; }
 
 // ===== TARİH / İZİN ARALIĞI (anestezi gibi) =====
