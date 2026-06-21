@@ -111,11 +111,52 @@
     return { totals: totals, warnings: warnings };
   }
 
+  // ---- ÇOK-BAŞLANGIÇLI (multi-start) ÜRETİM ----
+  // Greedy tek liste üretir ve yerel optimumda takılıp gereksiz fazla mesai bırakabilir
+  // (oysa overtime'sız geçerli bir liste vardır — kullanıcı elle bulabiliyor). Burada FARKLI
+  // rastgele tie-break'lerle ONLARCA aday liste üretip EN İYİSİNİ (önce fazla-mesai/kümeyi en
+  // aza indiren) seçeriz. variant 0 = eski deterministik davranış (asla daha kötü olamaz).
+  function scoreResult(r) {
+    var s = 0;
+    (r.warnings || []).forEach(function (w) {
+      if (w.charAt(0) === '💡') return;                       // bilgi notu — puanlanmaz
+      if (/sadece \d+ nöbetçi/.test(w)) s += 100000;          // kapsama eksiği (olmamalı)
+      else if (/FAZLA MESAİ/.test(w)) s += 1000;              // fazla mesai — en çok kaçınılan
+      else if (/EKSİK|çalışmıyor|ZORUNLU/.test(w)) s += 600;
+      else if (/üst üste izinli|gündüzde \d+ kişi/.test(w)) s += 100;
+      else s += 10;
+    });
+    return s;
+  }
   function buildSchedule(config) {
+    if (config && config.__variant !== undefined) return buildOne(config);
+    var attempts = (config && config.__attempts) || 80;   // skor 0 bulununca erken çıkar (kolay vakalar anında)
+    var best = null, bestScore = Infinity;
+    for (var v = 0; v < attempts; v++) {
+      var c = {}; for (var k in config) c[k] = config[k]; c.__variant = v;
+      var r = buildOne(c);
+      var sc = scoreResult(r);
+      if (sc < bestScore) { bestScore = sc; best = r; }
+      if (bestScore === 0) break;                             // kusursuz liste bulundu -> dur
+    }
+    if (best) best.meta = best.meta || {}, best.meta.variants = v + (bestScore === 0 ? 1 : 0);
+    return best;
+  }
+  function buildOne(config) {
     var year = config.year, month = config.month;
     var nDays = daysInMonth(year, month);
     var holidays = new Set(config.holidays || []);
     var warnings = [];
+    // Seed'li RNG (variant>0'da tie-break'leri rastgeleler; variant 0 deterministik).
+    var variant = config.__variant || 0;
+    var _seed = (variant * 2654435761 + 1013904223) >>> 0;
+    function rnd() { _seed = (_seed * 1664525 + 1013904223) >>> 0; return _seed / 4294967296; }
+    function jit() { return variant ? (rnd() - 0.5) : 0; }   // ±0.5 jitter (yalnız variant>0)
+    // Bazı varyantlar (3'te 1) N16'yı tercih eder: iş gününde nöbet N24 yerine N16 (16s) olur.
+    // Sıkı aylarda bu, FAZLA MESAİ yerine düşük-saatli çözüm verir; skor overtime'ı ağır
+    // cezalandırdığından N24+overtime yerine N16+temiz liste SEÇİLİR. N24-tercihli varyantlar
+    // küçük numaralı olduğundan, N24 ile temiz çözülebilen aylar yine N24 kalır (skor 0 erken çıkış).
+    var preferN16 = variant > 0 && (variant % 3 === 2);
 
     // ---- AYARLANABİLİR SEÇENEKLER (UI'dan; hepsi varsayılan AÇIK) ----
     var opts = config.options || {};
@@ -299,13 +340,18 @@
       var addH = HOURS[kind];
       var pool = people.filter(function (P) { return eligibleForNobet(P, dd, addH, strict); });
       if (!pool.length) return null;
+      if (variant) pool.forEach(function (P) { P._rk = rnd(); });   // bu seçim için rastgele anahtar
       pool.sort(function (a, b) {
         if (dd.weekend || dd.holiday) { if (a.weekendNobet !== b.weekendNobet) return a.weekendNobet - b.weekendNobet; }
         // İLERLEME HIZINA göre: hedefinin oransal olarak en GERİSİNDE olan önce gelsin.
         // Böylece herkes aya yayılı şekilde, hedefini ~AY SONUNA doğru BİRLİKTE doldurur;
         // kimse erken dolup ay sonunda boş (kümeli) kalmaz. (Hedefi küçük olan az nöbet alır.)
         var pa = a.hours / (a.target || 1), pb = b.hours / (b.target || 1);
-        if (Math.abs(pa - pb) > 0.0001) return pa - pb;
+        // variant>0: belirgin pace farkı yoksa (≤0.10) RASTGELE seç -> farklı dağılımlar dener.
+        // variant 0: aynen eski deterministik (sıkı 0.0001 eşik + lastNobet/idx).
+        var band = variant ? 0.10 : 0.0001;
+        if (Math.abs(pa - pb) > band) return pa - pb;
+        if (variant) return a._rk - b._rk;
         // nöbetleri aya YAY: nöbeti en eski olan (ya da hiç tutmamış) önce gelsin
         if (a.lastNobet !== b.lastNobet) return a.lastNobet - b.lastNobet;
         if (a.nobetDays.length !== b.nobetDays.length) return a.nobetDays.length - b.nobetDays.length;
@@ -325,6 +371,13 @@
         // Aday yoksa slot boş kalır; eksik kapsama NİHAİ doğrulamada (final grid) raporlanır.
       }
     });
+
+    // ---- 1.5) NÖBET KAPSAMA GARANTİSİ (MESAİ DOLDURMADAN ÖNCE) — overtime'ı önler ----
+    // KRİTİK SIRA: kapsama garantisini mesai-doldurmadan ÖNCE çalıştırırız. O an kimse
+    // mesaiyle 176'ya doldurulmadığından saatler düşük; ay sonu eksik günlere nöbet DOĞRUDAN
+    // (bütçe açmaya/takasa gerek kalmadan) yerleşir -> FAZLA MESAİ oluşmaz. Mesai doldurma
+    // bundan SONRA, nöbetlerin etrafındaki boş günleri 176'ya kadar tamamlar.
+    guaranteeCoverage();
 
     // ---- 2) MESAİ İLE HEDEFE TAMAMLA ----
     function freeWorkdaySlots(P) {
@@ -458,9 +511,11 @@
       var pool = people.filter(function (P) { return coverEligible(P, dd, kind); });
       if (!pool.length) return false;
       // En çok kalan bütçesi (en az aşım) olan; sonra en az nöbetli; sonra nöbeti aya yay.
+      if (variant) pool.forEach(function (P) { P._rk = rnd(); });
       pool.sort(function (a, b) {
         var ra = a.target - a.hours, rb = b.target - b.hours;
         if (ra !== rb) return rb - ra;
+        if (variant) return a._rk - b._rk;
         if (a.nobetDays.length !== b.nobetDays.length) return a.nobetDays.length - b.nobetDays.length;
         return a.lastNobet - b.lastNobet;
       });
@@ -485,14 +540,19 @@
       placeCover(Q, dd, kind);
       return true;
     }
-    days.forEach(function (dd) {
-      function oc() { var n = 0; for (var i = 0; i < people.length; i++) { var c = people[i].assign[dd.day]; if (c === 'N24' || c === 'N16') n++; } return n; }
-      for (var guard = 0; guard < 2 && oc() < 2; guard++) {
-        var ok = tryCover(dd, 'N24');                 // tercih N24 (hafta sonu/tatil yalnız N24)
-        if (!ok && dd.workday) ok = tryCover(dd, 'N16');
-        if (!ok) break;                                // gerçekten imkânsız (ardışık/komşu kısıtı) -> final uyarı
-      }
-    });
+    function guaranteeCoverage() {
+      days.forEach(function (dd) {
+        function oc() { var n = 0; for (var i = 0; i < people.length; i++) { var c = people[i].assign[dd.day]; if (c === 'N24' || c === 'N16') n++; } return n; }
+        for (var guard = 0; guard < 2 && oc() < 2; guard++) {
+          var ok;
+          if (preferN16 && dd.workday) { ok = tryCover(dd, 'N16') || tryCover(dd, 'N24'); }   // düşük-saat varyantı
+          else { ok = tryCover(dd, 'N24'); if (!ok && dd.workday) ok = tryCover(dd, 'N16'); } // hafta sonu/tatil yalnız N24
+          if (!ok) break;                                // gerçekten imkânsız (ardışık/komşu kısıtı) -> final uyarı
+        }
+      });
+    }
+    // İKİNCİ çağrı (güvenlik ağı): mesai doldurma + 2.5 sonrası kalan boşlukları (varsa) takasla kapatır.
+    guaranteeCoverage();
 
     // ---- 2.6) ÜST ÜSTE 3 İŞ GÜNÜ SINIRI: (NI+UCI) serilerini mesai TAŞIYARAK kır ----
     function fixAbsence(P) {
@@ -660,7 +720,8 @@
     // Kullanıcı: "mümkünse nöbetler 16 yerine 24 olsun". N16->N24 (+8s) yapıp dengelemek
     // için fazlası olan bir iş gününde bir M'yi UCI'ye çevir (saat sabit). YALNIZCA
     // >3 boş seri açılmıyorsa kabul (yani N16 küme kırmak için 'yük taşımıyorsa').
-    people.forEach(function (P) {
+    // preferN16 varyantında ATLA (bu varyant bilerek düşük-saatli/N16-ağırlıklı kalır).
+    if (!preferN16) people.forEach(function (P) {
       if (P.noNobet) return;
       for (var d = 1; d <= nDays; d++) {
         if (P.assign[d] !== 'N16') continue;
@@ -672,6 +733,21 @@
           if (longestAbsentRun(P) <= 3) break;                            // kabul -> bu N16 yükseldi
           P.assign[d] = 'N16'; P.hours -= 8; P.assign[dm] = 'M'; P.hours += 8;     // geri al
         }
+      }
+    });
+
+    // ---- 2.97) FAZLA MESAİ GİDERME: N24->N16 indir (kullanıcı: overtime YERİNE N16 kabul) ----
+    // Sıkı aylarda kapsama-garantisi son çare overtime bırakmış olabilir. Burada overtime'lı
+    // kişinin İŞ GÜNÜ N24'lerini (gündüz min'i bozmadan; N16 gündüz saymaz) N16'ya indiririz:
+    // her indirme -8s, nöbet sayısı (2/gün) KORUNUR. Hafta sonu/tatil N24 sabit -> dokunulmaz.
+    // Saatler 8'in katı olduğundan tam hedefe iner; gündüz min izin vermezse kalan overtime
+    // gerçek darboğazdır (final uyarı + '+1 kişi' notu).
+    people.forEach(function (P) {
+      if (P.noNobet) return;
+      for (var d = 1; d <= nDays && P.hours > P.target; d++) {
+        if (P.assign[d] !== 'N24' || !days[d - 1].workday) continue;
+        if (daytimeCount(d) - 1 < dayNeed(days[d - 1])) continue;   // gündüz min korunur
+        P.assign[d] = 'N16'; P.hours -= 8;
       }
     });
 

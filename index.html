@@ -207,11 +207,11 @@
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v41</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v42</b>
   </div>
 </div>
 
-<script src="scheduler.js?v=29"></script>
+<script src="scheduler.js?v=30"></script>
 <script>
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DEFAULT_NAMES = Array.from({length:14},(_,i)=>'Personel '+(i+1));
@@ -435,7 +435,7 @@ function onPeriodChange(){
   if(activeKey){ const oldCfg=readCfg(); const [oy,om]=activeKey.split('-'); oldCfg.year=+oy; oldCfg.month=+om;
     obj[activeKey]={cfg:oldCfg, grid:(LAST&&LAST.grid)||null}; saveMonths(obj); }
   const nk=monthKey(); activeKey=nk;
-  if(obj[nk]){ applyCfg(obj[nk].cfg); LAST=Scheduler.buildSchedule(readCfg());
+  if(obj[nk]){ applyCfg(obj[nk].cfg); LAST=Scheduler.buildSchedule(Object.assign({__attempts:1},readCfg()));
     if(obj[nk].grid){ LAST.grid=obj[nk].grid; recomputeTotals(LAST); } render(LAST); saveCfgQuiet(); }
   else { seedNewMonth(); generate(); }
   storeActiveMonth(); cloudSave();
@@ -491,7 +491,7 @@ async function cloudSaveNow(){ if(!SYNC.on||!LAST)return;
   }catch(e){}
 }
 function applyState(st){ if(!st||!st.cfg)return;
-  try{ applyCfg(st.cfg); LAST=Scheduler.buildSchedule(readCfg());
+  try{ applyCfg(st.cfg); LAST=Scheduler.buildSchedule(Object.assign({__attempts:1},readCfg()));
     if(st.grid){ LAST.grid=st.grid; const re=Scheduler.recompute(LAST); LAST.totals=re.totals; LAST.warnings=re.warnings; }
     render(LAST); localStorage.setItem('anestezi_cfg',JSON.stringify(readCfg()));
     activeKey=monthKey(); storeActiveMonth();
