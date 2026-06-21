@@ -126,20 +126,52 @@
       else if (/üst üste izinli|gündüzde \d+ kişi/.test(w)) s += 100;
       else s += 10;
     });
+    // BOŞLUK-DÜZGÜNLÜĞÜ (tiebreaker): 3-altı bile olsa boş İŞ GÜNÜ kümelerini hafifçe
+    // cezalandır -> eşit-uyarılı varyantlar arasında EN AZ "gappy" (uzun boşluksuz) olan
+    // seçilir. Ağırlık küçük (×0.1, yalnız run>=2): gerçek uyarıların önüne geçmez.
+    var wd = (r.days || []).filter(function (d) { return d.workday; }).map(function (d) { return d.day; });
+    (r.totals || []).forEach(function (t) {
+      if (t.noNobet) return;
+      var locked = {}; (t.lockedOff || []).forEach(function (d) { locked[d] = 1; });
+      var g = r.grid[t.name] || {}, run = 0;
+      for (var i = 0; i < wd.length; i++) {
+        var c = g[wd[i]], idle = (c === 'NI' || c === 'UCI') && !locked[wd[i]];
+        if (idle) run++; else { if (run >= 2) s += run * run * 0.1; run = 0; }
+      }
+      if (run >= 2) s += run * run * 0.1;
+    });
     return s;
+  }
+  // Listenin "kimliği" (dedup için): kim hangi günde N24/N16 nöbette. Aynı nöbet dağılımına
+  // sahip varyantlar tek alternatif sayılır (mesai yerleşimi farkı önemsiz).
+  function sigOf(r) {
+    var parts = [];
+    (r.totals || []).forEach(function (t) {
+      var g = r.grid[t.name] || {}, on = [];
+      for (var d = 1; d <= (r.nDays || 31); d++) { if (g[d] === 'N24' || g[d] === 'N16') on.push(d + (g[d] === 'N16' ? 's' : '')); }
+      parts.push(on.join(','));
+    });
+    return parts.join('|');
   }
   function buildSchedule(config) {
     if (config && config.__variant !== undefined) return buildOne(config);
-    var attempts = (config && config.__attempts) || 80;   // skor 0 bulununca erken çıkar (kolay vakalar anında)
-    var best = null, bestScore = Infinity;
+    var attempts = (config && config.__attempts) || 60;
+    if (attempts <= 1) return buildOne((function () { var c = {}; for (var k in config) c[k] = config[k]; c.__variant = 0; return c; })());
+    var cands = [];
     for (var v = 0; v < attempts; v++) {
-      var c = {}; for (var k in config) c[k] = config[k]; c.__variant = v;
-      var r = buildOne(c);
-      var sc = scoreResult(r);
-      if (sc < bestScore) { bestScore = sc; best = r; }
-      if (bestScore === 0) break;                             // kusursuz liste bulundu -> dur
+      var c = {}; for (var k2 in config) c[k2] = config[k2]; c.__variant = v;
+      var r = buildOne(c); r.__score = scoreResult(r); r.__sig = sigOf(r);
+      cands.push(r);
     }
-    if (best) best.meta = best.meta || {}, best.meta.variants = v + (bestScore === 0 ? 1 : 0);
+    cands.sort(function (a, b) { return a.__score - b.__score; });   // en iyi (en düşük skor) önce
+    // belirgin FARKLI ilk 6 alternatif (aynı nöbet dağılımı tekrarını ele)
+    var seen = {}, alts = [];
+    for (var i = 0; i < cands.length && alts.length < 6; i++) {
+      if (!seen[cands[i].__sig]) { seen[cands[i].__sig] = 1; alts.push(cands[i]); }
+    }
+    var best = alts[0];
+    best.alternatives = alts;                                        // UI: Alternatif 1..N
+    best.meta = best.meta || {}; best.meta.variants = attempts;
     return best;
   }
   function buildOne(config) {

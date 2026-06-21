@@ -207,11 +207,11 @@
   <div id="output"></div>
 
   <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line)">
-    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v42</b>
+    Anestezi Nöbet &amp; Vardiya Planlayıcı · <b>Sürüm v43</b>
   </div>
 </div>
 
-<script src="scheduler.js?v=30"></script>
+<script src="scheduler.js?v=31"></script>
 <script>
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DEFAULT_NAMES = Array.from({length:14},(_,i)=>'Personel '+(i+1));
@@ -436,7 +436,7 @@ function onPeriodChange(){
     obj[activeKey]={cfg:oldCfg, grid:(LAST&&LAST.grid)||null}; saveMonths(obj); }
   const nk=monthKey(); activeKey=nk;
   if(obj[nk]){ applyCfg(obj[nk].cfg); LAST=Scheduler.buildSchedule(Object.assign({__attempts:1},readCfg()));
-    if(obj[nk].grid){ LAST.grid=obj[nk].grid; recomputeTotals(LAST); } render(LAST); saveCfgQuiet(); }
+    if(obj[nk].grid){ LAST.grid=obj[nk].grid; recomputeTotals(LAST); } ALTS=[LAST]; ALT_I=0; render(LAST); saveCfgQuiet(); }
   else { seedNewMonth(); generate(); }
   storeActiveMonth(); cloudSave();
 }
@@ -445,14 +445,24 @@ document.getElementById('month').addEventListener('change',onPeriodChange);
 document.getElementById('year').addEventListener('change',onPeriodChange);
 
 let LAST=null;
+// Multi-start'ın ürettiği alternatif listeler (Alternatif 1..N) ve seçili olanın indeksi.
+let ALTS=[], ALT_I=0;
 function generate(){
   const cfg=readCfg();
   if(!cfg.personnel.length){alert('En az 1 personel ekleyin.');return;}
   LAST=Scheduler.buildSchedule(cfg);
+  ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0;     // alternatifleri yakala
   render(LAST);
   saveCfg();
   storeActiveMonth();
   cloudSave();
+}
+// Alternatif listeyi seç: o listeyi aktif yap, çiz, kaydet/senkronize et.
+function pickAlt(i){
+  if(!ALTS[i]) return;
+  ALT_I=i; LAST=ALTS[i];
+  render(LAST); saveCfgQuiet(); storeActiveMonth(); cloudSave();
+  flash('Alternatif '+(i+1)+' seçildi ✓');
 }
 
 // ============== ORTAK / CANLI SENKRON — 3 mod ==============
@@ -493,7 +503,7 @@ async function cloudSaveNow(){ if(!SYNC.on||!LAST)return;
 function applyState(st){ if(!st||!st.cfg)return;
   try{ applyCfg(st.cfg); LAST=Scheduler.buildSchedule(Object.assign({__attempts:1},readCfg()));
     if(st.grid){ LAST.grid=st.grid; const re=Scheduler.recompute(LAST); LAST.totals=re.totals; LAST.warnings=re.warnings; }
-    render(LAST); localStorage.setItem('anestezi_cfg',JSON.stringify(readCfg()));
+    ALTS=[LAST]; ALT_I=0; render(LAST); localStorage.setItem('anestezi_cfg',JSON.stringify(readCfg()));
     activeKey=monthKey(); storeActiveMonth();
   }catch(e){} }
 async function cloudPoll(){ if(!SYNC.on||SYNC.editing)return;
@@ -663,8 +673,18 @@ function initApp(){
 function render(r){
   const out=document.getElementById('output');
   const title=`${MONTHS[r.month]} ${r.year}`;
-  let h=`<div class="panel"><h2>📋 ${title} Nöbet Listesi</h2>
-    <div class="note noprint" style="margin:0 0 10px">✏️ <b>Taslak — elle düzenlenebilir:</b> herhangi bir hücreye tıklayıp vardiyayı değiştirin; saatler/uyarılar anında güncellenir. (Yeniden "Liste Oluştur" derseniz düzenlemeler sıfırlanır.)</div>
+  let h=`<div class="panel"><h2>📋 ${title} Nöbet Listesi</h2>`;
+  // ---- ALTERNATİF LİSTELER: multi-start'ın ürettiği farklı (boşluk/dağılım) seçenekler ----
+  if(ALTS && ALTS.length>1){
+    h+=`<div class="noprint" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 10px;padding:8px;border:1px dashed var(--accent);border-radius:8px">
+      <span style="font-size:13px;font-weight:600">🔀 Alternatif listeler:</span>`+
+      ALTS.map((a,i)=>{ const w=(a.warnings||[]).filter(x=>x.charAt(0)!=='💡').length; const act=i===ALT_I;
+        return `<button class="sm" onclick="pickAlt(${i})" title="${w===0?'sorunsuz liste':w+' uyarı'}"
+          style="border:1px solid ${act?'var(--accent)':'var(--line)'};border-radius:7px;${act?'background:var(--accent);color:#fff':'background:transparent'}">
+          Alternatif ${i+1}${w===0?' ✓':' ('+w+')'}</button>`; }).join('')+
+      `<span class="muted" style="font-size:12px">— beğendiğinizi seçin (her biri farklı boşluk/dağılım). ✓ = sorunsuz.</span></div>`;
+  }
+  h+=`<div class="note noprint" style="margin:0 0 10px">✏️ <b>Taslak — elle düzenlenebilir:</b> herhangi bir hücreye tıklayıp vardiyayı değiştirin; saatler/uyarılar anında güncellenir. (Yeniden "Liste Oluştur" derseniz düzenlemeler sıfırlanır.)</div>
     <div class="gridwrap"><table class="grid"><thead><tr><th class="name">Personel</th>`;
   r.days.forEach(d=>{ h+=`<th class="${d.weekend||d.holiday?'wknd':''}">${d.day}<br><span class="muted">${d.dowName}</span></th>`; });
   h+=`<th class="tot">Hedef</th><th class="tot">Top.</th><th class="tot">Fark</th><th class="tot">M</th><th class="tot">N24</th><th class="tot">N16</th><th class="tot">Nİ</th><th class="tot">Ü.İ</th><th class="tot">HSn</th></tr></thead><tbody>`;
@@ -710,7 +730,7 @@ function editCell(td){
   td.textContent=''; td.appendChild(sel); sel.focus();
   SYNC.editing=true;
   let done=false;
-  sel.addEventListener('change',()=>{done=true; LAST.grid[name][d]=sel.value; recomputeTotals(LAST); render(LAST); SYNC.editing=false; storeActiveMonth(); cloudSave();});
+  sel.addEventListener('change',()=>{done=true; LAST.grid[name][d]=sel.value; recomputeTotals(LAST); ALTS=[LAST]; ALT_I=0; render(LAST); SYNC.editing=false; storeActiveMonth(); cloudSave();});
   sel.addEventListener('blur',()=>{ if(!done){ SYNC.editing=false; render(LAST); } });
 }
 // Elle düzenleme sonrası: ÜRETİMLE AYNI doğrulayıcıyı (Scheduler.recompute -> analyze)
