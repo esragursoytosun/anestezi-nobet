@@ -410,6 +410,90 @@
       days.forEach(function (dd) { if (dd.workday && P.assign[dd.day] === '') P.assign[dd.day] = 'UCI'; });
     });
 
+    // ---- 2.55) NÖBET KAPSAMA GARANTİSİ — her gün KESİN 2 nöbetçi (kullanıcı: %100 zorunlu) ----
+    // Greedy kapsama (pass 1) bazı günleri (ÖZELLİKLE AY SONU) kapatamaz: herkes 176'ya
+    // dolduğundan saat sınırı yeni nöbeti reddeder -> 29/30/31 gibi günlerde 0 nöbetçi.
+    // Burada eksik günleri TAKAS ile kapatırız: bir kişinin başka iş günlerindeki yeterli
+    // M'sini UCI'ye çevirip bütçe açar, o güne nöbet koyarız (toplam saat ~sabit, OVERTIME YOK).
+    // Hafta sonu/tatil yalnız N24. Temiz takas hiçbir kişide mümkün değilse SON ÇARE minimal
+    // overtime (kapsama her kuraldan önce gelir). Kapsama zaten tamsa bu pass NO-OP'tur.
+    function coverEligible(P, dd, kind) {
+      var d = dd.day, cur = P.assign[d];
+      if (P.noNobet) return false;
+      if (P.onlyDay.has(d)) return false;
+      if (P.onlyN16.has(d) && kind === 'N24') return false;
+      if (P.lockedOff.has(d) || P.offReq.has(d)) return false;
+      if (cur === 'YI' || cur === 'OFF' || cur === 'NI' || cur === 'N24' || cur === 'N16') return false;
+      // cur ∈ {'', 'UCI', 'M'} -> nöbete çevrilebilir
+      if (d > 1 && (P.assign[d - 1] === 'N24' || P.assign[d - 1] === 'N16')) return false;  // önceki gün nöbet -> olmaz
+      if (d < nDays) {
+        var nx = P.assign[d + 1];   // ertesi gün DİNLENME (NI) yazılabilmeli: M/nöbet/YI ise olmaz
+        if (nx === 'M' || nx === 'N24' || nx === 'N16' || nx === 'YI') return false;
+      }
+      return true;
+    }
+    // P'nin (excludeDay hariç) M günlerini UCI'ye çevirerek needH saat bütçe açar.
+    // Küme (>3 boş seri) açan donörü atlar. allowBreakDaytime=false iken donör günün gündüz
+    // min'ini korur; true (son çare) iken korumayı gevşetir. Açılan saati döndürür.
+    function freeBudgetForCover(P, needH, excludeDay, allowBreakDaytime) {
+      var conv = [], freed = 0;
+      for (var m = 0; m < workdayNums.length && freed < needH; m++) {
+        var dm = workdayNums[m];
+        if (dm === excludeDay || P.assign[dm] !== 'M' || P.mustMesai.has(dm)) continue;
+        if (!allowBreakDaytime && daytimeCount(dm) - 1 < dayNeed(days[dm - 1])) continue;
+        P.assign[dm] = 'UCI'; P.hours -= 8;
+        if (longestAbsentRun(P) > 3) { P.assign[dm] = 'M'; P.hours += 8; continue; }
+        conv.push(dm); freed += 8;
+      }
+      return { conv: conv, freed: freed };
+    }
+    function placeCover(P, dd, kind) {
+      var d = dd.day, cur = P.assign[d], net = HOURS[kind] - (HOURS[cur] || 0);
+      P.hours += net; P.assign[d] = kind; P.nobetDays.push(d); P.lastNobet = d;
+      if (dd.weekend || dd.holiday) P.weekendNobet++;
+      if (d < nDays) { var nx = P.assign[d + 1]; if (nx === '' || nx === 'HT' || nx === 'RT' || nx === 'UCI') P.assign[d + 1] = 'NI'; }
+    }
+    function tryCover(dd, kind) {
+      var d = dd.day, addH = HOURS[kind];
+      var pool = people.filter(function (P) { return coverEligible(P, dd, kind); });
+      if (!pool.length) return false;
+      // En çok kalan bütçesi (en az aşım) olan; sonra en az nöbetli; sonra nöbeti aya yay.
+      pool.sort(function (a, b) {
+        var ra = a.target - a.hours, rb = b.target - b.hours;
+        if (ra !== rb) return rb - ra;
+        if (a.nobetDays.length !== b.nobetDays.length) return a.nobetDays.length - b.nobetDays.length;
+        return a.lastNobet - b.lastNobet;
+      });
+      // Bir adaya 'allowBreak' modunda yerleştirmeyi dene: aşım takasla TAM kapanırsa
+      // (overtime YOK) yerleştir + true; kapanmazsa geri al + false.
+      function attempt(P, allowBreak) {
+        var over = (P.hours + (addH - (HOURS[P.assign[d]] || 0))) - P.target;
+        if (over <= 0) { placeCover(P, dd, kind); return true; }
+        var r = freeBudgetForCover(P, over, d, allowBreak);
+        if (r.freed >= over) { placeCover(P, dd, kind); return true; }
+        r.conv.forEach(function (dm) { P.assign[dm] = 'M'; P.hours += 8; });   // geri al
+        return false;
+      }
+      var i;
+      // FAZ A — TEMİZ takas (overtime YOK, gündüz min KORUNUR). En iyisi.
+      for (i = 0; i < pool.length; i++) if (attempt(pool[i], false)) return true;
+      // FAZ B — takas için gündüz min'i gevşet (overtime YİNE YOK). Overtime'dan iyidir.
+      for (i = 0; i < pool.length; i++) if (attempt(pool[i], true)) return true;
+      // FAZ C — SON ÇARE: kalan aşımı overtime kabul et (en bol bütçeli aday, önce mümkün olan bütçeyi aç).
+      var Q = pool[0], over2 = (Q.hours + (addH - (HOURS[Q.assign[d]] || 0))) - Q.target;
+      if (over2 > 0) freeBudgetForCover(Q, over2, d, true);
+      placeCover(Q, dd, kind);
+      return true;
+    }
+    days.forEach(function (dd) {
+      function oc() { var n = 0; for (var i = 0; i < people.length; i++) { var c = people[i].assign[dd.day]; if (c === 'N24' || c === 'N16') n++; } return n; }
+      for (var guard = 0; guard < 2 && oc() < 2; guard++) {
+        var ok = tryCover(dd, 'N24');                 // tercih N24 (hafta sonu/tatil yalnız N24)
+        if (!ok && dd.workday) ok = tryCover(dd, 'N16');
+        if (!ok) break;                                // gerçekten imkânsız (ardışık/komşu kısıtı) -> final uyarı
+      }
+    });
+
     // ---- 2.6) ÜST ÜSTE 3 İŞ GÜNÜ SINIRI: (NI+UCI) serilerini mesai TAŞIYARAK kır ----
     function fixAbsence(P) {
       for (var guard = 0; guard < 80; guard++) {
