@@ -419,7 +419,10 @@
             if (onDays.length > 1) { var ideal = nDays / onDays.length; for (var q = 1; q < onDays.length; q++) { var gap = onDays[q] - onDays[q - 1]; if (gap < ideal) spacing += (ideal - gap); } }
           }
         }
-        for (var k = 0; k < workdayNums.length; k++) { var dn = workdayNums[k], need = dayNeed(days[dn - 1]), g = daytimeCount(dn); if (g < need) s += (need - g) * 55; }
+        for (var k = 0; k < workdayNums.length; k++) { var dn = workdayNums[k], dday = days[dn - 1], need = dayNeed(dday), g = daytimeCount(dn);
+          if (g < need) s += (need - g) * 55;
+          else if (dday.isExtra && g > need) s -= Math.min(g - need, 4) * 6;   // EKSTRA günde min üstü fazlalık ÖDÜL -> fazlalık bu günlere yığılsın
+        }
         // ADALET cezaları: kişinin nöbet/hafta-sonu sayısı, hedef-oranlı ADİL paydan ne kadar sapıyor.
         for (var f = 0; f < ncArr.length; f++) {
           var fairNc = totNc * wArr[f] / sumW, fairWk = totWk * wArr[f] / sumW;
@@ -565,6 +568,14 @@
     var totNc = 0, totWk = 0, sumW = 0, arr = [];
     (r.totals || []).forEach(function (t) { if (t.noNobet) return; var nc = (t.nl || 0) + (t.ns || 0), w = t.target || 1; arr.push({ nc: nc, wk: t.weekendNobet || 0, w: w }); totNc += nc; totWk += t.weekendNobet || 0; sumW += w; });
     arr.forEach(function (a) { s += Math.abs(a.nc - totNc * a.w / sumW) * 4 + Math.abs(a.wk - totWk * a.w / sumW) * 6; });
+    // EKSTRA gündüz günlerinde min üstü fazlalık ödül (fazlalık o günlere yığılsın)
+    var prof = r.profile || {};
+    (r.days || []).forEach(function (dd) {
+      if (!dd.workday || !dd.isExtra) return;
+      var g = 0; (r.totals || []).forEach(function (t) { if (!t.noNobet && coversDaytime((r.grid[t.name] || {})[dd.day], prof)) g++; });
+      var need = dd.isExtra ? (prof.daytimeExtra || 0) : (prof.daytimeMin || 0);
+      if (g > need) s -= Math.min(g - need, 4) * 3;
+    });
     return s;
   }
   function sigOf(r) {
