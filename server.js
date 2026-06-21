@@ -87,6 +87,34 @@ async function saveState(st) {
 function sendJSON(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
 function pub(st) { const r = Object.assign({}, st); delete r.users; return r; }   // şifreleri istemciye gönderme
 
+// ===================== NÖBET PLANLAMA ASİSTANI (çok birimli, ayrı doc) =====================
+// Anestezi uçlarından BAĞIMSIZ. Ayrı doc 'asistan_state' / dosya 'asistan.json'.
+//   { units:[{id,name,profile,cfg}], users:[{u,p,role:'admin'|'manager',unitId}], rev }
+// Admin: env ADMIN_USER+APP_PASSWORD HER ZAMAN geçerli (süper-admin) + kayıtlı 'admin' rollü kullanıcılar.
+const A_DOC = 'asistan_state';
+const A_FILE = path.join(DATA_DIR, 'asistan.json');
+function aEmpty() { return { units: [], users: [], rev: 0 }; }
+async function loadAsistan() {
+  const col = await getCol();
+  if (col) { try { const d = await col.findOne({ _id: A_DOC }); if (d) { const { _id, ...r } = d; return Object.assign(aEmpty(), r); } return aEmpty(); }
+    catch (e) { console.error('[db] asistan load hata:', e.message); } }
+  try { if (fs.existsSync(A_FILE)) return Object.assign(aEmpty(), JSON.parse(fs.readFileSync(A_FILE, 'utf8'))); } catch (e) {}
+  return aEmpty();
+}
+async function saveAsistan(st) {
+  const col = await getCol();
+  if (col) { try { await col.replaceOne({ _id: A_DOC }, Object.assign({ _id: A_DOC }, st), { upsert: true }); return; }
+    catch (e) { console.error('[db] asistan save hata:', e.message); } }
+  try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(A_FILE, JSON.stringify(st), 'utf8'); } catch (e) {}
+}
+function aFindUser(st, u, p) {
+  if (u && u === ADMIN_USER && p === ADMIN_PASS) return { u: ADMIN_USER, role: 'admin', unitId: null };
+  return (st.users || []).find(x => x.u === u && x.p === p) || null;
+}
+async function aReqUser(req) { const st = await loadAsistan(); return aFindUser(st, req.headers['x-user'] || '', req.headers['x-auth'] || ''); }
+function aCanAccess(me, unitId) { return me && (me.role === 'admin' || me.unitId === unitId); }
+function aReadBody(req, cb) { let b = ''; req.on('data', c => { b += c; if (b.length > 6e6) req.destroy(); }); req.on('end', () => { try { cb(JSON.parse(b || '{}')); } catch (e) { cb(null); } }); }
+
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
 
@@ -166,6 +194,56 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     return sendJSON(res, 405, { error: 'method' });
+  }
+
+  // ===================== ASİSTAN ROTALARI =====================
+  if (u.pathname === '/api/asistan/login' && req.method === 'POST') {
+    aReadBody(req, async b => { if (!b) return sendJSON(res, 400, { error: 'gövde' });
+      const st = await loadAsistan(); const usr = aFindUser(st, (b.username || '').trim(), b.password || '');
+      if (usr) return sendJSON(res, 200, { ok: true, username: usr.u, role: usr.role, unitId: usr.unitId == null ? null : usr.unitId });
+      return sendJSON(res, 401, { ok: false, error: 'Kullanıcı adı veya şifre hatalı' }); });
+    return;
+  }
+  if (u.pathname === '/api/asistan/units' && req.method === 'GET') {
+    const me = await aReqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
+    const st = await loadAsistan();
+    const mgr = uid => (st.users || []).filter(x => x.role === 'manager' && x.unitId === uid).map(x => x.u);
+    let list = (st.units || []).map(un => ({ id: un.id, name: un.name, managers: mgr(un.id) }));
+    if (me.role !== 'admin') list = list.filter(un => un.id === me.unitId);
+    return sendJSON(res, 200, { units: list, role: me.role, unitId: me.unitId == null ? null : me.unitId, me: me.u });
+  }
+  if (u.pathname === '/api/asistan/unit') {
+    const me = await aReqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
+    const id = u.searchParams.get('id');
+    if (!aCanAccess(me, id)) return sendJSON(res, 403, { error: 'Bu birime erişim yetkiniz yok' });
+    if (req.method === 'GET') { const st = await loadAsistan(); const un = (st.units || []).find(x => x.id === id);
+      if (!un) return sendJSON(res, 404, { error: 'birim yok' }); return sendJSON(res, 200, { id: un.id, name: un.name, profile: un.profile || null, cfg: un.cfg || null }); }
+    if (req.method === 'POST') { aReadBody(req, async b => { if (!b) return sendJSON(res, 400, { error: 'gövde' });
+      const st = await loadAsistan(); const un = (st.units || []).find(x => x.id === id); if (!un) return sendJSON(res, 404, { error: 'birim yok' });
+      if (b.profile !== undefined) un.profile = b.profile; if (b.cfg !== undefined) un.cfg = b.cfg; if (b.name && me.role === 'admin') un.name = b.name;
+      st.rev = (st.rev || 0) + 1; await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }); return; }
+    return sendJSON(res, 405, { error: 'method' });
+  }
+  if (u.pathname === '/api/asistan/admin' && req.method === 'POST') {
+    const me = await aReqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
+    if (me.role !== 'admin') return sendJSON(res, 403, { error: 'Yalnız admin' });
+    aReadBody(req, async b => { if (!b) return sendJSON(res, 400, { error: 'gövde' });
+      const st = await loadAsistan(); st.units = st.units || []; st.users = st.users || [];
+      if (b.action === 'addUnit') { const id = 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+        st.units.push({ id, name: (b.name || 'Birim').trim(), profile: b.profile || null, cfg: b.cfg || null });
+        st.rev = (st.rev || 0) + 1; await saveAsistan(st); return sendJSON(res, 200, { ok: true, id }); }
+      if (b.action === 'delUnit') { st.units = st.units.filter(x => x.id !== b.id); st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id));
+        await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
+      if (b.action === 'setManager') { const uu = (b.username || '').trim(), pp = (b.password || '').trim();
+        if (!uu || !pp) return sendJSON(res, 400, { error: 'Kullanıcı adı ve şifre gerekli' });
+        if (st.users.some(x => x.u === uu && !(x.role === 'manager' && x.unitId === b.id))) return sendJSON(res, 400, { error: 'Bu kullanıcı adı başka yerde kullanılıyor' });
+        st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id));   // birimde tek yönetici (değiştir)
+        st.users.push({ u: uu, p: pp, role: 'manager', unitId: b.id }); await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
+      if (b.action === 'removeManager') { st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id)); await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
+      if (b.action === 'renameUnit') { const un = st.units.find(x => x.id === b.id); if (un) un.name = (b.name || un.name).trim(); await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
+      return sendJSON(res, 400, { error: 'bilinmeyen işlem' });
+    });
+    return;
   }
 
   // ---- statik dosyalar ----

@@ -107,12 +107,41 @@
     .tot{background:#f3f4f6!important;color:#000!important} .tot.bad{color:#b91c1c!important} .tot.good{color:#15803d!important}
     .legend{font-size:8px;margin-top:5px;gap:6px} .warns{font-size:9px;margin-top:6px}
   }
+  .ovl{position:fixed;inset:0;background:rgba(8,12,24,.82);display:none;align-items:center;justify-content:center;z-index:50}
+  .ovl .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;width:340px;max-width:92%;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  .ovl h3{margin:6px 0 10px;color:var(--accent2);text-align:center}
+  .ovl input{width:100%;margin-bottom:10px}
+  .err{color:var(--err);font-size:13px;min-height:18px}
+  .who{font-size:12px;color:#c7d2fe}
+  .mgrbox{background:var(--inset);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px}
 </style>
 </head>
 <body>
+<!-- GİRİŞ -->
+<div class="ovl" id="loginOvl"><div class="box">
+  <div style="text-align:center;font-size:30px">🔒</div><h3>Giriş</h3>
+  <input type="text" id="logUser" placeholder="Kullanıcı adı" autocomplete="username">
+  <input type="password" id="logPw" placeholder="Şifre" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+  <div class="err" id="logErr"></div>
+  <button style="width:100%" onclick="doLogin()">Giriş Yap</button>
+</div></div>
+<!-- YÖNETİCİ ATA (admin) -->
+<div class="ovl" id="mgrOvl"><div class="box">
+  <h3>Birim Yöneticisi Ata</h3>
+  <div class="who" id="mgrUnitName" style="margin-bottom:8px"></div>
+  <input type="text" id="mgrUser" placeholder="Yönetici kullanıcı adı" autocomplete="off">
+  <input type="password" id="mgrPw" placeholder="Şifre belirle" autocomplete="new-password">
+  <div class="err" id="mgrErr"></div>
+  <div style="display:flex;gap:8px"><button style="flex:1" onclick="saveManager()">Kaydet</button><button class="sec" onclick="document.getElementById('mgrOvl').style.display='none'">Kapat</button></div>
+  <div class="mgrbox" id="mgrCur"></div>
+</div></div>
 <header>
   <span style="font-size:26px">🩺</span>
   <div><h1>Nöbet Planlama Asistanı</h1><div class="sub">Her birim kendi kurallarını ayarlar · akıllı dağıtım + alternatif listeler</div></div>
+  <div id="userBar" style="margin-left:auto;display:none;align-items:center;gap:10px">
+    <span class="who" id="whoTxt"></span>
+    <button class="sm" onclick="logout()">Çıkış</button>
+  </div>
 </header>
 
 <div class="wrap">
@@ -121,10 +150,18 @@
   <div class="panel noprint" id="rulePanel">
     <h2>⚙️ Birim Seç / Kural Ayarları
       <select id="profSel" style="margin-left:6px"></select>
-      <button class="sm" onclick="newProfile()">+ Yeni</button>
-      <button class="sm" onclick="renameProfile()">✎ Ad</button>
-      <button class="sm" onclick="dupProfile()">⧉ Kopya</button>
-      <button class="sm danger" onclick="delProfile()">Sil</button>
+      <span id="localProfBtns">
+        <button class="sm" onclick="newProfile()">+ Yeni</button>
+        <button class="sm" onclick="renameProfile()">✎ Ad</button>
+        <button class="sm" onclick="dupProfile()">⧉ Kopya</button>
+        <button class="sm danger" onclick="delProfile()">Sil</button>
+      </span>
+      <span id="srvAdminBtns" style="display:none">
+        <button class="sm" onclick="srvAddUnit()">+ Birim</button>
+        <button class="sm" onclick="srvAssignManager()">👤 Yönetici ata</button>
+        <button class="sm" onclick="srvRenameUnit()">✎ Ad</button>
+        <button class="sm danger" onclick="srvDelUnit()">Birim sil</button>
+      </span>
       <button class="sm sec" onclick="toggleRules()" style="margin-left:auto">▾ Gizle/Göster</button>
     </h2>
     <div class="body" id="ruleBody">
@@ -238,7 +275,7 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v9</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v10</b> · anestezi sisteminden bağımsız</div>
 </div>
 
 <script src="asistan-scheduler.js?v=6"></script>
@@ -260,9 +297,11 @@ let PROFILES=[], PROF_I=0;
 function loadProfiles(){ try{ PROFILES=JSON.parse(localStorage.getItem('asistan_profiles')||'null'); }catch(e){ PROFILES=null; }
   if(!PROFILES||!PROFILES.length) PROFILES=[AsistanScheduler.defaultProfile()];
   PROF_I=parseInt(localStorage.getItem('asistan_profi')||'0',10)||0; if(PROF_I>=PROFILES.length)PROF_I=0; }
-function saveProfiles(){ localStorage.setItem('asistan_profiles',JSON.stringify(PROFILES)); localStorage.setItem('asistan_profi',String(PROF_I)); }
-function curProfile(){ return PROFILES[PROF_I]; }
-function refreshProfSel(){ document.getElementById('profSel').innerHTML=PROFILES.map((p,i)=>`<option value="${i}"${i===PROF_I?' selected':''}>${p.name||('Profil '+(i+1))}</option>`).join(''); }
+function saveProfiles(){ if(SRV.on)return; localStorage.setItem('asistan_profiles',JSON.stringify(PROFILES)); localStorage.setItem('asistan_profi',String(PROF_I)); }
+function curProfile(){ if(SRV.on){ if(!ACT)ACT={profile:AsistanScheduler.defaultProfile()}; if(!ACT.profile)ACT.profile=AsistanScheduler.defaultProfile(); return ACT.profile; } return PROFILES[PROF_I]; }
+function refreshProfSel(){ const s=document.getElementById('profSel');
+  if(SRV.on){ s.innerHTML=UNITS.map(u=>`<option value="${u.id}"${ACT&&u.id===ACT.id?' selected':''}>${u.name}${(u.managers&&u.managers.length)?' — 👤'+u.managers.join(','):''}</option>`).join(''); s.disabled=(SRV.role!=='admin'); return; }
+  s.disabled=false; s.innerHTML=PROFILES.map((p,i)=>`<option value="${i}"${i===PROF_I?' selected':''}>${p.name||('Profil '+(i+1))}</option>`).join(''); }
 function fillRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; if(el.type==='checkbox')el.checked=!!p[f]; else el.value=p[f];});
   exWrap.querySelectorAll('input[data-dow]').forEach(cb=>{cb.checked=(p.daytimeExtraDays||[]).indexOf(parseInt(cb.dataset.dow,10))>=0;});
@@ -292,7 +331,7 @@ function addCustomShift(){ const p=curProfile(); p.customShifts=p.customShifts||
   saveProfiles(); renderCustomShifts(); }
 function rmCustomShift(i){ const p=curProfile(); (p.customShifts||[]).splice(i,1); saveProfiles(); renderCustomShifts(); }
 document.getElementById('rulePanel').addEventListener('input',e=>{ if(e.target.closest('#ruleBody')) readRuleForm(); });
-document.getElementById('profSel').addEventListener('change',e=>{ PROF_I=parseInt(e.target.value,10); saveProfiles(); fillRuleForm(); });
+document.getElementById('profSel').addEventListener('change',e=>{ if(SRV.on){ loadUnit(e.target.value); } else { PROF_I=parseInt(e.target.value,10); saveProfiles(); fillRuleForm(); } });
 function newProfile(){ const n=(prompt('Yeni birim adı (örn. Anestezi, Yenidoğan Yakın İzlem):','Yenidoğan Yakın İzlem')||'').trim(); if(!n)return; const p=AsistanScheduler.defaultProfile(); p.name=n; PROFILES.push(p); PROF_I=PROFILES.length-1; saveProfiles(); refreshProfSel(); fillRuleForm(); }
 function dupProfile(){ const p=JSON.parse(JSON.stringify(curProfile())); p.name=(p.name||'Profil')+' (kopya)'; PROFILES.push(p); PROF_I=PROFILES.length-1; saveProfiles(); refreshProfSel(); fillRuleForm(); }
 function delProfile(){ if(PROFILES.length<=1){alert('En az bir profil kalmalı.');return;} if(!confirm((curProfile().name||'Profil')+' silinsin mi?'))return; PROFILES.splice(PROF_I,1); PROF_I=0; saveProfiles(); refreshProfSel(); fillRuleForm(); }
@@ -363,7 +402,11 @@ document.getElementById('year').addEventListener('change',updateDateBounds);
 // ===== KAYDET =====
 function readCfg(){ return { year:parseInt(document.getElementById('year').value,10), month:parseInt(document.getElementById('month').value,10),
   holidays:parseDays(document.getElementById('holidays').value), profile:curProfile(), personnel:readPersonnel() }; }
-function saveAll(){ readRuleForm(); localStorage.setItem('asistan_cfg',JSON.stringify({year:document.getElementById('year').value,month:document.getElementById('month').value,holidays:document.getElementById('holidays').value,personnel:readPersonnel()})); flash('Kaydedildi ✓'); }
+function saveAll(){ readRuleForm();
+  if(SRV.on){ if(!ACT){flash('Önce birim seçin/ekleyin');return;} const cfg={year:parseInt(document.getElementById('year').value,10),month:parseInt(document.getElementById('month').value,10),holidays:parseDays(document.getElementById('holidays').value),personnel:readPersonnel()}; ACT.cfg=cfg;
+    fetch('/api/asistan/unit?id='+encodeURIComponent(ACT.id),{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({profile:ACT.profile,cfg})})
+      .then(r=>{ if(r.status===401){location.reload();return;} flash('Kaydedildi ✓ (sunucu)'); }).catch(()=>flash('Kaydedilemedi (ağ?)')); return; }
+  localStorage.setItem('asistan_cfg',JSON.stringify({year:document.getElementById('year').value,month:document.getElementById('month').value,holidays:document.getElementById('holidays').value,personnel:readPersonnel()})); flash('Kaydedildi ✓'); }
 function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem('asistan_cfg')||'null'); if(c){ document.getElementById('year').value=c.year; document.getElementById('month').value=c.month; document.getElementById('holidays').value=c.holidays||''; applyPersonnel(c.personnel); return true; } }catch(e){} return false; }
 function flash(m){ const d=document.createElement('div'); d.textContent=m; d.style.cssText='position:fixed;bottom:20px;right:20px;background:#16a34a;color:#fff;padding:10px 16px;border-radius:8px;z-index:99'; document.body.appendChild(d); setTimeout(()=>d.remove(),1500); }
 
@@ -373,7 +416,7 @@ function codeLabel(c){ const p=curProfile(); const base={M:p.mesaiLabel,NL:p.onc
   if(base[c]!==undefined)return base[c]; const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.label:''; }
 function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.color:null; }
 function generate(){ readRuleForm(); const cfg=readCfg(); if(!cfg.personnel.length){alert('En az 1 personel ekleyin.');return;}
-  LAST=AsistanScheduler.buildSchedule(cfg); ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0; render(LAST); saveAll(); }
+  LAST=AsistanScheduler.buildSchedule(cfg); ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0; render(LAST); if(!SRV.on)saveAll(); }
 function pickAlt(i){ if(!ALTS[i])return; ALT_I=i; LAST=ALTS[i]; render(LAST); }
 function warnCount(a){ return (a.warnings||[]).filter(x=>x.charAt(0)!=='💡').length; }
 // tek bir listenin tam ızgarası (özet + lejant + uyarılar)
@@ -459,10 +502,60 @@ function exportXLS(){ if(!LAST){alert('Önce liste oluşturun.');return;} const 
 function fname(ext){ const p=curProfile(); return (p.name||'liste').replace(/\s+/g,'_')+'_'+MONTHS[parseInt(document.getElementById('month').value,10)]+'_'+document.getElementById('year').value+'.'+ext; }
 function dl(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},100); }
 
+// ===== SUNUCU / ÇOK-KULLANICILI (birim-bazlı yönetici + izolasyon) =====
+const SRV={on:false,role:null,unitId:null,me:null}; let UNITS=[], ACT=null;
+function asHeaders(extra){ return Object.assign({'X-User':localStorage.getItem('asistan_user')||'','X-Auth':localStorage.getItem('asistan_auth')||''}, extra||{}); }
+function applyCfgServer(c){ if(c){ if(c.year!=null)document.getElementById('year').value=c.year; if(c.month!=null)document.getElementById('month').value=c.month; document.getElementById('holidays').value=(c.holidays||[]).join(','); applyPersonnel(c.personnel||[]); } else resetNames(); }
+async function asInit(){
+  try{
+    const r=await fetch('/api/asistan/units',{cache:'no-store',headers:asHeaders()});
+    if(r.status===401){ SRV.on=true; document.getElementById('loginOvl').style.display='flex'; const i=document.getElementById('logUser'); if(i)i.focus(); return; }
+    if(r.ok){ const j=await r.json(); SRV.on=true; SRV.role=j.role; SRV.unitId=j.unitId; SRV.me=j.me; UNITS=j.units||[];
+      document.getElementById('loginOvl').style.display='none';
+      document.getElementById('userBar').style.display='flex';
+      document.getElementById('whoTxt').textContent='👤 '+SRV.me+(SRV.role==='admin'?' · admin':' · yönetici');
+      document.getElementById('localProfBtns').style.display='none';
+      document.getElementById('srvAdminBtns').style.display=(SRV.role==='admin')?'':'none';
+      if(UNITS.length){ await loadUnit((SRV.role!=='admin'&&SRV.unitId)?SRV.unitId:UNITS[0].id); }
+      else { ACT=null; refreshProfSel(); document.getElementById('output').innerHTML='<div class="panel"><div class="note">Henüz birim yok. '+(SRV.role==='admin'?'Üstten <b>+ Birim</b> ile ekleyin ve yönetici atayın.':'Yönetici sizi bir birime atamamış.')+'</div></div>'; }
+      return; }
+  }catch(e){}
+  SRV.on=false; localBoot();   // sunucu yok (dosyadan açıldı) -> yerel mod
+}
+function localBoot(){ loadProfiles(); refreshProfSel(); fillRuleForm(); if(!loadCfg())resetNames(); generate(); }
+async function doLogin(){ const u=(document.getElementById('logUser').value||'').trim(), p=document.getElementById('logPw').value||'';
+  const e=document.getElementById('logErr'); e.textContent='';
+  try{ const r=await fetch('/api/asistan/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const j=await r.json().catch(()=>({})); if(r.ok&&j.ok){ localStorage.setItem('asistan_user',u); localStorage.setItem('asistan_auth',p); asInit(); }
+    else e.textContent=(j&&j.error)||'Hatalı giriş'; }catch(err){ e.textContent='Sunucuya ulaşılamadı'; } }
+function logout(){ localStorage.removeItem('asistan_user'); localStorage.removeItem('asistan_auth'); location.reload(); }
+async function reloadUnits(){ try{ const r=await fetch('/api/asistan/units',{cache:'no-store',headers:asHeaders()}); const j=await r.json(); UNITS=j.units||[]; refreshProfSel(); }catch(e){} }
+async function loadUnit(id){ try{ const r=await fetch('/api/asistan/unit?id='+encodeURIComponent(id),{cache:'no-store',headers:asHeaders()});
+    if(r.status===401){location.reload();return;} if(!r.ok){flash('Birim yüklenemedi');return;}
+    const un=await r.json(); ACT={id:un.id,name:un.name,profile:un.profile||AsistanScheduler.defaultProfile(),cfg:un.cfg||null};
+    fillRuleForm(); applyCfgServer(ACT.cfg); refreshProfSel(); generate();
+  }catch(e){ flash('Birim yüklenemedi'); } }
+// Admin işlemleri
+async function srvAddUnit(){ const name=(prompt('Yeni birim adı (örn. Anestezi, Yenidoğan):','')||'').trim(); if(!name)return;
+  const prof=AsistanScheduler.defaultProfile(); prof.name=name;
+  const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'addUnit',name,profile:prof,cfg:null})});
+  const j=await r.json(); if(j.ok){ await reloadUnits(); await loadUnit(j.id); flash('Birim eklendi ✓'); } else alert(j.error||'Hata'); }
+function srvAssignManager(){ if(!ACT){alert('Önce bir birim seçin/ekleyin');return;}
+  document.getElementById('mgrUnitName').textContent='Birim: '+ACT.name; document.getElementById('mgrUser').value=''; document.getElementById('mgrPw').value=''; document.getElementById('mgrErr').textContent='';
+  const un=UNITS.find(u=>u.id===ACT.id); document.getElementById('mgrCur').textContent=(un&&un.managers&&un.managers.length)?('Mevcut yönetici: '+un.managers.join(', ')+' (yeni atama eskisini değiştirir)'):'Henüz yönetici atanmadı.';
+  document.getElementById('mgrOvl').style.display='flex'; }
+async function saveManager(){ const u=(document.getElementById('mgrUser').value||'').trim(), p=(document.getElementById('mgrPw').value||'').trim();
+  const e=document.getElementById('mgrErr'); if(!u||!p){e.textContent='Kullanıcı adı ve şifre gerekli';return;}
+  const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'setManager',id:ACT.id,username:u,password:p})});
+  const j=await r.json(); if(j.ok){ document.getElementById('mgrOvl').style.display='none'; await reloadUnits(); flash('Yönetici atandı ✓'); } else e.textContent=j.error||'Hata'; }
+async function srvDelUnit(){ if(!ACT)return; if(!confirm('“'+ACT.name+'” birimi ve yöneticisi kalıcı silinsin mi?'))return;
+  await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'delUnit',id:ACT.id})});
+  await reloadUnits(); if(UNITS.length)await loadUnit(UNITS[0].id); else { ACT=null; document.getElementById('output').innerHTML=''; refreshProfSel(); } flash('Birim silindi'); }
+async function srvRenameUnit(){ if(!ACT)return; const n=(prompt('Birim adı:',ACT.name)||'').trim(); if(!n)return;
+  await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'renameUnit',id:ACT.id,name:n})}); ACT.name=n; await reloadUnits(); }
+
 // ===== BAŞLAT =====
-loadProfiles(); refreshProfSel(); fillRuleForm();
-if(!loadCfg()) resetNames();
-generate();
+asInit();
 </script>
 </body>
 </html>
