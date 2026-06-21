@@ -235,6 +235,27 @@
       });
     });
 
+    // ---- 0.6) İZİN DÖNÜŞÜ: İLK İŞ GÜNÜ ZORUNLU ÇALIŞMA ----
+    // Yıllık izin biten kişi, dönüşte ilk İŞ GÜNÜnde kesin çalışır (mustMesai ile korunur).
+    // İzin Cuma biterse → Cumartesi/Pazar boş, Pazartesi başlar. Çarşamba biterse → Perşembe başlar.
+    // İzin bitişi ile dönüş günü arasındaki hafta sonu/tatile nöbet/mesai yazılmaz.
+    people.forEach(function (Pp) {
+      for (var d = 1; d <= nDays; d++) {
+        if (Pp.assign[d] !== 'YI') continue;
+        if (d !== nDays && Pp.assign[d + 1] === 'YI') continue;     // sadece izin bloğunun BİTİŞİ
+        var rd = -1;
+        for (var k = d + 1; k <= nDays; k++) {
+          if (!days[k - 1].workday) continue;                       // hafta sonu/tatil: atla
+          if (Pp.assign[k] === 'OFF') continue;                     // kişisel haftalık izin günü: atla
+          if (Pp.assign[k] === '') rd = k;                          // ilk çalışılabilir iş günü
+          break;                                                    // ilk iş günü bulundu (boşsa rd, doluysa zorlama yok)
+        }
+        if (rd < 0) continue;
+        for (var w = d + 1; w < rd; w++) if (!days[w - 1].workday) Pp.lockedOff.add(w);  // aradaki h.sonu/tatil kilit
+        addMesai(Pp, rd); Pp.mustMesai.add(rd);                     // dönüş günü = korumalı kesin çalışma
+      }
+    });
+
     // ---- 1) NÖBET KAPSAMA (greedy) ----
     function pickCandidate(dd, kind, strict) {
       var pool = people.filter(function (Pp) { return eligible(Pp, dd, kind, strict); });
@@ -352,7 +373,7 @@
         if (mid < 0) break;
         for (var m = 0; m < workdayNums.length; m++) {
           var dm = workdayNums[m];
-          if (Pp.assign[dm] !== 'M' || (dm >= best[0] && dm <= best[best.length - 1])) continue;
+          if (Pp.assign[dm] !== 'M' || Pp.mustMesai.has(dm) || (dm >= best[0] && dm <= best[best.length - 1])) continue;
           if (daytimeCount(dm) - 1 < dayNeed(days[dm - 1])) continue;
           Pp.assign[dm] = 'UCI'; Pp.assign[mid] = 'M';
           if (longestAbsentRun(Pp) <= P.maxConsecutiveOff || longestAbsentRun(Pp) < best.length) { moved = true; break; }
