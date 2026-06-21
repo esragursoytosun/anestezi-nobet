@@ -438,6 +438,8 @@
           if (!Pp.noNobet) { var w = Pp.target || 1; ncArr.push(nc); wkArr.push(wk); wArr.push(w); totNc += nc; totWk += wk; sumW += w;
             // YAYILIM: kişinin kendi nöbetleri aya eşit aralıklı mı (kısa aralık cezalı)
             if (onDays.length > 1) { var ideal = nDays / onDays.length; for (var q = 1; q < onDays.length; q++) { var gap = onDays[q] - onDays[q - 1]; if (gap < ideal) spacing += (ideal - gap); } }
+            // GÜN AŞIRI ÜST ÜSTE 3+ NÖBET (N _ N _ N, 2 gün arayla): mecbur kalmadıkça kaçın
+            var gaRun = 1; for (var ga = 1; ga < onDays.length; ga++) { if (onDays[ga] - onDays[ga - 1] === 2) { gaRun++; if (gaRun >= 3) s += 50; } else gaRun = 1; }
           }
         }
         // gündüz min (sert) + DAĞILIM ŞEKİLLENDİRME (ekstra gün = normal ort + 1..2, aşırı yığma yok)
@@ -594,6 +596,9 @@
       var g = r.grid[t.name] || {}, run = 0;
       for (var i = 0; i < wd.length; i++) { var c = g[wd[i]], idle = (c === 'NI' || c === 'UCI') && !locked[wd[i]]; if (idle) run++; else { if (run >= 2) s += run * run * 0.1; run = 0; } }
       if (run >= 2) s += run * run * 0.1;
+      // GÜN AŞIRI ÜST ÜSTE 3+ NÖBET (N _ N _ N): mecbur kalmadıkça kaçın
+      var onD = []; for (var od = 1; od <= (r.nDays || 31); od++) if (isOncall(g[od])) onD.push(od);
+      var gr = 1; for (var j = 1; j < onD.length; j++) { if (onD[j] - onD[j - 1] === 2) { gr++; if (gr >= 3) s += 22; } else gr = 1; }
     });
     // ADALET: nöbet ve hafta sonu nöbeti, hedef-oranlı adil paydan sapma (eşit dağılım)
     var totNc = 0, totWk = 0, sumW = 0, arr = [];
