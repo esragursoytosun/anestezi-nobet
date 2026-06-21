@@ -403,16 +403,30 @@
     if (LS_ITER > 0) {
       function penalty() {
         var s = 0;
+        // ADALET için toplama: kişi başına nöbet sayısı, hafta sonu nöbeti, nöbet günleri (yayılım), hedef ağırlığı
+        var ncArr = [], wkArr = [], wArr = [], totNc = 0, totWk = 0, sumW = 0, spacing = 0;
         for (var i = 0; i < people.length; i++) {
           var Pp = people[i], h = Pp.hours;
           if (h > Pp.target) s += (h - Pp.target) * 7;                      // fazla mesai
           else if (h < Pp.target && !Pp.noNobet) s += (Pp.target - h) * 7;  // eksik saat
-          var run = 0;
+          var run = 0, nc = 0, wk = 0, onDays = [];
           for (var d = 1; d <= nDays; d++) { var c = Pp.assign[d];
+            if (isOncall(c)) { nc++; onDays.push(d); if (days[d - 1].weekend || days[d - 1].holiday) wk++; }
             if (c === 'M' || isOncall(c)) run = 0;
             else if (days[d - 1].workday && (c === 'NI' || c === 'UCI') && !Pp.lockedOff.has(d)) { run++; if (run > P.maxConsecutiveOff) s += 75; else if (run >= 2) s += run * run * 0.5; } }
+          if (!Pp.noNobet) { var w = Pp.target || 1; ncArr.push(nc); wkArr.push(wk); wArr.push(w); totNc += nc; totWk += wk; sumW += w;
+            // YAYILIM: kişinin kendi nöbetleri aya eşit aralıklı mı (kısa aralık cezalı)
+            if (onDays.length > 1) { var ideal = nDays / onDays.length; for (var q = 1; q < onDays.length; q++) { var gap = onDays[q] - onDays[q - 1]; if (gap < ideal) spacing += (ideal - gap); } }
+          }
         }
         for (var k = 0; k < workdayNums.length; k++) { var dn = workdayNums[k], need = dayNeed(days[dn - 1]), g = daytimeCount(dn); if (g < need) s += (need - g) * 55; }
+        // ADALET cezaları: kişinin nöbet/hafta-sonu sayısı, hedef-oranlı ADİL paydan ne kadar sapıyor.
+        for (var f = 0; f < ncArr.length; f++) {
+          var fairNc = totNc * wArr[f] / sumW, fairWk = totWk * wArr[f] / sumW;
+          s += Math.abs(ncArr[f] - fairNc) * 9;      // nöbet sayısı adaleti
+          s += Math.abs(wkArr[f] - fairWk) * 14;     // hafta sonu/tatil nöbeti adaleti (daha değerli)
+        }
+        s += spacing * 2.5;                           // nöbetleri aya eşit yay (kümeleşme/sıkışma)
         return s;
       }
       function mFill() {           // eksik-saatli kişiye boş iş gününde M ekle (hedefe yaklaştır + küme kır)
@@ -547,6 +561,10 @@
       for (var i = 0; i < wd.length; i++) { var c = g[wd[i]], idle = (c === 'NI' || c === 'UCI') && !locked[wd[i]]; if (idle) run++; else { if (run >= 2) s += run * run * 0.1; run = 0; } }
       if (run >= 2) s += run * run * 0.1;
     });
+    // ADALET: nöbet ve hafta sonu nöbeti, hedef-oranlı adil paydan sapma (eşit dağılım)
+    var totNc = 0, totWk = 0, sumW = 0, arr = [];
+    (r.totals || []).forEach(function (t) { if (t.noNobet) return; var nc = (t.nl || 0) + (t.ns || 0), w = t.target || 1; arr.push({ nc: nc, wk: t.weekendNobet || 0, w: w }); totNc += nc; totWk += t.weekendNobet || 0; sumW += w; });
+    arr.forEach(function (a) { s += Math.abs(a.nc - totNc * a.w / sumW) * 4 + Math.abs(a.wk - totWk * a.w / sumW) * 6; });
     return s;
   }
   function sigOf(r) {
