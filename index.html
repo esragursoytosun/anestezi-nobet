@@ -45,8 +45,8 @@
   .shiftrow .sw{width:18px;height:18px}
   /* ---- personel (CSS grid — sütunlar kesin hizalı) ---- */
   .pwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
-  .pgrid{min-width:1040px}
-  .phead,.prow{display:grid;grid-template-columns:30px 150px 78px 78px 112px 300px 112px 180px 40px;align-items:center;gap:8px;padding:7px 8px}
+  .pgrid{min-width:1100px}
+  .phead,.prow{display:grid;grid-template-columns:30px 150px 78px 78px 112px 300px 112px 180px 100px;align-items:center;gap:8px;padding:7px 8px}
   .phead{background:var(--inset);color:var(--muted);font-size:11px;font-weight:600;line-height:1.2;position:sticky;top:0;z-index:1}
   .phead>div,.prow>.ctr{display:flex;justify-content:center;align-items:center;text-align:center}
   .prow{border-top:1px solid var(--line)}
@@ -54,6 +54,8 @@
   .prow input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
   .prow .num{color:var(--muted)} .prow .pref{display:flex;flex-direction:column;gap:4px}
   .prow .pref input{font-size:11px}
+  .rowact{display:flex;gap:3px;justify-content:center}
+  .rowact button{padding:4px 7px;font-size:13px;line-height:1;font-weight:700}
   .daterange{display:flex;align-items:center;gap:4px;margin-bottom:4px}
   .daterange span{color:var(--muted)} .daterange input[type=date]{width:122px;min-width:0;padding:5px 6px}
   /* ---- toolbar ---- */
@@ -252,7 +254,7 @@
     <h2>👥 Personel & Talepler</h2>
     <div class="pwrap"><div class="pgrid">
       <div class="phead">
-        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Sorumlu<br>(nöbet yok)</div><div>Aya N.İ<br>başla</div><div>Haftalık<br>izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün<br>isteği</div><div>Gün tercihi</div><div></div>
+        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Sorumlu<br>(nöbet yok)</div><div>Aya N.İ<br>başla</div><div>Haftalık<br>izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün<br>isteği</div><div>Gün tercihi</div><div>Sırala<br>/ Sil</div>
       </div>
       <div id="pbody"></div>
     </div></div>
@@ -275,7 +277,7 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v11</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v12</b> · anestezi sisteminden bağımsız</div>
 </div>
 
 <script src="asistan-scheduler.js?v=7"></script>
@@ -369,9 +371,16 @@ function addPerson(name){
     <div class="pref">
       <input type="text" class="p-onlyday" placeholder="sadece gündüz: 7,8" title="Bu günlerde nöbet verilmez, sadece gündüz">
       <input type="text" class="p-onlyn16" placeholder="sadece kısa nöbet: 12" title="Bu günlerde uzun değil kısa nöbet"></div>
-    <div class="ctr"><button class="sm danger" onclick="this.closest('.prow').remove();renumber()" title="Sil">×</button></div>`;
+    <div class="rowact">
+      <button class="sm" onclick="moveRow(this,-1)" title="Yukarı taşı">↑</button>
+      <button class="sm" onclick="moveRow(this,1)" title="Aşağı taşı">↓</button>
+      <button class="sm danger" onclick="this.closest('.prow').remove();renumber()" title="Sil">×</button></div>`;
   document.getElementById('pbody').appendChild(row); renumber(); updateDateBounds();
 }
+function moveRow(btn,dir){ const row=btn.closest('.prow'), p=row.parentNode;
+  if(dir<0){ const prev=row.previousElementSibling; if(prev)p.insertBefore(row,prev); }
+  else { const next=row.nextElementSibling; if(next)p.insertBefore(next,row); }
+  renumber(); }
 function renumber(){ [...document.querySelectorAll('#pbody .prow')].forEach((r,i)=>r.querySelector('.num').textContent=i+1); }
 function resetNames(){ document.getElementById('pbody').innerHTML=''; for(let i=1;i<=12;i++)addPerson('Personel '+i); }
 function parseDays(s){ return (s||'').split(',').map(x=>parseInt(x.trim(),10)).filter(x=>x>=1&&x<=31); }
