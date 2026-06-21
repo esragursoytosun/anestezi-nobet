@@ -1,0 +1,444 @@
+/* =====================================================================
+   NÖBET PLANLAMA ASİSTANI — PROFİLE GÖRE AYARLANABİLİR MOTOR
+   ---------------------------------------------------------------------
+   Anestezi scheduler.js'ten BAĞIMSIZ. Tüm "çalışma şartları" bir KURAL
+   PROFİLİ'nden okunur (her birim kendi profilini ayarlar). Temel kısımlar
+   (mesai, izin türleri, aylık hedef mantığı) ortak; profille değişen:
+     - günde kaç nöbetçi (oncallPerDay)
+     - nöbet 24s mı 16s mi (defaultOncall, useShortOncall)
+     - gündüz minimumu (daytimeMin, ekstra günler)
+     - hafta sonu/tatil kuralı (weekendForceLong, weekendOncallPerDay)
+     - izin öncesi nöbet/boşluk (preLeave*), nöbet sonrası dinlenme (postOncallRest)
+     - üst üste en fazla boş gün (maxConsecutiveOff), aylık hedef (targetPerWorkday)
+   Çıktı: { grid, totals, warnings, days, alternatives, ... } (anestezi ile aynı şekil).
+   UMD: tarayıcıda window.AsistanScheduler, Node'da module.exports.
+   ===================================================================== */
+(function (root) {
+  'use strict';
+
+  var DOW_TR = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+
+  // ---- VARSAYILAN PROFİL (Anestezi kuralları) — yeni birim bunu kopyalayıp değiştirir ----
+  function defaultProfile() {
+    return {
+      name: 'Anestezi',
+      mesaiHours: 8, mesaiLabel: 'M8-17',                 // gündüz mesai vardiyası
+      oncallLongHours: 24, oncallLongLabel: 'N08-08', oncallLongDaytime: true,   // 24s nöbet (gündüzü kapsar)
+      oncallShortHours: 16, oncallShortLabel: 'N16-08', oncallShortDaytime: false, // 16s nöbet (gündüzü kapsamaz)
+      useShortOncall: true,                                // 16s nöbet kullanılsın mı
+      defaultOncall: 'long',                               // varsayılan nöbet: 'long'(24) | 'short'(16)
+      oncallPerDay: 2,                                     // hafta içi günde kaç nöbetçi
+      daytimeMin: 2,                                       // hafta içi gündüz min (oncall-daytime + mesai)
+      daytimeExtraDays: [2, 4],                            // ekstra gündüz istenen günler (dow: Sal=2, Per=4)
+      daytimeExtra: 3,                                     // o günlerde gündüz min
+      weekendForceLong: true,                              // hafta sonu/tatil hep uzun (24s) nöbet
+      weekendOncallPerDay: 2,                              // hafta sonu/tatil günde kaç nöbetçi
+      targetPerWorkday: 8,                                 // aylık hedef = bu × iş günü
+      preLeaveOncall: true,                                // yıllık izin öncesi nöbet konsun mu
+      preLeaveDaysBefore: 4,                               // izinden kaç iş günü önce nöbet (tercih)
+      preLeaveDaysBeforeFallback: 3,                       // olmazsa kaç iş günü önce
+      preLeaveGap: 2,                                      // izinden hemen önce kaç iş günü boş (ücretli izin)
+      postOncallRest: 1,                                   // nöbet sonrası kaç gün dinlenme (N.İ)
+      maxConsecutiveOff: 3,                                // üst üste en fazla kaç boş iş günü
+      minStaffWarn: 12                                     // bu sayının altında "kapasite sınırda" uyarısı
+    };
+  }
+
+  function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
+  function dow(y, m, d) { return new Date(y, m, d).getDay(); }
+  function isWeekend(w) { return w === 0 || w === 6; }
+  function clampProfile(p) { var d = defaultProfile(); var r = {}; for (var k in d) r[k] = (p && p[k] !== undefined) ? p[k] : d[k]; return r; }
+
+  // Vardiya kodları sabit arketip: M(mesai), NL(uzun nöbet), NS(kısa nöbet) + izin türleri.
+  // Profil bunların SAATİNİ/etiketini/gündüz-sayılıp-sayılmadığını belirler.
+  function hoursMap(P) {
+    return { M: P.mesaiHours, NL: P.oncallLongHours, NS: P.oncallShortHours,
+      NI: 0, HT: 0, RT: 0, YI: 0, OFF: 0, UCI: 0, '': 0 };
+  }
+  function isOncall(c) { return c === 'NL' || c === 'NS'; }
+  function coversDaytime(c, P) {
+    if (c === 'M') return true;
+    if (c === 'NL') return !!P.oncallLongDaytime;
+    if (c === 'NS') return !!P.oncallShortDaytime;
+    return false;
+  }
+
+  // ===== ANALİZ (tek doğruluk kaynağı) =====
+  function analyze(grid, plist, daysArr, nDays, P) {
+    var HOURS = hoursMap(P), warnings = [];
+    function present(c) { return c === 'M' || isOncall(c); }
+    function dayNeed(dd) { return (dd.workday && P.daytimeExtraDays.indexOf(dd.dow) >= 0) ? P.daytimeExtra : P.daytimeMin; }
+    function oncallNeed(dd) { return (dd.weekend || dd.holiday) ? P.weekendOncallPerDay : P.oncallPerDay; }
+
+    var totals = plist.map(function (p) {
+      var a = grid[p.name] || {}, hours = 0, mesai = 0, nl = 0, ns = 0, ni = 0, uci = 0, wkn = 0;
+      for (var d = 1; d <= nDays; d++) {
+        var c = a[d] || ''; hours += HOURS[c] || 0;
+        if (c === 'M') mesai++; else if (c === 'NL') nl++; else if (c === 'NS') ns++;
+        else if (c === 'NI') ni++; else if (c === 'UCI') uci++;
+        if (isOncall(c) && (daysArr[d - 1].weekend || daysArr[d - 1].holiday)) wkn++;
+      }
+      var fark = hours - p.target;
+      if (fark > 0) warnings.push(p.name + ': FAZLA MESAİ ' + fark + ' saat (hedef ' + p.target + ').');
+      else if (fark < 0) {
+        if (p.noNobet) {
+          var avail = daysArr.filter(function (dd) { return dd.workday && a[dd.day] !== 'YI' && a[dd.day] !== 'OFF'; }).length;
+          warnings.push(p.name + ' (sorumlu · sadece gündüz): bu ay ' + avail + ' iş günü var → en fazla ' + (avail * P.mesaiHours) + ' saat.');
+        } else warnings.push(p.name + ': EKSİK ' + (-fark) + ' saat (hedef ' + p.target + ', toplam ' + hours + ').');
+      }
+      // üst üste boş iş günü (lockedOff hariç)
+      var locked = {}; (p.lockedOff || []).forEach(function (x) { locked[x] = 1; });
+      var best = 0, run = 0;
+      for (var d2 = 1; d2 <= nDays; d2++) {
+        var c2 = a[d2] || '';
+        if (present(c2)) run = 0;
+        else if (daysArr[d2 - 1].workday && (c2 === 'NI' || c2 === 'UCI') && !locked[d2]) { run++; if (run > best) best = run; }
+      }
+      if (best > P.maxConsecutiveOff) warnings.push(p.name + ': ' + best + ' iş günü üst üste izinli/boşta (en fazla ' + P.maxConsecutiveOff + ' olmalı).');
+      return { name: p.name, target: p.target, hours: hours, fark: fark, mesai: mesai, nl: nl, ns: ns,
+        ni: ni, uci: uci, weekendNobet: wkn, noNobet: !!p.noNobet, lockedOff: p.lockedOff || [] };
+    });
+
+    daysArr.forEach(function (dd) {
+      var nob = 0, gun = 0;
+      plist.forEach(function (p) { var c = (grid[p.name] || {})[dd.day]; if (isOncall(c)) nob++; if (!p.noNobet && coversDaytime(c, P)) gun++; });
+      var needN = oncallNeed(dd);
+      if (nob < needN) warnings.push(dd.day + '. gün (' + dd.dowName + '): sadece ' + nob + ' nöbetçi (' + needN + ' gerekli).');
+      if (dd.workday && gun < dayNeed(dd)) warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüzde ' + gun + ' kişi (en az ' + dayNeed(dd) + ' olmalı).');
+    });
+
+    var nNobet = plist.filter(function (p) { return !p.noNobet; }).length;
+    var hasGap = warnings.some(function (w) { return /sadece \d+ nöbetçi|gündüzde \d+ kişi|üst üste izinli/.test(w); });
+    if (hasGap && nNobet < P.minStaffWarn) {
+      warnings.push('💡 ÖNERİ: Bu ay ' + nNobet + ' nöbetçi kişi var; bu izin yoğunluğu için kapasite sınırda. ' +
+        'Çözüm: çakışan izinleri farklı haftalara yayın ya da o ay 1 kişi daha ekleyin.');
+    }
+    return { totals: totals, warnings: warnings };
+  }
+
+  // ===== TEK LİSTE ÜRETİMİ =====
+  function buildOne(config) {
+    var P = clampProfile(config.profile);
+    var year = config.year, month = config.month, nDays = daysInMonth(year, month);
+    var holidays = new Set(config.holidays || []);
+    var HOURS = hoursMap(P);
+    var variant = config.__variant || 0;
+    var _s = (variant * 2654435761 + 1013904223) >>> 0;
+    function rnd() { _s = (_s * 1664525 + 1013904223) >>> 0; return _s / 4294967296; }
+
+    var days = [];
+    for (var d = 1; d <= nDays; d++) {
+      var w = dow(year, month, d);
+      days.push({ day: d, dow: w, dowName: DOW_TR[w], weekend: isWeekend(w), holiday: holidays.has(d),
+        isExtra: (P.daytimeExtraDays.indexOf(w) >= 0), workday: (!isWeekend(w) && !holidays.has(d)) });
+    }
+    var workdayNums = days.filter(function (x) { return x.workday; }).map(function (x) { return x.day; });
+    var baseTarget = P.targetPerWorkday * workdayNums.length;
+    function dayNeed(dd) { return (dd.workday && dd.isExtra) ? P.daytimeExtra : P.daytimeMin; }
+    function oncallNeed(dd) { return (dd.weekend || dd.holiday) ? P.weekendOncallPerDay : P.oncallPerDay; }
+
+    var people = config.personnel.map(function (p, idx) {
+      var YI = new Set(p.leaveYI || []);
+      var offDow = (p.offDay != null) ? p.offDay : null;
+      var assign = {}, lockedOff = new Set(), mustMesai = new Set();
+      var offDays = 0;
+      days.forEach(function (dd) {
+        var dn = dd.day;
+        if (YI.has(dn)) { assign[dn] = 'YI'; }
+        else if (offDow != null && dd.dow === offDow && dd.workday) { assign[dn] = 'OFF'; offDays++; }
+        else if (dd.holiday) assign[dn] = 'RT';
+        else if (dd.weekend) assign[dn] = 'HT';
+        else assign[dn] = '';
+      });
+      // hedef: iş günü başına targetPerWorkday; yıllık izin + haftalık izin günü DÜŞER (gün×targetPerWorkday)
+      var leaveWork = workdayNums.filter(function (x) { return YI.has(x); }).length;
+      var target = baseTarget - (leaveWork + offDays) * P.targetPerWorkday;
+      return { name: p.name, idx: idx, noNobet: !!p.noNobet, startNI: !!p.startNI,
+        onlyDay: new Set(p.onlyDay || []), onlyN16: new Set(p.onlyN16 || []), offReq: new Set(p.offReq || []),
+        assign: assign, target: target, hours: 0, nobetDays: [], lastNobet: -99, weekendNobet: 0,
+        lockedOff: lockedOff, mustMesai: mustMesai };
+    });
+    // aylar arası devir: önceki ayın son nöbetçisi 1. gün N.İ
+    people.forEach(function (Pp) {
+      if (Pp.startNI && Pp.assign[1] === '') { Pp.assign[1] = 'NI'; }
+      // boş gün isteği -> kesin boş (UCI sayılmaz; sadece nöbet/mesai yazılmaz)
+      Pp.offReq.forEach(function (dn) { if (Pp.assign[dn] === '') Pp.assign[dn] = 'UCI'; Pp.lockedOff.add(dn); });
+    });
+
+    function hoursOf(Pp) { var h = 0; for (var d = 1; d <= nDays; d++) h += HOURS[Pp.assign[d]] || 0; return h; }
+    function daytimeCount(day) { var c = 0; people.forEach(function (Pp) { if (!Pp.noNobet && coversDaytime(Pp.assign[day], P)) c++; }); return c; }
+    function oncallCount(day) { var c = 0; people.forEach(function (Pp) { if (isOncall(Pp.assign[day])) c++; }); return c; }
+    function absentRun(Pp, d) { var c = Pp.assign[d]; return (c === 'NI' || c === 'UCI') && !Pp.lockedOff.has(d); }
+    function longestAbsentRun(Pp) {
+      var best = 0, run = 0;
+      for (var d = 1; d <= nDays; d++) {
+        var c = Pp.assign[d];
+        if (c === 'M' || isOncall(c)) run = 0;
+        else if (days[d - 1].workday && absentRun(Pp, d)) { run++; if (run > best) best = run; }
+      }
+      return best;
+    }
+    function defType() { return P.defaultOncall === 'short' && P.useShortOncall ? 'NS' : 'NL'; }
+
+    function eligible(Pp, dd, kind, strict) {
+      var d = dd.day, cur = Pp.assign[d];
+      if (Pp.noNobet) return false;
+      if (Pp.onlyDay.has(d)) return false;
+      if (Pp.onlyN16.has(d) && kind === 'NL') return false;
+      if (Pp.lockedOff.has(d) || Pp.offReq.has(d)) return false;
+      if (cur !== '' ) return false;
+      if (d > 1 && isOncall(Pp.assign[d - 1])) return false;
+      if (d < nDays) { var nx = Pp.assign[d + 1]; if (isOncall(nx) || nx === 'YI' || nx === 'UCI') return false; }
+      if (Pp.hours + HOURS[kind] > Pp.target) return false;
+      if (strict) {
+        var cnt = 0; for (var k = Math.max(1, d - 6); k <= d; k++) if (isOncall(Pp.assign[k])) cnt++;
+        if (cnt >= 3) return false;
+      }
+      return true;
+    }
+    function placeOncall(Pp, dd, kind) {
+      var d = dd.day; Pp.assign[d] = kind; Pp.hours += HOURS[kind]; Pp.nobetDays.push(d); Pp.lastNobet = d;
+      if (dd.weekend || dd.holiday) Pp.weekendNobet++;
+      // nöbet sonrası dinlenme (postOncallRest gün)
+      for (var r = 1; r <= P.postOncallRest && d + r <= nDays; r++) {
+        var nx = Pp.assign[d + r]; if (nx === '' || nx === 'HT' || nx === 'RT') Pp.assign[d + r] = 'NI'; else break;
+      }
+    }
+    function addMesai(Pp, day) { Pp.assign[day] = 'M'; Pp.hours += P.mesaiHours; }
+
+    // ---- 0.5) İZİN ÖNCESİ NÖBET + BOŞLUK ----
+    if (P.preLeaveOncall) people.forEach(function (Pp) {
+      var starts = [];
+      for (var d = 1; d <= nDays; d++) if (Pp.assign[d] === 'YI' && (d === 1 || Pp.assign[d - 1] !== 'YI')) starts.push(d);
+      starts.forEach(function (bs) {
+        var wprev = workdayNums.filter(function (x) { return x < bs; }).sort(function (a, b) { return b - a; });
+        var placed = false;
+        if (!Pp.noNobet) {
+          [P.preLeaveDaysBefore - 1, P.preLeaveDaysBeforeFallback - 1].some(function (ni) {
+            var nd = wprev[ni];
+            if (nd === undefined || Pp.assign[nd] !== '' || Pp.hours + HOURS[defType()] > Pp.target) return false;
+            placeOncall(Pp, days[nd - 1], defType());
+            for (var g = nd + 1; g < bs; g++) { Pp.lockedOff.add(g); if (Pp.assign[g] === '') Pp.assign[g] = 'UCI'; }
+            placed = true; return true;
+          });
+        }
+        if (!placed) for (var i = 0; i < P.preLeaveGap; i++) { var dd2 = wprev[i]; if (dd2 !== undefined && Pp.assign[dd2] === '') { Pp.assign[dd2] = 'UCI'; Pp.lockedOff.add(dd2); } }
+      });
+    });
+
+    // ---- 1) NÖBET KAPSAMA (greedy) ----
+    function pickCandidate(dd, kind, strict) {
+      var pool = people.filter(function (Pp) { return eligible(Pp, dd, kind, strict); });
+      if (!pool.length) return null;
+      if (variant) pool.forEach(function (Pp) { Pp._rk = rnd(); });
+      pool.sort(function (a, b) {
+        if (dd.weekend || dd.holiday) { if (a.weekendNobet !== b.weekendNobet) return a.weekendNobet - b.weekendNobet; }
+        var pa = a.hours / (a.target || 1), pb = b.hours / (b.target || 1);
+        var band = variant ? 0.10 : 0.0001;
+        if (Math.abs(pa - pb) > band) return pa - pb;
+        if (variant) return a._rk - b._rk;
+        if (a.lastNobet !== b.lastNobet) return a.lastNobet - b.lastNobet;
+        return a.idx - b.idx;
+      });
+      return pool[0];
+    }
+    days.forEach(function (dd) {
+      var need = oncallNeed(dd);
+      for (var slot = oncallCount(dd.day); slot < need; slot++) {
+        var kind = (dd.weekend || dd.holiday) ? (P.weekendForceLong ? 'NL' : defType()) : defType();
+        var cand = pickCandidate(dd, kind, true) || pickCandidate(dd, kind, false);
+        if (!cand && dd.workday && P.useShortOncall && kind === 'NL') { kind = 'NS'; cand = pickCandidate(dd, kind, true) || pickCandidate(dd, kind, false); }
+        if (cand) placeOncall(cand, dd, kind);
+      }
+    });
+
+    // ---- 1.5) KAPSAMA GARANTİSİ (mesai doldurmadan ÖNCE — overtime önler) ----
+    function coverEligible(Pp, dd, kind) {
+      var d = dd.day, cur = Pp.assign[d];
+      if (Pp.noNobet || Pp.onlyDay.has(d)) return false;
+      if (Pp.onlyN16.has(d) && kind === 'NL') return false;
+      if (Pp.lockedOff.has(d) || Pp.offReq.has(d)) return false;
+      if (cur === 'YI' || cur === 'OFF' || cur === 'NI' || isOncall(cur)) return false;
+      if (d > 1 && isOncall(Pp.assign[d - 1])) return false;
+      if (d < nDays) { var nx = Pp.assign[d + 1]; if (nx === 'M' || isOncall(nx) || nx === 'YI') return false; }
+      return true;
+    }
+    function freeBudget(Pp, needH, excl, allowBreak) {
+      var conv = [], freed = 0;
+      for (var m = 0; m < workdayNums.length && freed < needH; m++) {
+        var dm = workdayNums[m];
+        if (dm === excl || Pp.assign[dm] !== 'M' || Pp.mustMesai.has(dm)) continue;
+        if (!allowBreak && daytimeCount(dm) - 1 < dayNeed(days[dm - 1])) continue;
+        Pp.assign[dm] = 'UCI'; Pp.hours -= P.mesaiHours;
+        if (longestAbsentRun(Pp) > P.maxConsecutiveOff) { Pp.assign[dm] = 'M'; Pp.hours += P.mesaiHours; continue; }
+        conv.push(dm); freed += P.mesaiHours;
+      }
+      return { conv: conv, freed: freed };
+    }
+    function placeCover(Pp, dd, kind) {
+      var d = dd.day, net = HOURS[kind] - (HOURS[Pp.assign[d]] || 0);
+      Pp.hours += net; Pp.assign[d] = kind; Pp.nobetDays.push(d); Pp.lastNobet = d;
+      if (dd.weekend || dd.holiday) Pp.weekendNobet++;
+      for (var r = 1; r <= P.postOncallRest && d + r <= nDays; r++) { var nx = Pp.assign[d + r]; if (nx === '' || nx === 'HT' || nx === 'RT' || nx === 'UCI') Pp.assign[d + r] = 'NI'; else break; }
+    }
+    function tryCover(dd, kind) {
+      var d = dd.day, addH = HOURS[kind];
+      var pool = people.filter(function (Pp) { return coverEligible(Pp, dd, kind); });
+      if (!pool.length) return false;
+      if (variant) pool.forEach(function (Pp) { Pp._rk = rnd(); });
+      pool.sort(function (a, b) { var ra = a.target - a.hours, rb = b.target - b.hours; if (ra !== rb) return rb - ra; if (variant) return a._rk - b._rk; return a.lastNobet - b.lastNobet; });
+      function attempt(Pp, allowBreak) {
+        var over = (Pp.hours + (addH - (HOURS[Pp.assign[d]] || 0))) - Pp.target;
+        if (over <= 0) { placeCover(Pp, dd, kind); return true; }
+        var r = freeBudget(Pp, over, d, allowBreak);
+        if (r.freed >= over) { placeCover(Pp, dd, kind); return true; }
+        r.conv.forEach(function (dm) { Pp.assign[dm] = 'M'; Pp.hours += P.mesaiHours; }); return false;
+      }
+      var i;
+      for (i = 0; i < pool.length; i++) if (attempt(pool[i], false)) return true;
+      for (i = 0; i < pool.length; i++) if (attempt(pool[i], true)) return true;
+      var Q = pool[0], over2 = (Q.hours + (addH - (HOURS[Q.assign[d]] || 0))) - Q.target;
+      if (over2 > 0) freeBudget(Q, over2, d, true);
+      placeCover(Q, dd, kind); return true;
+    }
+    function guaranteeCoverage() {
+      days.forEach(function (dd) {
+        var need = oncallNeed(dd);
+        for (var guard = 0; guard < need && oncallCount(dd.day) < need; guard++) {
+          var longK = (dd.weekend || dd.holiday) ? (P.weekendForceLong ? 'NL' : defType()) : defType();
+          var ok = tryCover(dd, longK);
+          if (!ok && dd.workday && P.useShortOncall && longK === 'NL') ok = tryCover(dd, 'NS');
+          if (!ok) break;
+        }
+      });
+    }
+    guaranteeCoverage();
+
+    // ---- 2) MESAİ İLE HEDEFE TAMAMLA ----
+    people.forEach(function (Pp) {
+      if (Pp.target - Pp.hours < P.mesaiHours) return;
+      // izin dönüşü ilk iş günü zorunlu çalışma korunur (mustMesai) — basit: izin sonrası ilk boş iş günü
+      days.forEach(function (dd) {
+        if (Pp.target - Pp.hours < P.mesaiHours) return;
+        if (dd.workday && Pp.assign[dd.day] === '' && !Pp.offReq.has(dd.day)) addMesai(Pp, dd.day);
+      });
+    });
+
+    // ---- 2.5) KALAN BOŞ İŞ GÜNLERİ -> ÜCRETLİ İZİN ----
+    people.forEach(function (Pp) { days.forEach(function (dd) { if (dd.workday && Pp.assign[dd.day] === '') Pp.assign[dd.day] = 'UCI'; }); });
+
+    guaranteeCoverage();  // güvenlik ağı
+
+    // ---- 2.6) ÜST ÜSTE BOŞ SINIRI: mesai taşıyarak kır ----
+    people.forEach(function (Pp) {
+      for (var guard = 0; guard < 60; guard++) {
+        if (longestAbsentRun(Pp) <= P.maxConsecutiveOff) break;
+        // seri içinde bir UCI'yi M yap, dengelemek için fazlası olan bir M'yi UCI yap
+        var moved = false, runs = [], cur = [];
+        for (var d = 1; d <= nDays; d++) { var c = Pp.assign[d]; if (c === 'M' || isOncall(c)) { if (cur.length) { runs.push(cur); cur = []; } } else if (days[d - 1].workday && absentRun(Pp, d)) cur.push(d); }
+        if (cur.length) runs.push(cur);
+        var best = null; runs.forEach(function (rn) { if (rn.length > P.maxConsecutiveOff && (!best || rn.length > best.length)) best = rn; });
+        if (!best) break;
+        var mid = -1; for (var k = P.maxConsecutiveOff; k < best.length; k++) if (Pp.assign[best[k]] === 'UCI') { mid = best[k]; break; }
+        if (mid < 0) break;
+        for (var m = 0; m < workdayNums.length; m++) {
+          var dm = workdayNums[m];
+          if (Pp.assign[dm] !== 'M' || (dm >= best[0] && dm <= best[best.length - 1])) continue;
+          if (daytimeCount(dm) - 1 < dayNeed(days[dm - 1])) continue;
+          Pp.assign[dm] = 'UCI'; Pp.assign[mid] = 'M';
+          if (longestAbsentRun(Pp) <= P.maxConsecutiveOff || longestAbsentRun(Pp) < best.length) { moved = true; break; }
+          Pp.assign[dm] = 'M'; Pp.assign[mid] = 'UCI';
+        }
+        if (!moved) break;
+      }
+    });
+
+    // ---- 2.7) GÜNDÜZ MİNİMUMU: saat-korumalı takasla tamamla ----
+    days.forEach(function (dd) {
+      if (!dd.workday) return; var need = dayNeed(dd);
+      for (var guard = 0; guard < 40 && daytimeCount(dd.day) < need; guard++) {
+        var done = false;
+        for (var pi = 0; pi < people.length && !done; pi++) {
+          var Pp = people[pi];
+          if (Pp.noNobet || Pp.assign[dd.day] !== 'UCI' || Pp.offReq.has(dd.day) || Pp.lockedOff.has(dd.day)) continue;
+          for (var m = 0; m < workdayNums.length && !done; m++) {
+            var dm = workdayNums[m];
+            if (dm === dd.day || Pp.assign[dm] !== 'M' || Pp.mustMesai.has(dm)) continue;
+            if (daytimeCount(dm) - 1 < dayNeed(days[dm - 1])) continue;
+            Pp.assign[dm] = 'UCI'; Pp.assign[dd.day] = 'M';
+            if (longestAbsentRun(Pp) > P.maxConsecutiveOff) { Pp.assign[dm] = 'M'; Pp.assign[dd.day] = 'UCI'; continue; }
+            done = true;
+          }
+        }
+        if (!done) break;
+      }
+    });
+
+    // ---- 2.97) FAZLA MESAİ GİDERME: uzun nöbeti kısa nöbete indir (gündüz min'i bozmadan) ----
+    if (P.useShortOncall) people.forEach(function (Pp) {
+      if (Pp.noNobet) return;
+      for (var d = 1; d <= nDays && Pp.hours > Pp.target; d++) {
+        if (Pp.assign[d] !== 'NL' || !days[d - 1].workday) continue;
+        // uzun gündüzü kapsıyorsa indirince gündüz düşer -> koru
+        if (P.oncallLongDaytime && !P.oncallShortDaytime && daytimeCount(d) - 1 < dayNeed(days[d - 1])) continue;
+        Pp.assign[d] = 'NS'; Pp.hours -= (P.oncallLongHours - P.oncallShortHours);
+      }
+    });
+
+    var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });
+    var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, noNobet: Pp.noNobet, lockedOff: Array.from(Pp.lockedOff) }; });
+    var av = analyze(gridA, plist, days, nDays, P);
+    return { year: year, month: month, nDays: nDays, days: days, grid: gridA, totals: av.totals, warnings: av.warnings,
+      profile: P, meta: { base: baseTarget } };
+  }
+
+  // ===== MULTI-START + ALTERNATİFLER =====
+  function scoreResult(r, P) {
+    var s = 0;
+    (r.warnings || []).forEach(function (w) {
+      if (w.charAt(0) === '💡') return;
+      if (/sadece \d+ nöbetçi/.test(w)) s += 100000;
+      else if (/FAZLA MESAİ/.test(w)) s += 1000;
+      else if (/EKSİK/.test(w)) s += 600;
+      else if (/üst üste izinli|gündüzde \d+ kişi/.test(w)) s += 100;
+      else s += 10;
+    });
+    var wd = (r.days || []).filter(function (d) { return d.workday; }).map(function (d) { return d.day; });
+    (r.totals || []).forEach(function (t) {
+      if (t.noNobet) return; var locked = {}; (t.lockedOff || []).forEach(function (d) { locked[d] = 1; });
+      var g = r.grid[t.name] || {}, run = 0;
+      for (var i = 0; i < wd.length; i++) { var c = g[wd[i]], idle = (c === 'NI' || c === 'UCI') && !locked[wd[i]]; if (idle) run++; else { if (run >= 2) s += run * run * 0.1; run = 0; } }
+      if (run >= 2) s += run * run * 0.1;
+    });
+    return s;
+  }
+  function sigOf(r) {
+    var parts = [];
+    (r.totals || []).forEach(function (t) { var g = r.grid[t.name] || {}, on = []; for (var d = 1; d <= (r.nDays || 31); d++) if (isOncall(g[d])) on.push(d + (g[d] === 'NS' ? 's' : '')); parts.push(on.join(',')); });
+    return parts.join('|');
+  }
+  function buildSchedule(config) {
+    if (config && config.__variant !== undefined) return buildOne(config);
+    var attempts = (config && config.__attempts) || 50;
+    if (attempts <= 1) { var c0 = {}; for (var k0 in config) c0[k0] = config[k0]; c0.__variant = 0; return buildOne(c0); }
+    var P = clampProfile(config.profile), cands = [];
+    for (var v = 0; v < attempts; v++) {
+      var c = {}; for (var k in config) c[k] = config[k]; c.__variant = v;
+      var r = buildOne(c); r.__score = scoreResult(r, P); r.__sig = sigOf(r); cands.push(r);
+    }
+    cands.sort(function (a, b) { return a.__score - b.__score; });
+    var seen = {}, alts = [];
+    for (var i = 0; i < cands.length && alts.length < 6; i++) if (!seen[cands[i].__sig]) { seen[cands[i].__sig] = 1; alts.push(cands[i]); }
+    var best = alts[0]; best.alternatives = alts; return best;
+  }
+  function recompute(result) {
+    var P = clampProfile(result.profile);
+    var plist = (result.totals || []).map(function (t) { return { name: t.name, target: t.target, noNobet: t.noNobet, lockedOff: t.lockedOff || [] }; });
+    return analyze(result.grid, plist, result.days, result.nDays, P);
+  }
+
+  var API = { buildSchedule: buildSchedule, recompute: recompute, defaultProfile: defaultProfile,
+    daysInMonth: daysInMonth, DOW_TR: DOW_TR, hoursMap: hoursMap };
+  if (typeof module !== 'undefined' && module.exports) module.exports = API;
+  else root.AsistanScheduler = API;
+})(typeof window !== 'undefined' ? window : this);
