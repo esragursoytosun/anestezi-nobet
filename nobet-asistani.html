@@ -45,6 +45,32 @@
   .muted{color:var(--muted)} .note{background:var(--inset);border:1px dashed var(--line);border-radius:8px;padding:8px 12px;font-size:12.5px;color:var(--muted)}
   .collapsed .body{display:none}
   .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
+  /* --- profesyonel cila --- */
+  .panel{box-shadow:0 2px 10px rgba(0,0,0,.25)}
+  button{transition:background .15s,transform .05s} button:active{transform:translateY(1px)}
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+  table.grid td[data-d]{cursor:pointer;transition:filter .1s} table.grid td[data-d]:hover{filter:brightness(1.25)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:15px;height:15px;border-radius:4px;display:inline-block;border:1px solid rgba(255,255,255,.15)}
+  .toolbar{position:sticky;top:0;z-index:5;background:rgba(15,23,42,.85);backdrop-filter:blur(6px);padding:10px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--line)}
+  .altbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 12px;padding:10px;border:1px dashed var(--accent);border-radius:10px;max-height:120px;overflow:auto}
+  .altbtn{border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:var(--txt);padding:5px 10px;font-size:12px;cursor:pointer}
+  .altbtn.act{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .altbtn.star::after{content:' ★';color:#fde047}
+  @media print{
+    @page{size:A4 landscape;margin:6mm}
+    body{background:#fff;color:#000} header,.toolbar,.note,.altbar,#rulePanel,.panel:has(#ptable),button,.foot{display:none!important}
+    .panel{box-shadow:none;border:0;padding:0;margin:0}
+    .wrap{margin:0;padding:0;max-width:none}
+    table.grid{width:100%;table-layout:fixed;font-size:7px}
+    table.grid th,table.grid td{border:1px solid #999;padding:1px;color:#000!important}
+    table.grid td[data-d]{font-weight:700}
+    td.M{background:#bfdbfe!important} td.NL{background:#fecaca!important} td.NS{background:#fed7aa!important}
+    td.NI{background:#e5e7eb!important} td.HT{background:#e5e7eb!important} td.RT{background:#ddd6fe!important}
+    td.YI{background:#bbf7d0!important} td.UCI{background:#cffafe!important} td.OFF{background:#fbcfe8!important}
+    th.wknd{background:#fde68a!important} .warns{border:1px solid #999;color:#000}
+  }
 </style>
 </head>
 <body>
@@ -60,6 +86,7 @@
     <h2>⚙️ Birim / Kural Profili
       <select id="profSel" style="margin-left:8px"></select>
       <button class="sm" onclick="newProfile()">+ Yeni profil</button>
+      <button class="sm" onclick="renameProfile()">✎ Adı</button>
       <button class="sm" onclick="dupProfile()">⧉ Kopyala</button>
       <button class="sm danger" onclick="delProfile()">Sil</button>
       <button class="sm sec" onclick="toggleRules()" id="toggleRulesBtn" style="margin-left:auto">▾ Dağılım seçeneklerini gizle/göster</button>
@@ -143,16 +170,21 @@
     </div>
   </div>
 
-  <div style="display:flex;gap:10px;flex-wrap:wrap">
+  <div class="toolbar">
     <button onclick="generate()">⚙️ Liste Oluştur</button>
     <button class="sec" onclick="saveAll()">💾 Kaydet</button>
+    <span style="width:1px;height:24px;background:var(--line)"></span>
+    <button class="sec sm" onclick="exportXLS()">📊 Excel</button>
+    <button class="sec sm" onclick="exportCSV()">📄 CSV</button>
+    <button class="sec sm" onclick="window.print()">🖨️ Yazdır / PDF</button>
+    <span id="altInfo" class="muted" style="margin-left:auto;font-size:12px"></span>
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v1 (çatı)</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v2</b> · anestezi sisteminden bağımsız</div>
 </div>
 
-<script src="asistan-scheduler.js?v=1"></script>
+<script src="asistan-scheduler.js?v=2"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -257,13 +289,14 @@ function pickAlt(i){ if(!ALTS[i])return; ALT_I=i; LAST=ALTS[i]; render(LAST); fl
 function render(r){
   const out=document.getElementById('output'); const p=curProfile();
   let h=`<div class="panel"><h2>📋 ${MONTHS[r.month]} ${r.year} — ${p.name} Nöbet Listesi</h2>`;
+  const ai=document.getElementById('altInfo');
   if(ALTS&&ALTS.length>1){
-    h+=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 10px;padding:8px;border:1px dashed var(--accent);border-radius:8px">
-      <span style="font-size:13px;font-weight:600">🔀 Alternatif listeler:</span>`+
-      ALTS.map((a,i)=>{const w=(a.warnings||[]).filter(x=>x.charAt(0)!=='💡').length;const act=i===ALT_I;
-        return `<button class="sm" onclick="pickAlt(${i})" style="border:1px solid ${act?'var(--accent)':'var(--line)'};${act?'background:var(--accent);color:#fff':'background:transparent'}">Alternatif ${i+1}${w===0?' ✓':' ('+w+')'}</button>`;}).join('')+
-      `<span class="muted" style="font-size:12px">— beğendiğinizi seçin. ✓ = sorunsuz.</span></div>`;
-  }
+    if(ai) ai.textContent=ALTS.length+' alternatif'+(r.meta&&r.meta.tried?' ('+r.meta.tried+' deneme)':'');
+    h+=`<div class="altbar"><span style="font-size:13px;font-weight:600">🔀 Alternatif listeler:</span>`+
+      ALTS.map((a,i)=>{const w=(a.warnings||[]).filter(x=>x.charAt(0)!=='💡').length;
+        return `<button class="altbtn${i===ALT_I?' act':''}${i===0?' star':''}" onclick="pickAlt(${i})" title="${i===0?'önerilen (en düzgün)':''}${w===0?' sorunsuz':' '+w+' uyarı'}">${i+1}${w===0?' ✓':' ('+w+')'}</button>`;}).join('')+
+      `<span class="muted" style="font-size:12px;margin-left:4px">— beğendiğinizi seçin. ★=önerilen · ✓=sorunsuz</span></div>`;
+  } else if(ai) ai.textContent='';
   h+=`<div class="gridwrap"><table class="grid"><thead><tr><th class="name">Personel</th>`;
   r.days.forEach(d=>{ h+=`<th class="${d.weekend||d.holiday?'wknd':''}">${d.day}<br><span class="muted">${d.dowName}</span></th>`; });
   h+=`<th class="tot">Hedef</th><th class="tot">Top.</th><th class="tot">Fark</th><th class="tot">${p.mesaiLabel}</th><th class="tot">${p.oncallLongLabel}</th><th class="tot">${p.oncallShortLabel}</th><th class="tot">Nİ</th><th class="tot">Ü.İ</th><th class="tot">HSn</th></tr></thead><tbody>`;
@@ -280,6 +313,16 @@ function render(r){
   h+=`<td class="tot" colspan="9"></td></tr><tr style="font-weight:700"><td class="name">🌙 Nöbetçi</td>`;
   r.days.forEach(d=>{const c=dc(d.day);const need=(d.weekend||d.holiday)?p.weekendOncallPerDay:p.oncallPerDay;h+=`<td class="tot ${c.nob<need?'bad':'good'}">${c.nob}</td>`;});
   h+=`<td class="tot" colspan="9"></td></tr></tbody></table></div>`;
+  h+=`<div class="legend">
+    <span><i class="sw" style="background:var(--c-M)"></i> ${p.mesaiLabel} (${p.mesaiHours}s · gündüz)</span>
+    <span><i class="sw" style="background:var(--c-NL)"></i> ${p.oncallLongLabel} (${p.oncallLongHours}s · uzun nöbet)</span>
+    <span><i class="sw" style="background:var(--c-NS)"></i> ${p.oncallShortLabel} (${p.oncallShortHours}s · kısa nöbet)</span>
+    <span><i class="sw" style="background:var(--c-NI)"></i> N.İ (nöbet sonrası)</span>
+    <span><i class="sw" style="background:var(--c-YI)"></i> Yıllık izin</span>
+    <span><i class="sw" style="background:var(--c-UCI)"></i> Ücretli izin</span>
+    <span><i class="sw" style="background:var(--c-HT)"></i> Hafta sonu</span>
+    <span><i class="sw" style="background:var(--c-RT)"></i> Resmi tatil</span>
+    <span><i class="sw" style="background:var(--c-OFF)"></i> Haftalık izin</span></div>`;
   if(r.warnings.length){ h+=`<div class="warns"><b>⚠️ ${r.warnings.length} uyarı / not</b><ul>`+r.warnings.map(w=>`<li>${w}</li>`).join('')+`</ul></div>`; }
   else h+=`<div class="warns ok"><b>✓ Liste hazır.</b> Herkes hedefini tuttu, her gün yeterli nöbetçi var, fazla mesai yok.</div>`;
   h+=`</div>`; out.innerHTML=h;
@@ -293,6 +336,28 @@ function editCell(td){ if(!LAST||td.querySelector('select'))return;
   sel.addEventListener('change',()=>{LAST.grid[name][d]=sel.value;const re=AsistanScheduler.recompute(LAST);LAST.totals=re.totals;LAST.warnings=re.warnings;ALTS=[LAST];ALT_I=0;render(LAST);});
   sel.addEventListener('blur',()=>render(LAST));
 }
+
+// ---- DIŞA AKTARMA ----
+function exportCSV(){ if(!LAST){alert('Önce liste oluşturun.');return;} const r=LAST,p=curProfile();
+  const head=['Personel'].concat(r.days.map(d=>d.day+' '+d.dowName)).concat(['Hedef','Toplam','Fark',p.mesaiLabel,p.oncallLongLabel,p.oncallShortLabel,'Nİ','Üİ','HSn']);
+  const rows=[head];
+  r.totals.forEach(t=>{ const g=r.grid[t.name]; const row=[t.name].concat(r.days.map(d=>codeLabel(g[d.day]||'')));
+    row.push(t.target,t.hours,(t.fark>0?'+':'')+t.fark,t.mesai,t.nl,t.ns,t.ni,t.uci,t.weekendNobet); rows.push(row); });
+  const csv=rows.map(rw=>rw.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  dl(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),fname('csv')); }
+function exportXLS(){ if(!LAST){alert('Önce liste oluşturun.');return;} const r=LAST,p=curProfile();
+  const col={M:'#1d4ed8',NL:'#dc2626',NS:'#ea580c',NI:'#64748b',HT:'#475569',RT:'#7c3aed',YI:'#16a34a',UCI:'#0d9488',OFF:'#db2777'};
+  let h='<table border="1" style="border-collapse:collapse;font-family:Arial;font-size:10px"><tr><th>Personel</th>';
+  r.days.forEach(d=>{h+=`<th style="background:${d.weekend||d.holiday?'#fde68a':'#e5e7eb'}">${d.day} ${d.dowName}</th>`;});
+  h+='<th>Hedef</th><th>Toplam</th><th>Fark</th><th>'+p.mesaiLabel+'</th><th>'+p.oncallLongLabel+'</th><th>'+p.oncallShortLabel+'</th><th>Nİ</th><th>Üİ</th><th>HSn</th></tr>';
+  r.totals.forEach(t=>{ const g=r.grid[t.name]; h+=`<tr><td style="font-weight:bold">${t.name}</td>`;
+    r.days.forEach(d=>{const c=g[d.day]||'';h+=`<td style="${col[c]?('background:'+col[c]+';color:#fff;font-weight:bold'):''};text-align:center">${codeLabel(c)}</td>`;});
+    h+=`<td align=center>${t.target}</td><td align=center>${t.hours}</td><td align=center>${(t.fark>0?'+':'')+t.fark}</td><td align=center>${t.mesai}</td><td align=center>${t.nl}</td><td align=center>${t.ns}</td><td align=center>${t.ni}</td><td align=center>${t.uci}</td><td align=center>${t.weekendNobet}</td></tr>`; });
+  h+='</table>';
+  dl(new Blob(['﻿<html><head><meta charset="utf-8"></head><body>'+h+'</body></html>'],{type:'application/vnd.ms-excel'}),fname('xls')); }
+function fname(ext){ const p=curProfile(); return (p.name||'liste').replace(/\s+/g,'_')+'_'+MONTHS[parseInt(document.getElementById('month').value,10)]+'_'+document.getElementById('year').value+'.'+ext; }
+function dl(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},100); }
+function renameProfile(){ const n=(prompt('Profil (birim) adı:',curProfile().name)||'').trim(); if(n){curProfile().name=n; saveProfiles(); refreshProfSel(); if(LAST)render(LAST);} }
 
 // ---- BAŞLAT ----
 loadProfiles(); refreshProfSel(); fillRuleForm();

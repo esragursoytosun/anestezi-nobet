@@ -419,7 +419,8 @@
   }
   function buildSchedule(config) {
     if (config && config.__variant !== undefined) return buildOne(config);
-    var attempts = (config && config.__attempts) || 50;
+    var attempts = (config && config.__attempts) || 140;          // daha çok varyant -> daha çok alternatif
+    var maxAlts = (config && config.__maxAlts) || 12;             // gösterilecek belirgin farklı liste sayısı
     if (attempts <= 1) { var c0 = {}; for (var k0 in config) c0[k0] = config[k0]; c0.__variant = 0; return buildOne(c0); }
     var P = clampProfile(config.profile), cands = [];
     for (var v = 0; v < attempts; v++) {
@@ -428,8 +429,9 @@
     }
     cands.sort(function (a, b) { return a.__score - b.__score; });
     var seen = {}, alts = [];
-    for (var i = 0; i < cands.length && alts.length < 6; i++) if (!seen[cands[i].__sig]) { seen[cands[i].__sig] = 1; alts.push(cands[i]); }
-    var best = alts[0]; best.alternatives = alts; return best;
+    for (var i = 0; i < cands.length && alts.length < maxAlts; i++) if (!seen[cands[i].__sig]) { seen[cands[i].__sig] = 1; alts.push(cands[i]); }
+    var best = alts[0]; best.alternatives = alts; best.meta = best.meta || {}; best.meta.tried = attempts; best.meta.distinct = alts.length;
+    return best;
   }
   function recompute(result) {
     var P = clampProfile(result.profile);
