@@ -40,7 +40,11 @@
       preLeaveGap: 2,                                      // izinden hemen önce kaç iş günü boş (ücretli izin)
       postOncallRest: 1,                                   // nöbet sonrası kaç gün dinlenme (N.İ)
       maxConsecutiveOff: 3,                                // üst üste en fazla kaç boş iş günü
-      minStaffWarn: 12                                     // bu sayının altında "kapasite sınırda" uyarısı
+      minStaffWarn: 12,                                    // bu sayının altında "kapasite sınırda" uyarısı
+      // ÖZEL VARDİYALAR (kullanıcı ekler): ızgarada ELLE atanır; saat/gündüz/lejantta sayılır.
+      // (Otomatik dağıtım çekirdek vardiyalarla yapılır; özel vardiyaların otomatiğe girmesi sonra.)
+      //   { code:'C1', label:'12s', hours:12, daytime:true, color:'#0891b2' }
+      customShifts: []
     };
   }
 
@@ -51,22 +55,27 @@
 
   // Vardiya kodları sabit arketip: M(mesai), NL(uzun nöbet), NS(kısa nöbet) + izin türleri.
   // Profil bunların SAATİNİ/etiketini/gündüz-sayılıp-sayılmadığını belirler.
+  function customMap(P) { var m = {}; (P.customShifts || []).forEach(function (s) { if (s && s.code) m[s.code] = s; }); return m; }
   function hoursMap(P) {
-    return { M: P.mesaiHours, NL: P.oncallLongHours, NS: P.oncallShortHours,
+    var h = { M: P.mesaiHours, NL: P.oncallLongHours, NS: P.oncallShortHours,
       NI: 0, HT: 0, RT: 0, YI: 0, OFF: 0, UCI: 0, '': 0 };
+    (P.customShifts || []).forEach(function (s) { if (s && s.code) h[s.code] = +s.hours || 0; });
+    return h;
   }
   function isOncall(c) { return c === 'NL' || c === 'NS'; }
+  function isCustom(c, P) { return !!customMap(P)[c]; }
   function coversDaytime(c, P) {
     if (c === 'M') return true;
     if (c === 'NL') return !!P.oncallLongDaytime;
     if (c === 'NS') return !!P.oncallShortDaytime;
+    var cs = customMap(P)[c]; if (cs) return !!cs.daytime;
     return false;
   }
 
   // ===== ANALİZ (tek doğruluk kaynağı) =====
   function analyze(grid, plist, daysArr, nDays, P) {
     var HOURS = hoursMap(P), warnings = [];
-    function present(c) { return c === 'M' || isOncall(c); }
+    function present(c) { return c === 'M' || isOncall(c) || isCustom(c, P); }   // özel vardiya da "çalıştı" sayılır
     function dayNeed(dd) { return (dd.workday && P.daytimeExtraDays.indexOf(dd.dow) >= 0) ? P.daytimeExtra : P.daytimeMin; }
     function oncallNeed(dd) { return (dd.weekend || dd.holiday) ? P.weekendOncallPerDay : P.oncallPerDay; }
 

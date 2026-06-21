@@ -37,7 +37,12 @@
   details.adv>summary{cursor:pointer;padding:11px 0;font-weight:600;color:#a5b4fc;list-style:none}
   details.adv>summary::-webkit-details-marker{display:none}
   details.adv>summary::before{content:'▸ ';color:var(--accent2)} details.adv[open]>summary::before{content:'▾ '}
-  .advgrp{padding:4px 0 14px;border-top:1px solid var(--line)} .advgrp h4{margin:10px 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .advgrp{padding:4px 0 14px;border-top:1px solid var(--line)} .advgrp h4{margin:12px 0 4px;font-size:12px;color:#a5b4fc;text-transform:uppercase;letter-spacing:.4px}
+  .help{font-size:11.5px;color:var(--muted);margin:0 0 10px;line-height:1.5}
+  .fld .hint{font-size:11px;color:var(--muted);margin-top:2px;max-width:200px}
+  .advgrp .row{align-items:flex-start} .fld{display:flex;flex-direction:column}
+  .shiftrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+  .shiftrow .sw{width:18px;height:18px}
   /* ---- personel ---- */
   table.ptbl{border-collapse:collapse;width:100%}
   table.ptbl th,table.ptbl td{border:1px solid var(--line);padding:6px;font-size:12px;vertical-align:middle}
@@ -132,42 +137,55 @@
       <details class="adv">
         <summary>Gelişmiş ayarlar (vardiya saatleri, ekstra gündüz, izin & boşluk, hedef)</summary>
         <div class="advgrp">
-          <h4>Vardiya tanımları (saat / etiket)</h4>
-          <div class="row">
-            <div><label>Gündüz mesai — saat</label><input type="number" id="mesaiHours"></div>
-            <div><label>Gündüz mesai — etiket</label><input type="text" id="mesaiLabel" style="width:120px"></div>
-            <div><label>Uzun nöbet — saat</label><input type="number" id="oncallLongHours"></div>
-            <div><label>Uzun nöbet — etiket</label><input type="text" id="oncallLongLabel" style="width:120px"></div>
-            <label class="chk"><input type="checkbox" id="oncallLongDaytime"> uzun nöbet gündüzü kapsar</label>
-          </div>
-          <div class="row" style="margin-top:8px">
-            <div><label>Kısa nöbet — saat</label><input type="number" id="oncallShortHours"></div>
-            <div><label>Kısa nöbet — etiket</label><input type="text" id="oncallShortLabel" style="width:120px"></div>
-            <label class="chk"><input type="checkbox" id="oncallShortDaytime"> kısa nöbet gündüzü kapsar</label>
-          </div>
+          <h4>Vardiya tipleri</h4>
+          <p class="help">Bu birimde kullanılan vardiyaların <b>saatini ve adını</b> belirleyin. <b>“Gündüzü kapsar”</b> işaretliyse o vardiya 08-17 gündüz sayısına dahil olur (örn. 24s nöbet gündüzü kapsar; 16s akşam nöbeti kapsamaz). Otomatik dağıtım bu 3 çekirdek vardiyayı kullanır.</p>
+          <div class="shiftrow"><i class="sw" style="background:var(--c-M)"></i>
+            <b style="min-width:96px">Gündüz mesai</b>
+            <div class="fld"><label>saat</label><input type="number" id="mesaiHours"></div>
+            <div class="fld"><label>etiket</label><input type="text" id="mesaiLabel" style="width:120px"></div>
+            <span class="hint">Sadece gündüz çalışma; hedefe sayar.</span></div>
+          <div class="shiftrow"><i class="sw" style="background:var(--c-NL)"></i>
+            <b style="min-width:96px">Uzun nöbet</b>
+            <div class="fld"><label>saat</label><input type="number" id="oncallLongHours"></div>
+            <div class="fld"><label>etiket</label><input type="text" id="oncallLongLabel" style="width:120px"></div>
+            <label class="chk"><input type="checkbox" id="oncallLongDaytime"> gündüzü kapsar</label>
+            <span class="hint">Tam gün nöbet (örn. 08-08, 24s).</span></div>
+          <div class="shiftrow"><i class="sw" style="background:var(--c-NS)"></i>
+            <b style="min-width:96px">Kısa nöbet</b>
+            <div class="fld"><label>saat</label><input type="number" id="oncallShortHours"></div>
+            <div class="fld"><label>etiket</label><input type="text" id="oncallShortLabel" style="width:120px"></div>
+            <label class="chk"><input type="checkbox" id="oncallShortDaytime"> gündüzü kapsar</label>
+            <span class="hint">Akşam/kısa nöbet (örn. 16-08, 16s).</span></div>
+          <h4 style="margin-top:14px">Özel vardiyalar (elle atanır)</h4>
+          <p class="help">İhtiyacınız olan başka bir vardiya tipini buradan <b>ekleyin</b> (örn. 12 saatlik gündüz, icap, yarım gün). Eklediğiniz vardiya; <b>ızgarada hücreye tıklayınca seçilebilir</b>, saatleri toplama, “gündüzü kapsar” ise gündüz sayısına ve lejanta dahil olur. <span class="muted">(Şimdilik elle atanır; otomatik dağıtıma katılması, kuralları netleşince eklenecek.)</span></p>
+          <div id="customShifts"></div>
+          <button type="button" class="sm sec" onclick="addCustomShift()">+ Vardiya tipi ekle</button>
         </div>
         <div class="advgrp">
           <h4>Ekstra gündüz günleri</h4>
+          <p class="help">Belirli günlerde (örn. ameliyatların yoğun olduğu Salı/Perşembe) gündüzde <b>daha fazla kişi</b> gerekiyorsa, o günleri işaretleyin ve o günler için minimumu girin.</p>
           <div class="row">
-            <div><label>Bu günlerde gündüz min</label><input type="number" id="daytimeExtra"></div>
-            <div><label>Günler</label><div id="extraDays" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:5px"></div></div>
+            <div class="fld"><label>Bu günlerde gündüz min</label><input type="number" id="daytimeExtra"><span class="hint">İşaretli günlerde en az kaç kişi gündüzde olsun.</span></div>
+            <div class="fld"><label>Günler</label><div id="extraDays" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:5px"></div></div>
           </div>
         </div>
         <div class="advgrp">
-          <h4>İzin & boşluk</h4>
+          <h4>İzin & boşluk kuralları</h4>
+          <p class="help">Yıllık izne ayrılan kişiye <b>izinden hemen önce</b> nasıl davranılacağı ve kimsenin çok uzun süre boşta kalmaması.</p>
           <div class="row">
-            <div><label>İzinden kaç iş günü önce nöbet</label><input type="number" id="preLeaveDaysBefore"></div>
-            <div><label>…olmazsa kaç iş günü önce</label><input type="number" id="preLeaveDaysBeforeFallback"></div>
-            <div><label>İzinden önce kaç iş günü boş</label><input type="number" id="preLeaveGap"></div>
-            <div><label>Nöbet sonrası dinlenme (gün)</label><input type="number" id="postOncallRest"></div>
-            <div><label>Üst üste en fazla boş iş günü</label><input type="number" id="maxConsecutiveOff"></div>
+            <div class="fld"><label>İzinden kaç iş günü önce nöbet</label><input type="number" id="preLeaveDaysBefore"><span class="hint">İzin öncesi nöbet bu kadar gün önceye konur (tercih).</span></div>
+            <div class="fld"><label>…olmazsa kaç iş günü önce</label><input type="number" id="preLeaveDaysBeforeFallback"><span class="hint">Tercih edilen güne sığmazsa yedek mesafe.</span></div>
+            <div class="fld"><label>İzinden önce kaç iş günü boş</label><input type="number" id="preLeaveGap"><span class="hint">İzine girmeden önce bu kadar gün ücretli izin (dinlenme).</span></div>
+            <div class="fld"><label>Nöbet sonrası dinlenme (gün)</label><input type="number" id="postOncallRest"><span class="hint">Nöbetten sonra kaç gün N.İ (gelmez).</span></div>
+            <div class="fld"><label>Üst üste en fazla boş iş günü</label><input type="number" id="maxConsecutiveOff"><span class="hint">Kişi bu kadar günden fazla üst üste boşta kalmasın.</span></div>
           </div>
         </div>
         <div class="advgrp">
           <h4>Hedef & fizibilite</h4>
+          <p class="help">Aylık çalışma hedefi ve kapasite uyarısı.</p>
           <div class="row">
-            <div><label>Aylık hedef = (saat) × iş günü</label><input type="number" id="targetPerWorkday"></div>
-            <div><label>"Kapasite sınırda" uyarısı: altı (kişi)</label><input type="number" id="minStaffWarn"></div>
+            <div class="fld"><label>Aylık hedef = (saat) × iş günü</label><input type="number" id="targetPerWorkday"><span class="hint">Her iş günü için bu kadar saat (örn. 8). Yıllık/haftalık izin günleri hedeften düşer.</span></div>
+            <div class="fld"><label>“Kapasite sınırda” uyarısı: altı (kişi)</label><input type="number" id="minStaffWarn"><span class="hint">Nöbetçi sayısı bunun altındaysa ve sorun çıkarsa “+1 kişi” notu verilir.</span></div>
           </div>
         </div>
       </details>
@@ -210,10 +228,10 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v3</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v4</b> · anestezi sisteminden bağımsız</div>
 </div>
 
-<script src="asistan-scheduler.js?v=2"></script>
+<script src="asistan-scheduler.js?v=3"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -237,11 +255,32 @@ function curProfile(){ return PROFILES[PROF_I]; }
 function refreshProfSel(){ document.getElementById('profSel').innerHTML=PROFILES.map((p,i)=>`<option value="${i}"${i===PROF_I?' selected':''}>${p.name||('Profil '+(i+1))}</option>`).join(''); }
 function fillRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; if(el.type==='checkbox')el.checked=!!p[f]; else el.value=p[f];});
-  exWrap.querySelectorAll('input[data-dow]').forEach(cb=>{cb.checked=(p.daytimeExtraDays||[]).indexOf(parseInt(cb.dataset.dow,10))>=0;}); }
+  exWrap.querySelectorAll('input[data-dow]').forEach(cb=>{cb.checked=(p.daytimeExtraDays||[]).indexOf(parseInt(cb.dataset.dow,10))>=0;});
+  renderCustomShifts(); }
 function readRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return;
     if(el.type==='checkbox')p[f]=el.checked; else if(el.type==='number')p[f]=parseFloat(el.value)||0; else p[f]=el.value;});
-  p.daytimeExtraDays=[...exWrap.querySelectorAll('input[data-dow]:checked')].map(cb=>parseInt(cb.dataset.dow,10)); saveProfiles(); }
+  p.daytimeExtraDays=[...exWrap.querySelectorAll('input[data-dow]:checked')].map(cb=>parseInt(cb.dataset.dow,10));
+  readCustomShifts(); saveProfiles(); }
+// ---- ÖZEL VARDİYALAR ----
+const CUSTOM_COLORS=['#0891b2','#9333ea','#ca8a04','#be185d','#15803d','#b45309','#0369a1','#4d7c0f'];
+function customShiftsOf(){ return curProfile().customShifts||[]; }
+function renderCustomShifts(){ const box=document.getElementById('customShifts'); if(!box)return;
+  box.innerHTML=customShiftsOf().map((s,i)=>`<div class="shiftrow" data-i="${i}">
+    <i class="sw" style="background:${s.color||'#0891b2'}"></i>
+    <div class="fld"><label>etiket</label><input type="text" class="cs-label" value="${(s.label||'').replace(/"/g,'&quot;')}" style="width:130px"></div>
+    <div class="fld"><label>saat</label><input type="number" class="cs-hours" value="${s.hours||0}"></div>
+    <label class="chk"><input type="checkbox" class="cs-daytime" ${s.daytime?'checked':''}> gündüzü kapsar</label>
+    <button type="button" class="sm danger" onclick="rmCustomShift(${i})">Sil</button></div>`).join(''); }
+function readCustomShifts(){ const p=curProfile(); const rows=[...document.querySelectorAll('#customShifts .shiftrow')];
+  p.customShifts=rows.map((r,i)=>{ const old=(p.customShifts&&p.customShifts[i])||{};
+    return { code: old.code||('C'+Date.now().toString(36)+i), label:(r.querySelector('.cs-label').value||('Özel '+(i+1))),
+      hours:parseFloat(r.querySelector('.cs-hours').value)||0, daytime:r.querySelector('.cs-daytime').checked,
+      color: old.color||CUSTOM_COLORS[i%CUSTOM_COLORS.length] }; }); }
+function addCustomShift(){ const p=curProfile(); p.customShifts=p.customShifts||[]; const i=p.customShifts.length;
+  p.customShifts.push({code:'C'+Date.now().toString(36)+i, label:'Özel '+(i+1), hours:12, daytime:true, color:CUSTOM_COLORS[i%CUSTOM_COLORS.length]});
+  saveProfiles(); renderCustomShifts(); }
+function rmCustomShift(i){ const p=curProfile(); (p.customShifts||[]).splice(i,1); saveProfiles(); renderCustomShifts(); }
 document.getElementById('rulePanel').addEventListener('input',e=>{ if(e.target.closest('#ruleBody')) readRuleForm(); });
 document.getElementById('profSel').addEventListener('change',e=>{ PROF_I=parseInt(e.target.value,10); saveProfiles(); fillRuleForm(); });
 function newProfile(){ const n=(prompt('Yeni profil (birim) adı:','Yenidoğan Yakın İzlem')||'').trim(); if(!n)return; const p=AsistanScheduler.defaultProfile(); p.name=n; PROFILES.push(p); PROF_I=PROFILES.length-1; saveProfiles(); refreshProfSel(); fillRuleForm(); }
@@ -320,7 +359,9 @@ function flash(m){ const d=document.createElement('div'); d.textContent=m; d.sty
 
 // ===== ÜRETİM + RENDER =====
 let LAST=null, ALTS=[], ALT_I=0;
-function codeLabel(c){ const p=curProfile(); return ({M:p.mesaiLabel,NL:p.oncallLongLabel,NS:p.oncallShortLabel,NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UCI:'Ü.İ',OFF:'İ','':''})[c]||''; }
+function codeLabel(c){ const p=curProfile(); const base={M:p.mesaiLabel,NL:p.oncallLongLabel,NS:p.oncallShortLabel,NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UCI:'Ü.İ',OFF:'İ','':''};
+  if(base[c]!==undefined)return base[c]; const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.label:''; }
+function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.color:null; }
 function generate(){ readRuleForm(); const cfg=readCfg(); if(!cfg.personnel.length){alert('En az 1 personel ekleyin.');return;}
   LAST=AsistanScheduler.buildSchedule(cfg); ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0; render(LAST); saveAll(); }
 function pickAlt(i){ if(!ALTS[i])return; ALT_I=i; LAST=ALTS[i]; render(LAST); }
@@ -331,10 +372,11 @@ function gridHtml(r){
   r.days.forEach(d=>{ h+=`<th class="${d.weekend||d.holiday?'wknd':''}">${d.day}<br><span class="muted">${d.dowName}</span></th>`; });
   h+=`<th class="tot">Hedef</th><th class="tot">Top.</th><th class="tot">Fark</th><th class="tot">${p.mesaiLabel}</th><th class="tot">${p.oncallLongLabel}</th><th class="tot">${p.oncallShortLabel}</th><th class="tot">Nİ</th><th class="tot">Ü.İ</th><th class="tot">HSn</th></tr></thead><tbody>`;
   r.totals.forEach((t,ti)=>{ const g=r.grid[t.name]; h+=`<tr><td class="name">${t.name}</td>`;
-    r.days.forEach(d=>{ const c=g[d.day]||''; h+=`<td class="${c}" data-ti="${ti}" data-d="${d.day}" onclick="editCell(this)">${codeLabel(c)}</td>`; });
+    r.days.forEach(d=>{ const c=g[d.day]||''; const cc=customColor(c);
+      h+=`<td class="${cc?'':c}" ${cc?`style="background:${cc}"`:''} data-ti="${ti}" data-d="${d.day}" onclick="editCell(this)">${codeLabel(c)}</td>`; });
     const fc=t.fark===0?'good':'bad';
     h+=`<td class="tot">${t.target}</td><td class="tot">${t.hours}</td><td class="tot ${fc}">${t.fark>0?'+':''}${t.fark}</td><td class="tot">${t.mesai}</td><td class="tot">${t.nl}</td><td class="tot">${t.ns}</td><td class="tot">${t.ni}</td><td class="tot">${t.uci}</td><td class="tot">${t.weekendNobet}</td></tr>`; });
-  function dc(day){let nob=0,gun=0;r.totals.forEach(t=>{const c=r.grid[t.name][day];if(c==='NL'||c==='NS')nob++;const cd=(c==='M')||(c==='NL'&&p.oncallLongDaytime)||(c==='NS'&&p.oncallShortDaytime);if(!t.noNobet&&cd)gun++;});return{nob,gun};}
+  function dc(day){let nob=0,gun=0;r.totals.forEach(t=>{const c=r.grid[t.name][day];if(c==='NL'||c==='NS')nob++;const cs=customShiftsOf().find(s=>s.code===c);const cd=(c==='M')||(c==='NL'&&p.oncallLongDaytime)||(c==='NS'&&p.oncallShortDaytime)||(cs&&cs.daytime);if(!t.noNobet&&cd)gun++;});return{nob,gun};}
   h+=`<tr style="font-weight:700;border-top:2px solid var(--accent)"><td class="name">☀️ Gündüz</td>`;
   r.days.forEach(d=>{const c=dc(d.day);const need=d.workday?(d.isExtra?p.daytimeExtra:p.daytimeMin):0;h+=`<td class="tot ${d.workday&&c.gun<need?'bad':'good'}">${c.gun}</td>`;});
   h+=`<td class="tot" colspan="9"></td></tr><tr style="font-weight:700"><td class="name">🌙 Nöbetçi</td>`;
@@ -346,7 +388,8 @@ function gridHtml(r){
     <span><i class="sw" style="background:var(--c-NS)"></i> ${p.oncallShortLabel}</span>
     <span><i class="sw" style="background:var(--c-NI)"></i> N.İ</span><span><i class="sw" style="background:var(--c-YI)"></i> Yıllık izin</span>
     <span><i class="sw" style="background:var(--c-UCI)"></i> Ücretli izin</span><span><i class="sw" style="background:var(--c-HT)"></i> Hafta sonu</span>
-    <span><i class="sw" style="background:var(--c-RT)"></i> Resmi tatil</span><span><i class="sw" style="background:var(--c-OFF)"></i> Haftalık izin</span></div>`;
+    <span><i class="sw" style="background:var(--c-RT)"></i> Resmi tatil</span><span><i class="sw" style="background:var(--c-OFF)"></i> Haftalık izin</span>`
+    +customShiftsOf().map(s=>`<span><i class="sw" style="background:${s.color}"></i> ${s.label}${s.daytime?' · gündüz':''}</span>`).join('')+`</div>`;
   if(r.warnings.length){ h+=`<div class="warns"><b>⚠️ ${r.warnings.length} uyarı / not</b><ul>`+r.warnings.map(w=>`<li>${w}</li>`).join('')+`</ul></div>`; }
   else h+=`<div class="warns ok"><b>✓ Liste hazır.</b> Herkes hedefini tuttu, her gün yeterli nöbetçi var, fazla mesai yok.</div>`;
   return h;
@@ -380,7 +423,7 @@ const EDIT_CODES=['M','NL','NS','NI','UCI','YI','HT','RT','OFF',''];
 function editCell(td){ if(!LAST||td.querySelector('select'))return;
   const ti=+td.dataset.ti,d=+td.dataset.d,name=LAST.totals[ti].name,cur=LAST.grid[name][d]||'';
   const sel=document.createElement('select'); sel.style.cssText='width:100%;font-size:11px';
-  EDIT_CODES.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=codeLabel(c)||'(boş)';if(c===cur)o.selected=true;sel.appendChild(o);});
+  EDIT_CODES.concat(customShiftsOf().map(s=>s.code)).forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=codeLabel(c)||'(boş)';if(c===cur)o.selected=true;sel.appendChild(o);});
   td.textContent='';td.appendChild(sel);sel.focus();
   sel.addEventListener('change',()=>{LAST.grid[name][d]=sel.value;const re=AsistanScheduler.recompute(LAST);LAST.totals=re.totals;LAST.warnings=re.warnings;ALTS=[LAST];ALT_I=0;if(document.getElementById('showAll'))document.getElementById('showAll').checked=false;render(LAST);});
   sel.addEventListener('blur',()=>render(LAST));
@@ -395,6 +438,7 @@ function exportCSV(){ if(!LAST){alert('Önce liste oluşturun.');return;} const 
   dl(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),fname('csv')); }
 function exportXLS(){ if(!LAST){alert('Önce liste oluşturun.');return;} const r=LAST,p=curProfile();
   const col={M:'#1d4ed8',NL:'#dc2626',NS:'#ea580c',NI:'#64748b',HT:'#475569',RT:'#7c3aed',YI:'#16a34a',UCI:'#0d9488',OFF:'#db2777'};
+  customShiftsOf().forEach(s=>{col[s.code]=s.color;});
   let h='<table border="1" style="border-collapse:collapse;font-family:Arial;font-size:10px"><tr><th>Personel</th>';
   r.days.forEach(d=>{h+=`<th style="background:${d.weekend||d.holiday?'#fde68a':'#e5e7eb'}">${d.day} ${d.dowName}</th>`;});
   h+='<th>Hedef</th><th>Toplam</th><th>Fark</th><th>'+p.mesaiLabel+'</th><th>'+p.oncallLongLabel+'</th><th>'+p.oncallShortLabel+'</th><th>Nİ</th><th>Üİ</th><th>HSn</th></tr>';
