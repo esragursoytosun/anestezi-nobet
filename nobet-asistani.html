@@ -43,13 +43,19 @@
   .advgrp .row{align-items:flex-start} .fld{display:flex;flex-direction:column}
   .shiftrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px}
   .shiftrow .sw{width:18px;height:18px}
-  /* ---- personel ---- */
-  table.ptbl{border-collapse:collapse;width:100%}
-  table.ptbl th,table.ptbl td{border:1px solid var(--line);padding:6px;font-size:12px;vertical-align:middle}
-  table.ptbl th{background:var(--inset);color:var(--muted);text-align:center;font-weight:600}
-  .num{text-align:center;color:var(--muted)} td.chk{text-align:center}
-  .daterange{display:flex;align-items:center;gap:5px;margin-bottom:4px}
-  .daterange span{color:var(--muted)}
+  /* ---- personel (CSS grid — sütunlar kesin hizalı) ---- */
+  .pwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+  .pgrid{min-width:1040px}
+  .phead,.prow{display:grid;grid-template-columns:30px 150px 78px 78px 112px 300px 112px 180px 40px;align-items:center;gap:8px;padding:7px 8px}
+  .phead{background:var(--inset);color:var(--muted);font-size:11px;font-weight:600;line-height:1.2;position:sticky;top:0;z-index:1}
+  .phead>div,.prow>.ctr{display:flex;justify-content:center;align-items:center;text-align:center}
+  .prow{border-top:1px solid var(--line)}
+  .prow input[type=text],.prow select{width:100%}
+  .prow input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+  .prow .num{color:var(--muted)} .prow .pref{display:flex;flex-direction:column;gap:4px}
+  .prow .pref input{font-size:11px}
+  .daterange{display:flex;align-items:center;gap:4px;margin-bottom:4px}
+  .daterange span{color:var(--muted)} .daterange input[type=date]{width:122px;min-width:0;padding:5px 6px}
   /* ---- toolbar ---- */
   .toolbar{position:sticky;top:0;z-index:5;background:rgba(15,23,42,.9);backdrop-filter:blur(6px);padding:10px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--line)}
   /* ---- alternatif şerit ---- */
@@ -205,10 +211,12 @@
   <!-- ===== PERSONEL ===== -->
   <div class="panel noprint">
     <h2>👥 Personel & Talepler</h2>
-    <div class="gridwrap"><table class="ptbl">
-      <thead><tr><th>#</th><th>Ad Soyad</th><th>Sorumlu<br>(nöbet yok)</th><th>Haftalık<br>izin günü</th><th>Aya N.İ<br>başla</th><th>Yıllık izin (tarih aralığı)</th><th>Boş gün<br>isteği</th><th>Gün tercihi</th><th></th></tr></thead>
-      <tbody id="pbody"></tbody>
-    </table></div>
+    <div class="pwrap"><div class="pgrid">
+      <div class="phead">
+        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Sorumlu<br>(nöbet yok)</div><div>Aya N.İ<br>başla</div><div>Haftalık<br>izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün<br>isteği</div><div>Gün tercihi</div><div></div>
+      </div>
+      <div id="pbody"></div>
+    </div></div>
     <div style="margin-top:10px;display:flex;gap:8px">
       <button class="sec sm" onclick="addPerson()">+ Personel ekle</button>
       <button class="sec sm" onclick="resetNames()">↺ Varsayılan 12 isim</button>
@@ -228,7 +236,7 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v4</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v5</b> · anestezi sisteminden bağımsız</div>
 </div>
 
 <script src="asistan-scheduler.js?v=3"></script>
@@ -301,49 +309,49 @@ function yiRangeHtml(s,e){ return `<div class="daterange"><input type="date" cla
   +`<input type="date" class="p-yi-e" value="${e||''}"><button type="button" class="sm danger yix" onclick="rmYi(this)" title="Sil" style="padding:2px 7px;display:none">×</button></div>`; }
 function yiCellHtml(){ return `<div class="yi-list">${yiRangeHtml('','')}</div><button type="button" class="sm sec" onclick="addYi(this)" style="margin-top:4px">+ izin ekle</button>`; }
 function updateYiX(cell){ const list=cell.querySelector('.yi-list'); const multi=list.children.length>1; list.querySelectorAll('.yix').forEach(x=>x.style.display=multi?'inline-block':'none'); }
-function addYi(btn){ const cell=btn.closest('td'); cell.querySelector('.yi-list').insertAdjacentHTML('beforeend',yiRangeHtml('','')); updateDateBounds(); updateYiX(cell); }
-function rmYi(btn){ const cell=btn.closest('td'),row=btn.closest('.daterange'),list=cell.querySelector('.yi-list');
+function addYi(btn){ const cell=btn.closest('.leave'); cell.querySelector('.yi-list').insertAdjacentHTML('beforeend',yiRangeHtml('','')); updateDateBounds(); updateYiX(cell); }
+function rmYi(btn){ const cell=btn.closest('.leave'),row=btn.closest('.daterange'),list=cell.querySelector('.yi-list');
   if(list.children.length>1)row.remove(); else {row.querySelector('.p-yi-s').value='';row.querySelector('.p-yi-e').value='';} updateYiX(cell); }
 function rangesOf(tr){ return [...tr.querySelectorAll('.yi-list .daterange')].map(d=>({s:d.querySelector('.p-yi-s').value,e:d.querySelector('.p-yi-e').value})).filter(r=>r.s); }
 function leaveDaysOf(tr){ const set=new Set(); rangesOf(tr).forEach(r=>rangeToDays(r.s,r.e).forEach(d=>set.add(d))); return [...set].sort((a,b)=>a-b); }
 
 // ===== PERSONEL =====
 function addPerson(name){
-  const tr=document.createElement('tr');
-  tr.innerHTML=`<td class="num"></td>
-    <td><input type="text" class="p-name" value="${name||''}"></td>
-    <td class="chk"><input type="checkbox" class="p-sorumlu"></td>
-    <td class="chk"><select class="p-offday"><option value="">—</option>${[1,2,3,4,5].map(d=>`<option value="${d}">${DOW[d]}</option>`).join('')}</select></td>
-    <td class="chk"><input type="checkbox" class="p-startni"></td>
-    <td>${yiCellHtml()}</td>
-    <td><input type="text" class="p-off" placeholder="5,12" style="min-width:90px"></td>
-    <td><div style="display:flex;flex-direction:column;gap:3px">
-      <input type="text" class="p-onlyday" placeholder="sadece gündüz: 7,8" style="min-width:130px">
-      <input type="text" class="p-onlyn16" placeholder="sadece kısa nöbet: 12" style="min-width:130px"></div></td>
-    <td><button class="sm danger" onclick="this.closest('tr').remove();renumber()">×</button></td>`;
-  document.getElementById('pbody').appendChild(tr); renumber(); updateDateBounds();
+  const row=document.createElement('div'); row.className='prow';
+  row.innerHTML=`<div class="ctr num"></div>
+    <div><input type="text" class="p-name" value="${name||''}"></div>
+    <div class="ctr"><input type="checkbox" class="p-sorumlu" title="Bu kişi nöbet tutmaz, sadece gündüz mesai yapar"></div>
+    <div class="ctr"><input type="checkbox" class="p-startni" title="Önceki ayın son nöbetçisi: ayın 1. günü N.İ (dinlenme) başlar"></div>
+    <div><select class="p-offday"><option value="">—</option>${[1,2,3,4,5].map(d=>`<option value="${d}">${DOW[d]}</option>`).join('')}</select></div>
+    <div class="leave">${yiCellHtml()}</div>
+    <div><input type="text" class="p-off" placeholder="örn. 5,12" title="Bu günlere ne nöbet ne mesai yazılır (kesin boş)"></div>
+    <div class="pref">
+      <input type="text" class="p-onlyday" placeholder="sadece gündüz: 7,8" title="Bu günlerde nöbet verilmez, sadece gündüz">
+      <input type="text" class="p-onlyn16" placeholder="sadece kısa nöbet: 12" title="Bu günlerde uzun değil kısa nöbet"></div>
+    <div class="ctr"><button class="sm danger" onclick="this.closest('.prow').remove();renumber()" title="Sil">×</button></div>`;
+  document.getElementById('pbody').appendChild(row); renumber(); updateDateBounds();
 }
-function renumber(){ [...document.querySelectorAll('#pbody tr')].forEach((tr,i)=>tr.querySelector('.num').textContent=i+1); }
+function renumber(){ [...document.querySelectorAll('#pbody .prow')].forEach((r,i)=>r.querySelector('.num').textContent=i+1); }
 function resetNames(){ document.getElementById('pbody').innerHTML=''; for(let i=1;i<=12;i++)addPerson('Personel '+i); }
 function parseDays(s){ return (s||'').split(',').map(x=>parseInt(x.trim(),10)).filter(x=>x>=1&&x<=31); }
 function readPersonnel(){
-  return [...document.querySelectorAll('#pbody tr')].map(tr=>({
-    name:(tr.querySelector('.p-name').value||'?').trim(),
-    noNobet:tr.querySelector('.p-sorumlu').checked, startNI:tr.querySelector('.p-startni').checked,
-    offDay:tr.querySelector('.p-offday').value===''?null:parseInt(tr.querySelector('.p-offday').value,10),
-    leaveYI:leaveDaysOf(tr), yiRanges:rangesOf(tr),
-    offReq:parseDays(tr.querySelector('.p-off').value),
-    onlyDay:parseDays(tr.querySelector('.p-onlyday').value), onlyN16:parseDays(tr.querySelector('.p-onlyn16').value)
+  return [...document.querySelectorAll('#pbody .prow')].map(r=>({
+    name:(r.querySelector('.p-name').value||'?').trim(),
+    noNobet:r.querySelector('.p-sorumlu').checked, startNI:r.querySelector('.p-startni').checked,
+    offDay:r.querySelector('.p-offday').value===''?null:parseInt(r.querySelector('.p-offday').value,10),
+    leaveYI:leaveDaysOf(r), yiRanges:rangesOf(r),
+    offReq:parseDays(r.querySelector('.p-off').value),
+    onlyDay:parseDays(r.querySelector('.p-onlyday').value), onlyN16:parseDays(r.querySelector('.p-onlyn16').value)
   })).filter(p=>p.name!=='?');
 }
 function applyPersonnel(list){
   document.getElementById('pbody').innerHTML='';
-  (list||[]).forEach(p=>{ addPerson(p.name); const tr=document.querySelector('#pbody tr:last-child');
-    tr.querySelector('.p-sorumlu').checked=!!p.noNobet; tr.querySelector('.p-startni').checked=!!p.startNI;
-    tr.querySelector('.p-offday').value=p.offDay!=null?String(p.offDay):'';
+  (list||[]).forEach(p=>{ addPerson(p.name); const r=document.querySelector('#pbody .prow:last-child');
+    r.querySelector('.p-sorumlu').checked=!!p.noNobet; r.querySelector('.p-startni').checked=!!p.startNI;
+    r.querySelector('.p-offday').value=p.offDay!=null?String(p.offDay):'';
     let ranges=(p.yiRanges&&p.yiRanges.length)?p.yiRanges:[]; if(!ranges.length)ranges=[{s:'',e:''}];
-    tr.querySelector('.yi-list').innerHTML=ranges.map(r=>yiRangeHtml(r.s,r.e)).join(''); updateYiX(tr.querySelector('.yi-list').closest('td'));
-    tr.querySelector('.p-off').value=(p.offReq||[]).join(','); tr.querySelector('.p-onlyday').value=(p.onlyDay||[]).join(','); tr.querySelector('.p-onlyn16').value=(p.onlyN16||[]).join(',');
+    r.querySelector('.yi-list').innerHTML=ranges.map(x=>yiRangeHtml(x.s,x.e)).join(''); updateYiX(r.querySelector('.leave'));
+    r.querySelector('.p-off').value=(p.offReq||[]).join(','); r.querySelector('.p-onlyday').value=(p.onlyDay||[]).join(','); r.querySelector('.p-onlyn16').value=(p.onlyN16||[]).join(',');
   });
   updateDateBounds();
 }
