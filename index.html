@@ -175,7 +175,7 @@
         <div class="kc"><div class="t">Hafta sonu/tatil nöbetçi</div><input type="number" id="weekendOncallPerDay"></div>
       </div>
       <div class="row" style="margin-bottom:6px">
-        <label class="chk"><input type="checkbox" id="weekendForceLong"> Hafta sonu/tatil hep uzun nöbet</label>
+        <label class="chk" title="İşaretliyse hafta sonu/tatil nöbetleri yalnız uzun (24s) tutulur, asla kısaya (16s) inilmez."><input type="checkbox" id="weekendForceLong"> Hafta sonu/tatil sadece uzun (<span id="wkLongHint">24s</span>) nöbet</label>
         <label class="chk"><input type="checkbox" id="useShortOncall"> Kısa nöbet kullanılsın</label>
         <label class="chk"><input type="checkbox" id="preLeaveOncall"> Yıllık izin öncesi nöbet koy</label>
       </div>
@@ -277,7 +277,7 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v14</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v15</b> · anestezi sisteminden bağımsız</div>
 </div>
 
 <script src="asistan-scheduler.js?v=9"></script>
@@ -307,6 +307,7 @@ function refreshProfSel(){ const s=document.getElementById('profSel');
 function fillRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; if(el.type==='checkbox')el.checked=!!p[f]; else el.value=p[f];});
   exWrap.querySelectorAll('input[data-dow]').forEach(cb=>{cb.checked=(p.daytimeExtraDays||[]).indexOf(parseInt(cb.dataset.dow,10))>=0;});
+  const wk=document.getElementById('wkLongHint'); if(wk)wk.textContent=(p.oncallLongHours||24)+'s';
   renderCustomShifts(); }
 function readRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return;
