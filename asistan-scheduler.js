@@ -27,13 +27,15 @@
       oncallShortHours: 16, oncallShortLabel: 'N16-08', oncallShortDaytime: false, // 16s nöbet (gündüzü kapsamaz)
       useShortOncall: true,                                // 16s nöbet kullanılsın mı
       defaultOncall: 'long',                               // varsayılan nöbet: 'long'(24) | 'short'(16)
-      oncallPerDay: 2,                                     // hafta içi günde kaç nöbetçi
+      oncallPerDay: 2,                                     // hafta içi günde kaç nöbetçi (EN AZ)
+      oncallMax: 2,                                        // hafta içi nöbetçi EN FAZLA (aralık; eksik-saat varsa max'a çıkar)
       daytimeMin: 2,                                       // hafta içi gündüz min (oncall-daytime + mesai)
       daytimeExtraDays: [2, 4],                            // ekstra gündüz istenen günler (dow: Sal=2, Per=4)
       daytimeExtra: 3,                                     // o günlerde gündüz min
       weekendForceLong: true,                              // (eski) — weekendOncall'a göç eder; tutuluyor
       weekendOncall: 'long',                               // hafta sonu/tatil nöbet şekli: 'long'(24) | 'short'(16)
-      weekendOncallPerDay: 2,                              // hafta sonu/tatil günde kaç nöbetçi
+      weekendOncallPerDay: 2,                              // hafta sonu/tatil nöbetçi EN AZ
+      weekendOncallMax: 2,                                 // hafta sonu/tatil nöbetçi EN FAZLA (aralık)
       targetPerWorkday: 8,                                 // aylık hedef = bu × iş günü
       preLeaveOncall: true,                                // yıllık izin öncesi nöbet konsun mu
       preLeaveDaysBefore: 4,                               // izinden kaç iş günü önce nöbet (tercih)
@@ -56,6 +58,11 @@
   function clampProfile(p) { var d = defaultProfile(); var r = {}; for (var k in d) r[k] = (p && p[k] !== undefined) ? p[k] : d[k];
     // GÖÇ: eski profillerde weekendOncall yoksa weekendForceLong'tan türet (false -> hafta içi şekli)
     if (p && p.weekendOncall === undefined) r.weekendOncall = (p.weekendForceLong === false) ? (p.defaultOncall || 'long') : 'long';
+    // GÖÇ: nöbetçi aralığı — eski profilde max yoksa min'e eşitle (sabit davranış); max >= min güvencesi
+    if (p && p.oncallMax === undefined) r.oncallMax = r.oncallPerDay;
+    if (p && p.weekendOncallMax === undefined) r.weekendOncallMax = r.weekendOncallPerDay;
+    r.oncallMax = Math.max(r.oncallMax || 0, r.oncallPerDay);
+    r.weekendOncallMax = Math.max(r.weekendOncallMax || 0, r.weekendOncallPerDay);
     return r; }
 
   // Vardiya kodları sabit arketip: M(mesai), NL(uzun nöbet), NS(kısa nöbet) + izin türleri.
@@ -151,6 +158,7 @@
     var baseTarget = P.targetPerWorkday * workdayNums.length;
     function dayNeed(dd) { return (dd.workday && dd.isExtra) ? P.daytimeExtra : P.daytimeMin; }
     function oncallNeed(dd) { return (dd.weekend || dd.holiday) ? P.weekendOncallPerDay : P.oncallPerDay; }
+    function oncallCap(dd) { var mn = oncallNeed(dd), mx = (dd.weekend || dd.holiday) ? P.weekendOncallMax : P.oncallMax; return Math.max(mn, mx || mn); }
 
     var people = config.personnel.map(function (p, idx) {
       var YI = new Set(p.leaveYI || []);
@@ -579,6 +587,28 @@
         }
       }
     }
+
+    // ---- 3.1) NÖBETÇİ ARALIĞI: min garanti edildi; KADRO YETERSE max'a kadar GÜÇLENDİR ----
+    // Sayı aralıksa (örn. hafta sonu "2 veya 3"): min zaten sağlandı. Burada o günü max'a kadar nöbetçiyle
+    // güçlendiririz — ama YALNIZCA aday, hafta içi mesaisini (gündüz-min'i BOZMADAN) takas ederek hedefini
+    // aşmadan alabiliyorsa (FAZLA MESAİ YOK). Hafta sonu/tatil yükü en az olana öncelik (adil). Aksi halde min'de kalır.
+    days.forEach(function (dd) {
+      var cap = oncallCap(dd), kind = dayType(dd);
+      for (var guard = 0; guard < 40 && oncallCount(dd.day) < cap; guard++) {
+        var pool = people.filter(function (Pp) { return coverEligible(Pp, dd, kind); });
+        if (!pool.length) break;
+        pool.sort(function (a, b) { if (a.weekendNobet !== b.weekendNobet) return a.weekendNobet - b.weekendNobet; return (b.target - b.hours) - (a.target - a.hours); });
+        var placed = false;
+        for (var i = 0; i < pool.length; i++) { var Pp = pool[i];
+          var over = (Pp.hours + (HOURS[kind] - (HOURS[Pp.assign[dd.day]] || 0))) - Pp.target;
+          if (over <= 0) { placeCover(Pp, dd, kind); placed = true; break; }   // zaten yeri var (eksik-saat)
+          var r = freeBudget(Pp, over, dd.day, false);                          // gündüz-min'i BOZMADAN hafta içi mesaiden aç
+          if (r.freed >= over) { placeCover(Pp, dd, kind); placed = true; break; }
+          r.conv.forEach(function (dm) { Pp.assign[dm] = 'M'; Pp.hours += P.mesaiHours; });   // yetmedi -> geri al, sonraki aday
+        }
+        if (!placed) break;
+      }
+    });
 
     // ---- 3.0) (opsiyonel) GEREKİRSE FAZLA MESAİ — LS'den SONRA, MİNİMUM ----
     // LS gündüz açıklarını saat-korumalı taşımalarla zaten en aza indirdi. Burada yalnız KALAN

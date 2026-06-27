@@ -169,9 +169,9 @@
     <div class="body" id="ruleBody">
       <!-- EN ÇOK KULLANILAN (sade) -->
       <div class="keycards">
-        <div class="kc"><div class="t">Günde kaç nöbetçi (hafta içi)</div><input type="number" id="oncallPerDay"></div>
+        <div class="kc"><div class="t">Günde kaç nöbetçi (hafta içi)</div><input type="text" id="oncallPerDay" placeholder="örn. 2 veya 2-3" title="Tek sayı (2) ya da aralık (2-3 / '2 veya 3'). Aralıkta en az ilk sayı garanti; boşta kişi varsa fazla mesai olmadan üst sayıya çıkar."></div>
         <div class="kc"><div class="t">Hafta içi gündüz min</div><input type="number" id="daytimeMin"></div>
-        <div class="kc"><div class="t">Hafta sonu/tatil nöbetçi</div><input type="number" id="weekendOncallPerDay"></div>
+        <div class="kc"><div class="t">Hafta sonu/tatil nöbetçi</div><input type="text" id="weekendOncallPerDay" placeholder="örn. 2 veya 2-3" title="Tek sayı (2) ya da aralık (2-3 / '2 veya 3'). En az ilk sayı garanti; boşta kişi varsa fazla mesai olmadan üst sayıya çıkar."></div>
       </div>
       <div class="row" style="margin-bottom:6px">
         <label class="chk"><input type="checkbox" id="useShortOncall"> Kısa nöbet kullanılsın</label>
@@ -284,10 +284,10 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v19</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v20</b> · anestezi sisteminden bağımsız</div>
 </div>
 
-<script src="asistan-scheduler.js?v=12"></script>
+<script src="asistan-scheduler.js?v=13"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -299,8 +299,8 @@ const exWrap=document.getElementById('extraDays');
 
 // ===== PROFİLLER =====
 const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel','oncallLongDaytime','useShortOncall',
-  'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','oncallPerDay','daytimeMin','daytimeExtra',
-  'weekendOncall','weekendOncallPerDay','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
+  'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','daytimeMin','daytimeExtra',
+  'weekendOncall','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
   'postOncallRest','maxConsecutiveOff','targetPerWorkday','minStaffWarn','overtimeForCounts'];
 let PROFILES=[], PROF_I=0;
 function loadProfiles(){ try{ PROFILES=JSON.parse(localStorage.getItem('asistan_profiles')||'null'); }catch(e){ PROFILES=null; }
@@ -311,14 +311,21 @@ function curProfile(){ if(SRV.on){ if(!ACT)ACT={profile:AsistanScheduler.default
 function refreshProfSel(){ const s=document.getElementById('profSel');
   if(SRV.on){ s.innerHTML=UNITS.map(u=>`<option value="${u.id}"${ACT&&u.id===ACT.id?' selected':''}>${u.name}${(u.managers&&u.managers.length)?' — 👤'+u.managers.join(','):''}</option>`).join(''); s.disabled=(SRV.role!=='admin'); return; }
   s.disabled=false; s.innerHTML=PROFILES.map((p,i)=>`<option value="${i}"${i===PROF_I?' selected':''}>${p.name||('Profil '+(i+1))}</option>`).join(''); }
+// nöbetçi sayısı ARALIĞI: "2", "2-3", "2 veya 3", "3 ya da 4" -> [min,max]
+function parseRange(s){ const n=(String(s||'').match(/\d+/g)||[]).map(x=>parseInt(x,10)); let a=n.length?n[0]:1, b=n.length>1?n[1]:a; if(isNaN(a))a=1; if(isNaN(b))b=a; if(b<a){const t=a;a=b;b=t;} return [a,b]; }
+function fmtRange(min,max){ min=min||0; return (max&&max>min)?(min+'-'+max):String(min); }
 function fillRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; if(el.type==='checkbox')el.checked=!!p[f]; else el.value=p[f];});
   exWrap.querySelectorAll('input[data-dow]').forEach(cb=>{cb.checked=(p.daytimeExtraDays||[]).indexOf(parseInt(cb.dataset.dow,10))>=0;});
+  document.getElementById('oncallPerDay').value=fmtRange(p.oncallPerDay,p.oncallMax);
+  document.getElementById('weekendOncallPerDay').value=fmtRange(p.weekendOncallPerDay,p.weekendOncallMax);
   renderCustomShifts(); }
 function readRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return;
     if(el.type==='checkbox')p[f]=el.checked; else if(el.type==='number')p[f]=parseFloat(el.value)||0; else p[f]=el.value;});
   p.daytimeExtraDays=[...exWrap.querySelectorAll('input[data-dow]:checked')].map(cb=>parseInt(cb.dataset.dow,10));
+  const r1=parseRange(document.getElementById('oncallPerDay').value); p.oncallPerDay=r1[0]; p.oncallMax=r1[1];
+  const r2=parseRange(document.getElementById('weekendOncallPerDay').value); p.weekendOncallPerDay=r2[0]; p.weekendOncallMax=r2[1];
   readCustomShifts(); saveProfiles(); }
 // ---- ÖZEL VARDİYALAR ----
 const CUSTOM_COLORS=['#0891b2','#9333ea','#ca8a04','#be185d','#15803d','#b45309','#0369a1','#4d7c0f'];
