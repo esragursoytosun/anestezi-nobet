@@ -406,24 +406,6 @@
       }
     });
 
-    // ---- 2.75) (opsiyonel) GEREKİRSE FAZLA MESAİ: istenen gündüz sayılarını TUTTUR ----
-    // overtimeForCounts açıkken: saat-korumalı takasla (2.7) tutturulamayan günlerde, o güne
-    // gündüz katkısı olabilecek uygun birine M (fazla mesai) ekleyip sayıyı garanti eder.
-    // Eklenen M 'mustMesai' ile korunur -> yerel arama (LS) bunu boşaltamaz, sayı düşmez.
-    if (P.overtimeForCounts) days.forEach(function (dd) {
-      if (!dd.workday) return; var need = dayNeed(dd);
-      for (var guard = 0; guard < 40 && daytimeCount(dd.day) < need; guard++) {
-        var cand = null, bestSlack = -1e15;
-        for (var pi = 0; pi < people.length; pi++) { var Pp = people[pi];
-          if (Pp.noNobet || Pp.assign[dd.day] !== 'UCI') continue;              // gündüze katkı + o gün boşta (UCI)
-          if (Pp.offReq.has(dd.day) || Pp.lockedOff.has(dd.day)) continue;      // kesin boş / kilitli olmasın
-          var slack = Pp.target - Pp.hours; if (slack > bestSlack) { bestSlack = slack; cand = Pp; }  // en az fazla mesaisi olana ver (adalet)
-        }
-        if (!cand) break;
-        cand.assign[dd.day] = 'M'; cand.hours += P.mesaiHours; cand.mustMesai.add(dd.day);
-      }
-    });
-
     // ---- 2.97) FAZLA MESAİ GİDERME: uzun nöbeti kısa nöbete indir (gündüz min'i bozmadan) ----
     if (P.useShortOncall) people.forEach(function (Pp) {
       if (Pp.noNobet) return;
@@ -591,6 +573,25 @@
         }
       }
     }
+
+    // ---- 3.0) (opsiyonel) GEREKİRSE FAZLA MESAİ — LS'den SONRA, MİNİMUM ----
+    // LS gündüz açıklarını saat-korumalı taşımalarla zaten en aza indirdi. Burada yalnız KALAN
+    // (kaçınılmaz) açıklar için, o gün boşta (UCI) + EN AZ fazla mesaisi olan uygun kişiye sırayla
+    // M ekleriz. Açığı tam kapatacak kadar, fazlası değil -> toplam fazla mesai minimumda ve adil dağılır.
+    if (P.overtimeForCounts) days.forEach(function (dd) {
+      if (!dd.workday) return; var need = dayNeed(dd);
+      for (var guard = 0; guard < 60 && daytimeCount(dd.day) < need; guard++) {
+        var cand = null, bestH = Infinity;
+        for (var pi = 0; pi < people.length; pi++) { var Pp = people[pi];
+          if (Pp.noNobet || Pp.assign[dd.day] !== 'UCI') continue;              // gündüze katkı + o gün boşta (UCI)
+          if (Pp.offReq.has(dd.day) || Pp.lockedOff.has(dd.day)) continue;      // kesin boş / kilitli olmasın
+          var over = Pp.hours - Pp.target;                                       // mevcut fazla mesai (negatifse henüz altında)
+          if (over < bestH) { bestH = over; cand = Pp; }                         // en az fazla mesaisi olana ver
+        }
+        if (!cand) break;
+        cand.assign[dd.day] = 'M'; cand.hours += P.mesaiHours;
+      }
+    });
 
     var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });
     var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, noNobet: Pp.noNobet, lockedOff: Array.from(Pp.lockedOff) }; });
