@@ -45,8 +45,8 @@
   .shiftrow .sw{width:18px;height:18px}
   /* ---- personel (CSS grid — sütunlar kesin hizalı) ---- */
   .pwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
-  .pgrid{min-width:1240px}
-  .phead,.prow{display:grid;grid-template-columns:30px 150px 78px 70px 78px 112px 300px 112px 200px 100px;align-items:center;gap:8px;padding:7px 8px}
+  .pgrid{min-width:1200px}
+  .phead,.prow{display:grid;grid-template-columns:30px 150px 70px 78px 112px 300px 112px 230px 100px;align-items:center;gap:8px;padding:7px 8px}
   .phead{background:var(--inset);color:var(--muted);font-size:11px;font-weight:600;line-height:1.2;position:sticky;top:0;z-index:1}
   .phead>div,.prow>.ctr{display:flex;justify-content:center;align-items:center;text-align:center}
   .prow{border-top:1px solid var(--line)}
@@ -269,7 +269,7 @@
     <h2>👥 Personel & Talepler</h2>
     <div class="pwrap"><div class="pgrid">
       <div class="phead">
-        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Sorumlu<br>(nöbet yok)</div><div>Kıdemli</div><div>Aya N.İ<br>başla</div><div>Haftalık<br>izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün<br>isteği</div><div>Gün tercihi</div><div>Sırala<br>/ Sil</div>
+        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Kıdemli</div><div>Aya N.İ<br>başla</div><div>Haftalık<br>izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün<br>isteği</div><div>Çalışma tercihi</div><div>Sırala<br>/ Sil</div>
       </div>
       <div id="pbody"></div>
     </div></div>
@@ -292,7 +292,7 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v21</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v22</b> · anestezi sisteminden bağımsız</div>
 </div>
 
 <script src="asistan-scheduler.js?v=14"></script>
@@ -385,16 +385,18 @@ function addPerson(name){
   const row=document.createElement('div'); row.className='prow';
   row.innerHTML=`<div class="ctr num"></div>
     <div><input type="text" class="p-name" value="${name||''}"></div>
-    <div class="ctr"><input type="checkbox" class="p-sorumlu" title="Bu kişi nöbet tutmaz, sadece gündüz mesai yapar"></div>
     <div class="ctr"><input type="checkbox" class="p-senior" title="Kıdemli personel (gelişmiş ayarlarda: gündüz/nöbette en az kaç kıdemli bulunsun)"></div>
     <div class="ctr"><input type="checkbox" class="p-startni" title="Önceki ayın son nöbetçisi: ayın 1. günü N.İ (dinlenme) başlar"></div>
     <div><select class="p-offday"><option value="">—</option>${[1,2,3,4,5].map(d=>`<option value="${d}">${DOW[d]}</option>`).join('')}</select></div>
     <div class="leave">${yiCellHtml()}</div>
     <div><input type="text" class="p-off" placeholder="örn. 5,12" title="Bu günlere ne nöbet ne mesai yazılır (kesin boş)"></div>
     <div class="pref">
-      <label class="chk" style="font-size:11px" title="İşaretliyse bu kişi TÜM AY yalnızca nöbete gelir; hiç gündüz mesaisi (M) yazılmaz."><input type="checkbox" class="p-onlynobet"> tüm ay sadece nöbet</label>
-      <input type="text" class="p-onlyday" placeholder="sadece gündüz: 7,8" title="Bu günlerde nöbet verilmez, sadece gündüz">
-      <input type="text" class="p-onlyn16" placeholder="sadece kısa nöbet: 12" title="Bu günlerde uzun değil kısa nöbet"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <label class="chk" style="font-size:11px" title="TÜM AY yalnızca gündüz mesaisi; hiç nöbet tutmaz."><input type="checkbox" class="p-sorumlu" onchange="if(this.checked)this.closest('.pref').querySelector('.p-onlynobet').checked=false"> sadece gündüz</label>
+        <label class="chk" style="font-size:11px" title="TÜM AY yalnızca nöbet; hiç gündüz mesaisi (M) yazılmaz."><input type="checkbox" class="p-onlynobet" onchange="if(this.checked)this.closest('.pref').querySelector('.p-sorumlu').checked=false"> sadece nöbet</label>
+      </div>
+      <input type="text" class="p-onlyday" placeholder="bazı gün gündüz: 7,8" title="Yalnız bu günlerde nöbet verilmez (gündüz)">
+      <input type="text" class="p-onlyn16" placeholder="bazı gün kısa nöbet: 12" title="Bu günlerde uzun değil kısa nöbet"></div>
     <div class="rowact">
       <button class="sm" onclick="moveRow(this,-1)" title="Yukarı taşı">↑</button>
       <button class="sm" onclick="moveRow(this,1)" title="Aşağı taşı">↓</button>
@@ -438,8 +440,8 @@ let MONTHS_DATA={};          // "Y-M" -> {holidays:[], personnel:[...]}
 let CUR_YM=null;
 function ymNow(){ return document.getElementById('year').value+'-'+document.getElementById('month').value; }
 // kimlik (isim, Sorumlu, Haftalık izin günü) korunur; aylık İSTEKLER sıfırlanır
-function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, senior:p.senior, offDay:p.offDay,
-  startNI:false, yiRanges:[], leaveYI:[], offReq:[], onlyNobet:false, onlyDay:[], onlyN16:[] })); }
+function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, onlyNobet:p.onlyNobet, senior:p.senior, offDay:p.offDay,
+  startNI:false, yiRanges:[], leaveYI:[], offReq:[], onlyDay:[], onlyN16:[] })); }
 function captureMonth(){ if(CUR_YM==null)return;
   MONTHS_DATA[CUR_YM]={ holidays:parseDays(document.getElementById('holidays').value), personnel:readPersonnel() }; }
 function showMonth(ym){
