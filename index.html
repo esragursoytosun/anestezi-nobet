@@ -45,8 +45,8 @@
   .shiftrow .sw{width:18px;height:18px}
   /* ---- personel (CSS grid — sütunlar kesin hizalı) ---- */
   .pwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
-  .pgrid{min-width:1100px}
-  .phead,.prow{display:grid;grid-template-columns:30px 150px 78px 78px 112px 300px 112px 180px 100px;align-items:center;gap:8px;padding:7px 8px}
+  .pgrid{min-width:1240px}
+  .phead,.prow{display:grid;grid-template-columns:30px 150px 78px 70px 78px 112px 300px 112px 200px 100px;align-items:center;gap:8px;padding:7px 8px}
   .phead{background:var(--inset);color:var(--muted);font-size:11px;font-weight:600;line-height:1.2;position:sticky;top:0;z-index:1}
   .phead>div,.prow>.ctr{display:flex;justify-content:center;align-items:center;text-align:center}
   .prow{border-top:1px solid var(--line)}
@@ -191,6 +191,14 @@
           </div>
         </div>
         <div class="advgrp">
+          <h4>Kıdem (kıdemli personel zorunluluğu)</h4>
+          <p class="help">Personel tablosunda <b>“Kıdemli”</b> işaretli kişiler kıdemli sayılır. Burada her gün <b>nöbette</b> ve her hafta içi <b>gündüzde</b> en az kaç kıdemli bulunması gerektiğini belirleyin. <b>0</b> = kapalı. Yeterli kıdemli yoksa o günler uyarı olarak listelenir (kapsama yine bozulmaz).</p>
+          <div class="row">
+            <div class="fld"><label>Nöbette en az kıdemli</label><input type="number" id="minSeniorOncall" min="0" style="width:80px"></div>
+            <div class="fld"><label>Gündüzde en az kıdemli</label><input type="number" id="minSeniorDaytime" min="0" style="width:80px"></div>
+          </div>
+        </div>
+        <div class="advgrp">
           <h4>Vardiya tipleri</h4>
           <p class="help">Bu birimde kullanılan vardiyaların <b>saatini ve adını</b> belirleyin. <b>“Gündüzü kapsar”</b> işaretliyse o vardiya 08-17 gündüz sayısına dahil olur (örn. 24s nöbet gündüzü kapsar; 16s akşam nöbeti kapsamaz). Otomatik dağıtım bu 3 çekirdek vardiyayı kullanır.</p>
           <div class="shiftrow"><i class="sw" style="background:var(--c-M)"></i>
@@ -261,7 +269,7 @@
     <h2>👥 Personel & Talepler</h2>
     <div class="pwrap"><div class="pgrid">
       <div class="phead">
-        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Sorumlu<br>(nöbet yok)</div><div>Aya N.İ<br>başla</div><div>Haftalık<br>izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün<br>isteği</div><div>Gün tercihi</div><div>Sırala<br>/ Sil</div>
+        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Sorumlu<br>(nöbet yok)</div><div>Kıdemli</div><div>Aya N.İ<br>başla</div><div>Haftalık<br>izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün<br>isteği</div><div>Gün tercihi</div><div>Sırala<br>/ Sil</div>
       </div>
       <div id="pbody"></div>
     </div></div>
@@ -284,10 +292,10 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v20</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v21</b> · anestezi sisteminden bağımsız</div>
 </div>
 
-<script src="asistan-scheduler.js?v=13"></script>
+<script src="asistan-scheduler.js?v=14"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -301,7 +309,7 @@ const exWrap=document.getElementById('extraDays');
 const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel','oncallLongDaytime','useShortOncall',
   'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','daytimeMin','daytimeExtra',
   'weekendOncall','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
-  'postOncallRest','maxConsecutiveOff','targetPerWorkday','minStaffWarn','overtimeForCounts'];
+  'postOncallRest','maxConsecutiveOff','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
 let PROFILES=[], PROF_I=0;
 function loadProfiles(){ try{ PROFILES=JSON.parse(localStorage.getItem('asistan_profiles')||'null'); }catch(e){ PROFILES=null; }
   if(!PROFILES||!PROFILES.length) PROFILES=[AsistanScheduler.defaultProfile()];
@@ -378,11 +386,13 @@ function addPerson(name){
   row.innerHTML=`<div class="ctr num"></div>
     <div><input type="text" class="p-name" value="${name||''}"></div>
     <div class="ctr"><input type="checkbox" class="p-sorumlu" title="Bu kişi nöbet tutmaz, sadece gündüz mesai yapar"></div>
+    <div class="ctr"><input type="checkbox" class="p-senior" title="Kıdemli personel (gelişmiş ayarlarda: gündüz/nöbette en az kaç kıdemli bulunsun)"></div>
     <div class="ctr"><input type="checkbox" class="p-startni" title="Önceki ayın son nöbetçisi: ayın 1. günü N.İ (dinlenme) başlar"></div>
     <div><select class="p-offday"><option value="">—</option>${[1,2,3,4,5].map(d=>`<option value="${d}">${DOW[d]}</option>`).join('')}</select></div>
     <div class="leave">${yiCellHtml()}</div>
     <div><input type="text" class="p-off" placeholder="örn. 5,12" title="Bu günlere ne nöbet ne mesai yazılır (kesin boş)"></div>
     <div class="pref">
+      <label class="chk" style="font-size:11px" title="İşaretliyse bu kişi TÜM AY yalnızca nöbete gelir; hiç gündüz mesaisi (M) yazılmaz."><input type="checkbox" class="p-onlynobet"> tüm ay sadece nöbet</label>
       <input type="text" class="p-onlyday" placeholder="sadece gündüz: 7,8" title="Bu günlerde nöbet verilmez, sadece gündüz">
       <input type="text" class="p-onlyn16" placeholder="sadece kısa nöbet: 12" title="Bu günlerde uzun değil kısa nöbet"></div>
     <div class="rowact">
@@ -401,20 +411,21 @@ function parseDays(s){ return (s||'').split(',').map(x=>parseInt(x.trim(),10)).f
 function readPersonnel(){
   return [...document.querySelectorAll('#pbody .prow')].map(r=>({
     name:(r.querySelector('.p-name').value||'?').trim(),
-    noNobet:r.querySelector('.p-sorumlu').checked, startNI:r.querySelector('.p-startni').checked,
+    noNobet:r.querySelector('.p-sorumlu').checked, senior:r.querySelector('.p-senior').checked, startNI:r.querySelector('.p-startni').checked,
     offDay:r.querySelector('.p-offday').value===''?null:parseInt(r.querySelector('.p-offday').value,10),
     leaveYI:leaveDaysOf(r), yiRanges:rangesOf(r),
-    offReq:parseDays(r.querySelector('.p-off').value),
+    offReq:parseDays(r.querySelector('.p-off').value), onlyNobet:r.querySelector('.p-onlynobet').checked,
     onlyDay:parseDays(r.querySelector('.p-onlyday').value), onlyN16:parseDays(r.querySelector('.p-onlyn16').value)
   })).filter(p=>p.name!=='?');
 }
 function applyPersonnel(list){
   document.getElementById('pbody').innerHTML='';
   (list||[]).forEach(p=>{ addPerson(p.name); const r=document.querySelector('#pbody .prow:last-child');
-    r.querySelector('.p-sorumlu').checked=!!p.noNobet; r.querySelector('.p-startni').checked=!!p.startNI;
+    r.querySelector('.p-sorumlu').checked=!!p.noNobet; r.querySelector('.p-senior').checked=!!p.senior; r.querySelector('.p-startni').checked=!!p.startNI;
     r.querySelector('.p-offday').value=p.offDay!=null?String(p.offDay):'';
     let ranges=(p.yiRanges&&p.yiRanges.length)?p.yiRanges:[]; if(!ranges.length)ranges=[{s:'',e:''}];
     r.querySelector('.yi-list').innerHTML=ranges.map(x=>yiRangeHtml(x.s,x.e)).join(''); updateYiX(r.querySelector('.leave'));
+    r.querySelector('.p-onlynobet').checked=!!p.onlyNobet;
     r.querySelector('.p-off').value=(p.offReq||[]).join(','); r.querySelector('.p-onlyday').value=(p.onlyDay||[]).join(','); r.querySelector('.p-onlyn16').value=(p.onlyN16||[]).join(',');
   });
   updateDateBounds();
@@ -427,8 +438,8 @@ let MONTHS_DATA={};          // "Y-M" -> {holidays:[], personnel:[...]}
 let CUR_YM=null;
 function ymNow(){ return document.getElementById('year').value+'-'+document.getElementById('month').value; }
 // kimlik (isim, Sorumlu, Haftalık izin günü) korunur; aylık İSTEKLER sıfırlanır
-function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, offDay:p.offDay,
-  startNI:false, yiRanges:[], leaveYI:[], offReq:[], onlyDay:[], onlyN16:[] })); }
+function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, senior:p.senior, offDay:p.offDay,
+  startNI:false, yiRanges:[], leaveYI:[], offReq:[], onlyNobet:false, onlyDay:[], onlyN16:[] })); }
 function captureMonth(){ if(CUR_YM==null)return;
   MONTHS_DATA[CUR_YM]={ holidays:parseDays(document.getElementById('holidays').value), personnel:readPersonnel() }; }
 function showMonth(ym){
