@@ -41,6 +41,7 @@
       postOncallRest: 1,                                   // nöbet sonrası kaç gün dinlenme (N.İ)
       maxConsecutiveOff: 3,                                // üst üste en fazla kaç boş iş günü
       minStaffWarn: 12,                                    // bu sayının altında "kapasite sınırda" uyarısı
+      overtimeForCounts: false,                            // açıksa: gündüz sayıları tutmazsa o günlerde FAZLA MESAİ verilir
       // ÖZEL VARDİYALAR (kullanıcı ekler): ızgarada ELLE atanır; saat/gündüz/lejantta sayılır.
       // (Otomatik dağıtım çekirdek vardiyalarla yapılır; özel vardiyaların otomatiğe girmesi sonra.)
       //   { code:'C1', label:'12s', hours:12, daytime:true, color:'#0891b2' }
@@ -88,7 +89,8 @@
         if (isOncall(c) && (daysArr[d - 1].weekend || daysArr[d - 1].holiday)) wkn++;
       }
       var fark = hours - p.target;
-      if (fark > 0) warnings.push(p.name + ': FAZLA MESAİ ' + fark + ' saat (hedef ' + p.target + ').');
+      if (fark > 0) warnings.push((P.overtimeForCounts ? '💡 ' + p.name + ': planlı fazla mesai ' + fark + ' saat (gündüz sayıları tutturuldu).'
+        : p.name + ': FAZLA MESAİ ' + fark + ' saat (hedef ' + p.target + ').'));
       else if (fark < 0) {
         if (p.noNobet) {
           var avail = daysArr.filter(function (dd) { return dd.workday && a[dd.day] !== 'YI' && a[dd.day] !== 'OFF'; }).length;
@@ -404,6 +406,24 @@
       }
     });
 
+    // ---- 2.75) (opsiyonel) GEREKİRSE FAZLA MESAİ: istenen gündüz sayılarını TUTTUR ----
+    // overtimeForCounts açıkken: saat-korumalı takasla (2.7) tutturulamayan günlerde, o güne
+    // gündüz katkısı olabilecek uygun birine M (fazla mesai) ekleyip sayıyı garanti eder.
+    // Eklenen M 'mustMesai' ile korunur -> yerel arama (LS) bunu boşaltamaz, sayı düşmez.
+    if (P.overtimeForCounts) days.forEach(function (dd) {
+      if (!dd.workday) return; var need = dayNeed(dd);
+      for (var guard = 0; guard < 40 && daytimeCount(dd.day) < need; guard++) {
+        var cand = null, bestSlack = -1e15;
+        for (var pi = 0; pi < people.length; pi++) { var Pp = people[pi];
+          if (Pp.noNobet || Pp.assign[dd.day] !== 'UCI') continue;              // gündüze katkı + o gün boşta (UCI)
+          if (Pp.offReq.has(dd.day) || Pp.lockedOff.has(dd.day)) continue;      // kesin boş / kilitli olmasın
+          var slack = Pp.target - Pp.hours; if (slack > bestSlack) { bestSlack = slack; cand = Pp; }  // en az fazla mesaisi olana ver (adalet)
+        }
+        if (!cand) break;
+        cand.assign[dd.day] = 'M'; cand.hours += P.mesaiHours; cand.mustMesai.add(dd.day);
+      }
+    });
+
     // ---- 2.97) FAZLA MESAİ GİDERME: uzun nöbeti kısa nöbete indir (gündüz min'i bozmadan) ----
     if (P.useShortOncall) people.forEach(function (Pp) {
       if (Pp.noNobet) return;
@@ -583,7 +603,7 @@
   function scoreResult(r, P) {
     var s = 0;
     (r.warnings || []).forEach(function (w) {
-      if (w.charAt(0) === '💡') return;
+      if (w.indexOf('💡') === 0) return;
       if (/sadece \d+ nöbetçi/.test(w)) s += 100000;
       else if (/FAZLA MESAİ/.test(w)) s += 1000;
       else if (/EKSİK/.test(w)) s += 600;
