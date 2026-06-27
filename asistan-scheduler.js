@@ -31,7 +31,8 @@
       daytimeMin: 2,                                       // hafta içi gündüz min (oncall-daytime + mesai)
       daytimeExtraDays: [2, 4],                            // ekstra gündüz istenen günler (dow: Sal=2, Per=4)
       daytimeExtra: 3,                                     // o günlerde gündüz min
-      weekendForceLong: true,                              // hafta sonu/tatil hep uzun (24s) nöbet
+      weekendForceLong: true,                              // (eski) — weekendOncall'a göç eder; tutuluyor
+      weekendOncall: 'long',                               // hafta sonu/tatil nöbet şekli: 'long'(24) | 'short'(16)
       weekendOncallPerDay: 2,                              // hafta sonu/tatil günde kaç nöbetçi
       targetPerWorkday: 8,                                 // aylık hedef = bu × iş günü
       preLeaveOncall: true,                                // yıllık izin öncesi nöbet konsun mu
@@ -52,7 +53,10 @@
   function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
   function dow(y, m, d) { return new Date(y, m, d).getDay(); }
   function isWeekend(w) { return w === 0 || w === 6; }
-  function clampProfile(p) { var d = defaultProfile(); var r = {}; for (var k in d) r[k] = (p && p[k] !== undefined) ? p[k] : d[k]; return r; }
+  function clampProfile(p) { var d = defaultProfile(); var r = {}; for (var k in d) r[k] = (p && p[k] !== undefined) ? p[k] : d[k];
+    // GÖÇ: eski profillerde weekendOncall yoksa weekendForceLong'tan türet (false -> hafta içi şekli)
+    if (p && p.weekendOncall === undefined) r.weekendOncall = (p.weekendForceLong === false) ? (p.defaultOncall || 'long') : 'long';
+    return r; }
 
   // Vardiya kodları sabit arketip: M(mesai), NL(uzun nöbet), NS(kısa nöbet) + izin türleri.
   // Profil bunların SAATİNİ/etiketini/gündüz-sayılıp-sayılmadığını belirler.
@@ -190,6 +194,8 @@
       return best;
     }
     function defType() { return P.defaultOncall === 'short' && P.useShortOncall ? 'NS' : 'NL'; }
+    function weekendType() { return P.weekendOncall === 'short' && P.useShortOncall ? 'NS' : 'NL'; }
+    function dayType(dd) { return (dd.weekend || dd.holiday) ? weekendType() : defType(); }
 
     function eligible(Pp, dd, kind, strict) {
       var d = dd.day, cur = Pp.assign[d];
@@ -277,7 +283,7 @@
     days.forEach(function (dd) {
       var need = oncallNeed(dd);
       for (var slot = oncallCount(dd.day); slot < need; slot++) {
-        var kind = (dd.weekend || dd.holiday) ? (P.weekendForceLong ? 'NL' : defType()) : defType();
+        var kind = dayType(dd);
         var cand = pickCandidate(dd, kind, true) || pickCandidate(dd, kind, false);
         if (!cand && dd.workday && P.useShortOncall && kind === 'NL') { kind = 'NS'; cand = pickCandidate(dd, kind, true) || pickCandidate(dd, kind, false); }
         if (cand) placeOncall(cand, dd, kind);
@@ -337,7 +343,7 @@
       days.forEach(function (dd) {
         var need = oncallNeed(dd);
         for (var guard = 0; guard < need && oncallCount(dd.day) < need; guard++) {
-          var longK = (dd.weekend || dd.holiday) ? (P.weekendForceLong ? 'NL' : defType()) : defType();
+          var longK = dayType(dd);
           var ok = tryCover(dd, longK);
           if (!ok && dd.workday && P.useShortOncall && longK === 'NL') ok = tryCover(dd, 'NS');
           if (!ok) break;

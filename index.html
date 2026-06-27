@@ -170,12 +170,10 @@
       <!-- EN ÇOK KULLANILAN (sade) -->
       <div class="keycards">
         <div class="kc"><div class="t">Günde kaç nöbetçi (hafta içi)</div><input type="number" id="oncallPerDay"></div>
-        <div class="kc"><div class="t">Varsayılan nöbet</div><select id="defaultOncall"><option value="long">Uzun (24s gibi)</option><option value="short">Kısa (16s gibi)</option></select></div>
         <div class="kc"><div class="t">Hafta içi gündüz min</div><input type="number" id="daytimeMin"></div>
         <div class="kc"><div class="t">Hafta sonu/tatil nöbetçi</div><input type="number" id="weekendOncallPerDay"></div>
       </div>
       <div class="row" style="margin-bottom:6px">
-        <label class="chk" title="İşaretliyse hafta sonu/tatil nöbetleri yalnız uzun (24s) tutulur, asla kısaya (16s) inilmez."><input type="checkbox" id="weekendForceLong"> Hafta sonu/tatil sadece uzun (<span id="wkLongHint">24s</span>) nöbet</label>
         <label class="chk"><input type="checkbox" id="useShortOncall"> Kısa nöbet kullanılsın</label>
         <label class="chk"><input type="checkbox" id="preLeaveOncall"> Yıllık izin öncesi nöbet koy</label>
         <label class="chk" title="Açıkken: gündüz kişi sayıları (hafta içi min, Salı/Perşembe ekstra) normal yoldan tutturulamazsa, o günlerde sayıyı tutturmak için FAZLA MESAİ verilir. Kapalıyken kimse hedefini aşmaz (boşluk olursa uyarı verir)."><input type="checkbox" id="overtimeForCounts"> ⚡ Gerekirse fazla mesai ver (gündüz sayıları tutsun)</label>
@@ -183,7 +181,15 @@
 
       <!-- GELİŞMİŞ (gizli) -->
       <details class="adv">
-        <summary>Gelişmiş ayarlar (vardiya saatleri, ekstra gündüz, izin & boşluk, hedef)</summary>
+        <summary>Gelişmiş ayarlar (nöbet şekli, vardiya saatleri, ekstra gündüz, izin & boşluk, hedef)</summary>
+        <div class="advgrp">
+          <h4>Nöbet şekli (hafta içi / hafta sonu ayrı)</h4>
+          <p class="help">Hafta içi ve hafta sonu/tatil nöbetlerinin <b>uzun (24s)</b> mu <b>kısa (16s)</b> mı olacağını ayrı ayrı seçin. Kısa seçilebilmesi için yukarıdaki <b>“Kısa nöbet kullanılsın”</b> açık olmalı; kapalıyken her ikisi de uzun (24s) tutulur.</p>
+          <div class="row">
+            <div class="fld"><label>Hafta içi nöbet şekli</label><select id="defaultOncall"><option value="long">Uzun (24s)</option><option value="short">Kısa (16s)</option></select></div>
+            <div class="fld"><label>Hafta sonu / tatil nöbet şekli</label><select id="weekendOncall"><option value="long">Uzun (24s)</option><option value="short">Kısa (16s)</option></select></div>
+          </div>
+        </div>
         <div class="advgrp">
           <h4>Vardiya tipleri</h4>
           <p class="help">Bu birimde kullanılan vardiyaların <b>saatini ve adını</b> belirleyin. <b>“Gündüzü kapsar”</b> işaretliyse o vardiya 08-17 gündüz sayısına dahil olur (örn. 24s nöbet gündüzü kapsar; 16s akşam nöbeti kapsamaz). Otomatik dağıtım bu 3 çekirdek vardiyayı kullanır.</p>
@@ -278,10 +284,10 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v18</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v19</b> · anestezi sisteminden bağımsız</div>
 </div>
 
-<script src="asistan-scheduler.js?v=11"></script>
+<script src="asistan-scheduler.js?v=12"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -294,7 +300,7 @@ const exWrap=document.getElementById('extraDays');
 // ===== PROFİLLER =====
 const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel','oncallLongDaytime','useShortOncall',
   'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','oncallPerDay','daytimeMin','daytimeExtra',
-  'weekendForceLong','weekendOncallPerDay','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
+  'weekendOncall','weekendOncallPerDay','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
   'postOncallRest','maxConsecutiveOff','targetPerWorkday','minStaffWarn','overtimeForCounts'];
 let PROFILES=[], PROF_I=0;
 function loadProfiles(){ try{ PROFILES=JSON.parse(localStorage.getItem('asistan_profiles')||'null'); }catch(e){ PROFILES=null; }
@@ -308,7 +314,6 @@ function refreshProfSel(){ const s=document.getElementById('profSel');
 function fillRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; if(el.type==='checkbox')el.checked=!!p[f]; else el.value=p[f];});
   exWrap.querySelectorAll('input[data-dow]').forEach(cb=>{cb.checked=(p.daytimeExtraDays||[]).indexOf(parseInt(cb.dataset.dow,10))>=0;});
-  const wk=document.getElementById('wkLongHint'); if(wk)wk.textContent=(p.oncallLongHours||24)+'s';
   renderCustomShifts(); }
 function readRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return;
