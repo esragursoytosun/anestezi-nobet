@@ -292,7 +292,7 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v22</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v23</b> · anestezi sisteminden bağımsız</div>
 </div>
 
 <script src="asistan-scheduler.js?v=14"></script>
@@ -491,7 +491,7 @@ function gridHtml(r){
   const p=curProfile(); let h=`<div class="gridwrap"><table class="grid"><thead><tr><th class="name">Personel</th>`;
   r.days.forEach(d=>{ h+=`<th class="${d.weekend||d.holiday?'wknd':''}">${d.day}<br><span class="muted">${d.dowName}</span></th>`; });
   h+=`<th class="tot">Hedef</th><th class="tot">Top.</th><th class="tot">Fark</th><th class="tot">${p.mesaiLabel}</th><th class="tot">${p.oncallLongLabel}</th><th class="tot">${p.oncallShortLabel}</th><th class="tot">Nİ</th><th class="tot">Ü.İ</th><th class="tot">HSn</th></tr></thead><tbody>`;
-  r.totals.forEach((t,ti)=>{ const g=r.grid[t.name]; h+=`<tr><td class="name">${t.name}</td>`;
+  r.totals.forEach((t,ti)=>{ const g=r.grid[t.name]; h+=`<tr><td class="name">${t.name}${t.noNobet?' <span class="muted" style="font-weight:400;font-size:9px">(Sorumlu)</span>':''}</td>`;
     r.days.forEach(d=>{ const c=g[d.day]||''; const cc=customColor(c);
       h+=`<td class="${cc?'':c}" ${cc?`style="background:${cc}"`:''} data-ti="${ti}" data-d="${d.day}" onclick="editCell(this)">${codeLabel(c)}</td>`; });
     const fc=t.fark===0?'good':'bad';
@@ -554,7 +554,7 @@ function editCell(td){ if(!LAST||td.querySelector('select'))return;
 // ===== DIŞA AKTARMA =====
 function exportCSV(){ if(!LAST){alert('Önce liste oluşturun.');return;} const r=LAST,p=curProfile();
   const head=['Personel'].concat(r.days.map(d=>d.day+' '+d.dowName)).concat(['Hedef','Toplam','Fark',p.mesaiLabel,p.oncallLongLabel,p.oncallShortLabel,'Nİ','Üİ','HSn']);
-  const rows=[head]; r.totals.forEach(t=>{ const g=r.grid[t.name]; const row=[t.name].concat(r.days.map(d=>codeLabel(g[d.day]||'')));
+  const rows=[head]; r.totals.forEach(t=>{ const g=r.grid[t.name]; const row=[t.name+(t.noNobet?' (Sorumlu)':'')].concat(r.days.map(d=>codeLabel(g[d.day]||'')));
     row.push(t.target,t.hours,(t.fark>0?'+':'')+t.fark,t.mesai,t.nl,t.ns,t.ni,t.uci,t.weekendNobet); rows.push(row); });
   const csv=rows.map(rw=>rw.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
   dl(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),fname('csv')); }
@@ -564,7 +564,7 @@ function exportXLS(){ if(!LAST){alert('Önce liste oluşturun.');return;} const 
   let h='<table border="1" style="border-collapse:collapse;font-family:Arial;font-size:10px"><tr><th>Personel</th>';
   r.days.forEach(d=>{h+=`<th style="background:${d.weekend||d.holiday?'#fde68a':'#e5e7eb'}">${d.day} ${d.dowName}</th>`;});
   h+='<th>Hedef</th><th>Toplam</th><th>Fark</th><th>'+p.mesaiLabel+'</th><th>'+p.oncallLongLabel+'</th><th>'+p.oncallShortLabel+'</th><th>Nİ</th><th>Üİ</th><th>HSn</th></tr>';
-  r.totals.forEach(t=>{ const g=r.grid[t.name]; h+=`<tr><td style="font-weight:bold">${t.name}</td>`;
+  r.totals.forEach(t=>{ const g=r.grid[t.name]; h+=`<tr><td style="font-weight:bold">${t.name}${t.noNobet?' (Sorumlu)':''}</td>`;
     r.days.forEach(d=>{const c=g[d.day]||'';h+=`<td style="${col[c]?('background:'+col[c]+';color:#fff;font-weight:bold'):''};text-align:center">${codeLabel(c)}</td>`;});
     h+=`<td align=center>${t.target}</td><td align=center>${t.hours}</td><td align=center>${(t.fark>0?'+':'')+t.fark}</td><td align=center>${t.mesai}</td><td align=center>${t.nl}</td><td align=center>${t.ns}</td><td align=center>${t.ni}</td><td align=center>${t.uci}</td><td align=center>${t.weekendNobet}</td></tr>`; });
   h+='</table>'; dl(new Blob(['﻿<html><head><meta charset="utf-8"></head><body>'+h+'</body></html>'],{type:'application/vnd.ms-excel'}),fname('xls')); }
