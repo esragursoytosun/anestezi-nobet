@@ -45,8 +45,8 @@
   .shiftrow .sw{width:18px;height:18px}
   /* ---- personel (CSS grid — sütunlar kesin hizalı) ---- */
   .pwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
-  .pgrid{min-width:1200px}
-  .phead,.prow{display:grid;grid-template-columns:30px 150px 70px 78px 112px 300px 112px 230px 100px;align-items:center;gap:8px;padding:7px 8px}
+  .pgrid{min-width:1280px}
+  .phead,.prow{display:grid;grid-template-columns:30px 150px 78px 70px 78px 112px 300px 112px 230px 100px;align-items:center;gap:8px;padding:7px 8px}
   .phead{background:var(--inset);color:var(--muted);font-size:11px;font-weight:600;line-height:1.2;position:sticky;top:0;z-index:1}
   .phead>div,.prow>.ctr{display:flex;justify-content:center;align-items:center;text-align:center}
   .prow{border-top:1px solid var(--line)}
@@ -269,7 +269,7 @@
     <h2>👥 Personel & Talepler</h2>
     <div class="pwrap"><div class="pgrid">
       <div class="phead">
-        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Kıdemli</div><div>Aya N.İ<br>başla</div><div>Haftalık<br>izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün<br>isteği</div><div>Çalışma tercihi</div><div>Sırala<br>/ Sil</div>
+        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Sorumlu<br>(sayıma katılmaz)</div><div>Kıdemli</div><div>Aya N.İ<br>başla</div><div>Haftalık<br>izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün<br>isteği</div><div>Çalışma tercihi</div><div>Sırala<br>/ Sil</div>
       </div>
       <div id="pbody"></div>
     </div></div>
@@ -292,10 +292,10 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v23</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v24</b> · anestezi sisteminden bağımsız</div>
 </div>
 
-<script src="asistan-scheduler.js?v=14"></script>
+<script src="asistan-scheduler.js?v=15"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -385,6 +385,7 @@ function addPerson(name){
   const row=document.createElement('div'); row.className='prow';
   row.innerHTML=`<div class="ctr num"></div>
     <div><input type="text" class="p-name" value="${name||''}"></div>
+    <div class="ctr"><input type="checkbox" class="p-sorumlu" onchange="pmode(this)" title="SORUMLU: listede etiketlenir ve belirlenen gündüz/nöbet SAYILARINA DAHİL EDİLMEZ (ekstra/üst görevli). Nöbet tutmaz."></div>
     <div class="ctr"><input type="checkbox" class="p-senior" title="Kıdemli personel (gelişmiş ayarlarda: gündüz/nöbette en az kaç kıdemli bulunsun)"></div>
     <div class="ctr"><input type="checkbox" class="p-startni" title="Önceki ayın son nöbetçisi: ayın 1. günü N.İ (dinlenme) başlar"></div>
     <div><select class="p-offday"><option value="">—</option>${[1,2,3,4,5].map(d=>`<option value="${d}">${DOW[d]}</option>`).join('')}</select></div>
@@ -392,8 +393,8 @@ function addPerson(name){
     <div><input type="text" class="p-off" placeholder="örn. 5,12" title="Bu günlere ne nöbet ne mesai yazılır (kesin boş)"></div>
     <div class="pref">
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <label class="chk" style="font-size:11px" title="TÜM AY yalnızca gündüz mesaisi; hiç nöbet tutmaz."><input type="checkbox" class="p-sorumlu" onchange="if(this.checked)this.closest('.pref').querySelector('.p-onlynobet').checked=false"> sadece gündüz</label>
-        <label class="chk" style="font-size:11px" title="TÜM AY yalnızca nöbet; hiç gündüz mesaisi (M) yazılmaz."><input type="checkbox" class="p-onlynobet" onchange="if(this.checked)this.closest('.pref').querySelector('.p-sorumlu').checked=false"> sadece nöbet</label>
+        <label class="chk" style="font-size:11px" title="TÜM AY yalnızca gündüz vardiyası; nöbet tutmaz AMA gündüz sayısına DAHİL EDİLİR (normal gündüzcü gibi)."><input type="checkbox" class="p-dayonly" onchange="pmode(this)"> sadece gündüz</label>
+        <label class="chk" style="font-size:11px" title="TÜM AY yalnızca nöbet; hiç gündüz mesaisi (M) yazılmaz."><input type="checkbox" class="p-onlynobet" onchange="pmode(this)"> sadece nöbet</label>
       </div>
       <input type="text" class="p-onlyday" placeholder="bazı gün gündüz: 7,8" title="Yalnız bu günlerde nöbet verilmez (gündüz)">
       <input type="text" class="p-onlyn16" placeholder="bazı gün kısa nöbet: 12" title="Bu günlerde uzun değil kısa nöbet"></div>
@@ -403,6 +404,7 @@ function addPerson(name){
       <button class="sm danger" onclick="this.closest('.prow').remove();renumber()" title="Sil">×</button></div>`;
   document.getElementById('pbody').appendChild(row); renumber(); updateDateBounds();
 }
+function pmode(el){ const row=el.closest('.prow'); if(!el.checked)return; ['p-sorumlu','p-dayonly','p-onlynobet'].forEach(c=>{ if(!el.classList.contains(c)){ const o=row.querySelector('.'+c); if(o)o.checked=false; } }); }
 function moveRow(btn,dir){ const row=btn.closest('.prow'), p=row.parentNode;
   if(dir<0){ const prev=row.previousElementSibling; if(prev)p.insertBefore(row,prev); }
   else { const next=row.nextElementSibling; if(next)p.insertBefore(next,row); }
@@ -413,7 +415,7 @@ function parseDays(s){ return (s||'').split(',').map(x=>parseInt(x.trim(),10)).f
 function readPersonnel(){
   return [...document.querySelectorAll('#pbody .prow')].map(r=>({
     name:(r.querySelector('.p-name').value||'?').trim(),
-    noNobet:r.querySelector('.p-sorumlu').checked, senior:r.querySelector('.p-senior').checked, startNI:r.querySelector('.p-startni').checked,
+    noNobet:r.querySelector('.p-sorumlu').checked, dayOnly:r.querySelector('.p-dayonly').checked, senior:r.querySelector('.p-senior').checked, startNI:r.querySelector('.p-startni').checked,
     offDay:r.querySelector('.p-offday').value===''?null:parseInt(r.querySelector('.p-offday').value,10),
     leaveYI:leaveDaysOf(r), yiRanges:rangesOf(r),
     offReq:parseDays(r.querySelector('.p-off').value), onlyNobet:r.querySelector('.p-onlynobet').checked,
@@ -423,7 +425,7 @@ function readPersonnel(){
 function applyPersonnel(list){
   document.getElementById('pbody').innerHTML='';
   (list||[]).forEach(p=>{ addPerson(p.name); const r=document.querySelector('#pbody .prow:last-child');
-    r.querySelector('.p-sorumlu').checked=!!p.noNobet; r.querySelector('.p-senior').checked=!!p.senior; r.querySelector('.p-startni').checked=!!p.startNI;
+    r.querySelector('.p-sorumlu').checked=!!p.noNobet; r.querySelector('.p-dayonly').checked=!!p.dayOnly; r.querySelector('.p-senior').checked=!!p.senior; r.querySelector('.p-startni').checked=!!p.startNI;
     r.querySelector('.p-offday').value=p.offDay!=null?String(p.offDay):'';
     let ranges=(p.yiRanges&&p.yiRanges.length)?p.yiRanges:[]; if(!ranges.length)ranges=[{s:'',e:''}];
     r.querySelector('.yi-list').innerHTML=ranges.map(x=>yiRangeHtml(x.s,x.e)).join(''); updateYiX(r.querySelector('.leave'));
@@ -440,7 +442,7 @@ let MONTHS_DATA={};          // "Y-M" -> {holidays:[], personnel:[...]}
 let CUR_YM=null;
 function ymNow(){ return document.getElementById('year').value+'-'+document.getElementById('month').value; }
 // kimlik (isim, Sorumlu, Haftalık izin günü) korunur; aylık İSTEKLER sıfırlanır
-function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, onlyNobet:p.onlyNobet, senior:p.senior, offDay:p.offDay,
+function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, dayOnly:p.dayOnly, onlyNobet:p.onlyNobet, senior:p.senior, offDay:p.offDay,
   startNI:false, yiRanges:[], leaveYI:[], offReq:[], onlyDay:[], onlyN16:[] })); }
 function captureMonth(){ if(CUR_YM==null)return;
   MONTHS_DATA[CUR_YM]={ holidays:parseDays(document.getElementById('holidays').value), personnel:readPersonnel() }; }

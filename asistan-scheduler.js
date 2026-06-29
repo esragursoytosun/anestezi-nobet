@@ -184,7 +184,7 @@
       // hedef: iş günü başına targetPerWorkday; yıllık izin + haftalık izin günü DÜŞER (gün×targetPerWorkday)
       var leaveWork = workdayNums.filter(function (x) { return YI.has(x); }).length;
       var target = baseTarget - (leaveWork + offDays) * P.targetPerWorkday;
-      return { name: p.name, idx: idx, noNobet: !!p.noNobet, startNI: !!p.startNI,
+      return { name: p.name, idx: idx, noNobet: !!p.noNobet, dayOnly: !!p.dayOnly, startNI: !!p.startNI,
         onlyNobet: !!p.onlyNobet, senior: !!p.senior,
         onlyDay: new Set(p.onlyDay || []), onlyN16: new Set(p.onlyN16 || []), offReq: new Set(p.offReq || []),
         assign: assign, target: target, hours: 0, nobetDays: [], lastNobet: -99, weekendNobet: 0,
@@ -218,7 +218,7 @@
 
     function eligible(Pp, dd, kind, strict) {
       var d = dd.day, cur = Pp.assign[d];
-      if (Pp.noNobet) return false;
+      if (Pp.noNobet || Pp.dayOnly) return false;   // Sorumlu ve "sadece gündüz" nöbet tutmaz
       if (Pp.onlyDay.has(d)) return false;
       if (Pp.onlyN16.has(d) && kind === 'NL') return false;
       if (Pp.lockedOff.has(d) || Pp.offReq.has(d)) return false;
@@ -315,7 +315,7 @@
     // ---- 1.5) KAPSAMA GARANTİSİ (mesai doldurmadan ÖNCE — overtime önler) ----
     function coverEligible(Pp, dd, kind) {
       var d = dd.day, cur = Pp.assign[d];
-      if (Pp.noNobet || Pp.onlyDay.has(d)) return false;
+      if (Pp.noNobet || Pp.dayOnly || Pp.onlyDay.has(d)) return false;
       if (Pp.onlyN16.has(d) && kind === 'NL') return false;
       if (Pp.lockedOff.has(d) || Pp.offReq.has(d)) return false;
       if (cur === 'YI' || cur === 'OFF' || cur === 'NI' || isOncall(cur)) return false;
@@ -583,7 +583,7 @@
         if (!As.length) return null;
         var A = As[(rnd() * As.length) | 0], kind = A.assign[d], Bs = [];
         for (var j = 0; j < people.length; j++) { var B = people[j];
-          if (B === A || B.noNobet || B.onlyDay.has(d)) continue;
+          if (B === A || B.noNobet || B.dayOnly || B.onlyDay.has(d)) continue;
           if (kind === 'NL' && B.onlyN16.has(d)) continue;
           if (B.lockedOff.has(d) || B.offReq.has(d)) continue;
           var cell = B.assign[d]; if (!(cell === 'M' || cell === 'UCI' || cell === '')) continue;
