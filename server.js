@@ -12,6 +12,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const PORT = process.env.PORT || 8090;
 const ROOT = __dirname;
@@ -24,6 +25,27 @@ const DOC_ID = 'anestezi_state';
 // Render'da bu ikisini ortam değişkeniyle değiştirin. Yöneticiler "Ayarlar"dan kullanıcı yönetir.
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.APP_PASSWORD || 'anestezi2026';
+
+// ---- ŞİFRE HASH (scrypt+salt) + OTURUM TOKEN'I (imzalı, durumsuz) ----
+// Şifreler artık düz metin saklanmaz. Oturumlar imzalı token ile yürür; şifre yalnız
+// GİRİŞTE doğrulanır (yavaş scrypt), sonraki her istekte ucuz HMAC token doğrulaması yapılır.
+const TOKEN_SECRET = process.env.SESSION_SECRET || ADMIN_PASS || 'asistan-secret';
+function hashPw(pw) { const salt = crypto.randomBytes(16).toString('hex');
+  return 'scrypt$' + salt + '$' + crypto.scryptSync(String(pw), salt, 32).toString('hex'); }
+function verifyPw(pw, stored) { const parts = String(stored || '').split('$');
+  if (parts[0] !== 'scrypt' || parts.length !== 3) return false;
+  const h = crypto.scryptSync(String(pw), parts[1], 32);
+  const b = Buffer.from(parts[2], 'hex');
+  return h.length === b.length && crypto.timingSafeEqual(h, b); }
+function makeToken(u, role, unitId) {
+  const p = Buffer.from(JSON.stringify({ u: u, role: role, unitId: unitId == null ? null : unitId })).toString('base64url');
+  const sig = crypto.createHmac('sha256', TOKEN_SECRET).update(p).digest('base64url');
+  return p + '.' + sig; }
+function verifyToken(t) { if (!t || String(t).indexOf('.') < 0) return null;
+  const ix = t.indexOf('.'), p = t.slice(0, ix), sig = t.slice(ix + 1);
+  const exp = crypto.createHmac('sha256', TOKEN_SECRET).update(p).digest('base64url');
+  try { if (sig.length !== exp.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(exp))) return null;
+    return JSON.parse(Buffer.from(p, 'base64url').toString()); } catch (e) { return null; } }
 function findUser(st, u, p) {
   // ANA YÖNETİCİ ANAHTARI: ortam değişkenindeki ADMIN_USER+APP_PASSWORD HER ZAMAN geçerli
   // (kayıtlı kullanıcılardan bağımsız) -> asla kilitlenme, şifre sonradan değişse de env ile girilir.
@@ -109,9 +131,17 @@ async function saveAsistan(st) {
 }
 function aFindUser(st, u, p) {
   if (u && u === ADMIN_USER && p === ADMIN_PASS) return { u: ADMIN_USER, role: 'admin', unitId: null };
-  return (st.users || []).find(x => x.u === u && x.p === p) || null;
+  var usr = (st.users || []).find(x => x.u === u); if (!usr) return null;
+  if (usr.pw) return verifyPw(p, usr.pw) ? usr : null;          // hash'li (yeni)
+  if (usr.p !== undefined) return usr.p === p ? usr : null;      // eski düz metin (girişte hash'e yükseltilir)
+  return null;
 }
-async function aReqUser(req) { const st = await loadAsistan(); return aFindUser(st, req.headers['x-user'] || '', req.headers['x-auth'] || ''); }
+async function aReqUser(req) {
+  const u = req.headers['x-user'] || '', auth = req.headers['x-auth'] || '';
+  const tk = verifyToken(auth);                                  // yeni oturum: imzalı token (ucuz doğrulama)
+  if (tk && tk.u === u) return tk;
+  const st = await loadAsistan(); return aFindUser(st, u, auth); // eski oturum: X-Auth düz metin şifre (geçiş)
+}
 function aCanAccess(me, unitId) { return me && (me.role === 'admin' || me.unitId === unitId); }
 function aReadBody(req, cb) { let b = ''; req.on('data', c => { b += c; if (b.length > 6e6) req.destroy(); }); req.on('end', () => { try { cb(JSON.parse(b || '{}')); } catch (e) { cb(null); } }); }
 
@@ -199,8 +229,12 @@ const server = http.createServer(async (req, res) => {
   // ===================== ASİSTAN ROTALARI =====================
   if (u.pathname === '/api/asistan/login' && req.method === 'POST') {
     aReadBody(req, async b => { if (!b) return sendJSON(res, 400, { error: 'gövde' });
-      const st = await loadAsistan(); const usr = aFindUser(st, (b.username || '').trim(), b.password || '');
-      if (usr) return sendJSON(res, 200, { ok: true, username: usr.u, role: usr.role, unitId: usr.unitId == null ? null : usr.unitId });
+      const st = await loadAsistan(); const pass = b.password || ''; const usr = aFindUser(st, (b.username || '').trim(), pass);
+      if (usr) {
+        if (usr.role !== 'admin' && usr.p !== undefined && !usr.pw) { usr.pw = hashPw(pass); delete usr.p; await saveAsistan(st); }  // eski düz-metni yükselt
+        const token = makeToken(usr.u, usr.role, usr.unitId == null ? null : usr.unitId);
+        return sendJSON(res, 200, { ok: true, username: usr.u, role: usr.role, unitId: usr.unitId == null ? null : usr.unitId, token: token });
+      }
       return sendJSON(res, 401, { ok: false, error: 'Kullanıcı adı veya şifre hatalı' }); });
     return;
   }
@@ -238,7 +272,7 @@ const server = http.createServer(async (req, res) => {
         if (!uu || !pp) return sendJSON(res, 400, { error: 'Kullanıcı adı ve şifre gerekli' });
         if (st.users.some(x => x.u === uu && !(x.role === 'manager' && x.unitId === b.id))) return sendJSON(res, 400, { error: 'Bu kullanıcı adı başka yerde kullanılıyor' });
         st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id));   // birimde tek yönetici (değiştir)
-        st.users.push({ u: uu, p: pp, role: 'manager', unitId: b.id }); await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
+        st.users.push({ u: uu, pw: hashPw(pp), role: 'manager', unitId: b.id }); await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
       if (b.action === 'removeManager') { st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id)); await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
       if (b.action === 'renameUnit') { const un = st.units.find(x => x.id === b.id); if (un) un.name = (b.name || un.name).trim(); await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
       return sendJSON(res, 400, { error: 'bilinmeyen işlem' });

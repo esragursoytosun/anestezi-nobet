@@ -292,7 +292,7 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v25</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v26</b> · anestezi sisteminden bağımsız</div>
 </div>
 
 <script src="asistan-scheduler.js?v=16"></script>
@@ -606,7 +606,7 @@ function localBoot(){ loadProfiles(); refreshProfSel(); fillRuleForm(); if(!load
 async function doLogin(){ const u=(document.getElementById('logUser').value||'').trim(), p=document.getElementById('logPw').value||'';
   const e=document.getElementById('logErr'); e.textContent='';
   try{ const r=await fetch('/api/asistan/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
-    const j=await r.json().catch(()=>({})); if(r.ok&&j.ok){ localStorage.setItem('asistan_user',u); localStorage.setItem('asistan_auth',p); asInit(); }
+    const j=await r.json().catch(()=>({})); if(r.ok&&j.ok){ localStorage.setItem('asistan_user',u); localStorage.setItem('asistan_auth',j.token||p); asInit(); }
     else e.textContent=(j&&j.error)||'Hatalı giriş'; }catch(err){ e.textContent='Sunucuya ulaşılamadı'; } }
 function logout(){ localStorage.removeItem('asistan_user'); localStorage.removeItem('asistan_auth'); location.reload(); }
 async function reloadUnits(){ try{ const r=await fetch('/api/asistan/units',{cache:'no-store',headers:asHeaders()}); const j=await r.json(); UNITS=j.units||[]; refreshProfSel(); }catch(e){} }
