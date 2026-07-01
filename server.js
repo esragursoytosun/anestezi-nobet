@@ -287,7 +287,12 @@ const server = http.createServer(async (req, res) => {
   if (!fp.startsWith(ROOT)) { res.writeHead(403); return res.end('forbidden'); }
   fs.readFile(fp, (err, data) => {
     if (err) { res.writeHead(404); return res.end('not found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream' });
+    var ext = path.extname(fp);
+    var headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
+    // HTML'i ASLA önbelleğe alma -> kullanıcı her açılışta en güncel sürümü (ve ?v=N ile en güncel motoru) alır.
+    // (Tekrarlayan "değişmiyor" sorununun kalıcı çözümü.) JS/CSS ?v=N ile zaten sürümlenir, onlar cache'lenebilir.
+    if (ext === '.html') headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    res.writeHead(200, headers);
     res.end(data);
   });
 });
