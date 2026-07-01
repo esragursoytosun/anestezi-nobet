@@ -144,6 +144,19 @@ section('Çalışma tercihi önceliği: uzun nöbet isteği o günlerde nöbete 
   ok(withPref > base, 'uzun nöbet isteği verilince istenen günlerde NL artmalı (önce ' + base + ' sonra ' + withPref + ')');
 })();
 
+section('Kısa nöbet isteği VARSAYILAN UZUN profilde bile yazılır (fiilen yerleştirilir)');
+(function () {
+  // default profil uzun; istenen günlerde NS çıkmalı, NL asla, fazla mesai yok
+  var req = [1, 3, 8]; // ardışık olmayan iş günleri (dinlenme çakışmasın)
+  var r = S.buildSchedule({ year: Y, month: M, holidays: [], profile: S.defaultProfile(), personnel: people(13, { 1: { onlyN16: req } }), __attempts: 40, __lsIter: 4000 });
+  var g = r.grid['P1'], ns = 0, nl = 0;
+  req.forEach(function (d) { if (g[d] === 'NS') ns++; else if (g[d] === 'NL') nl++; });
+  ok(ns >= 2, 'kısa nöbet isteği günlerinde NS yazılmalı (' + ns + '/' + req.length + ')');
+  ok(nl === 0, 'kısa nöbet isteği gününde NL olmamalı (' + nl + ')');
+  var ot = r.totals.filter(function (t) { return t.fark > 0; }).length;
+  ok(ot === 0, 'kısa nöbet isteği fazla mesai yaratmamalı');
+})();
+
 // ---------------------------------------------------------------
 console.log('\n──────────────────────────────');
 console.log('SONUÇ: ' + pass + ' geçti, ' + fail + ' düştü.');

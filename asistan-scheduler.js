@@ -314,6 +314,22 @@
       });
       return pool[0];
     }
+    // ---- 0.7) ÇALIŞMA TERCİHİ: belirli gün NÖBET TÜRÜ isteğini FİİLEN yerleştir (öncelik) ----
+    // "bazı gün kısa nöbet" (onlyN16) / "uzun nöbet" (onlyN24) = o gün o kişiye o türde nöbet yaz.
+    // Kapsamadan ÖNCE yerleştirilir; saat hedefe sayılır (mesai sonra tamamlar -> fazla mesai olmaz).
+    // Dinlenme + günün max nöbetçi sınırı korunur; kısa istek için "Kısa nöbet kullanılsın" açık olmalı.
+    people.forEach(function (Pp) {
+      if (Pp.noNobet || Pp.dayOnly) return;
+      days.forEach(function (dd) {
+        var d = dd.day, wants = Pp.onlyN16.has(d) ? 'NS' : (Pp.onlyN24.has(d) ? 'NL' : null);
+        if (!wants) return;
+        if (wants === 'NS' && !P.useShortOncall) return;      // kısa nöbet kapalıysa yapılamaz
+        if (oncallCount(d) >= oncallCap(dd)) return;           // günün max nöbetçisini aşma
+        if (!coverEligible(Pp, dd, wants)) return;             // dinlenme/izin/uygunluk
+        placeCover(Pp, dd, wants);
+      });
+    });
+
     days.forEach(function (dd) {
       var need = oncallNeed(dd);
       for (var slot = oncallCount(dd.day); slot < need; slot++) {
@@ -598,6 +614,7 @@
         for (var i = 0; i < people.length; i++) if (isOncall(people[i].assign[d])) As.push(people[i]);
         if (!As.length) return null;
         var A = As[(rnd() * As.length) | 0], kind = A.assign[d], Bs = [];
+        if ((kind === 'NS' && A.onlyN16.has(d)) || (kind === 'NL' && A.onlyN24.has(d))) return null;   // istenen nöbet devredilmez
         for (var j = 0; j < people.length; j++) { var B = people[j];
           if (B === A || B.noNobet || B.dayOnly || B.onlyDay.has(d)) continue;
           if (kind === 'NL' && B.onlyN16.has(d)) continue;
