@@ -287,12 +287,16 @@
     <button class="sec sm" onclick="exportXLS()">📊 Excel</button>
     <button class="sec sm" onclick="exportCSV()">📄 CSV</button>
     <button class="sec sm" onclick="window.print()">🖨️ Yazdır / PDF</button>
+    <span style="width:1px;height:24px;background:var(--line)"></span>
+    <button class="sec sm" onclick="toggleBoard()">📊 Adalet panosu</button>
+    <button class="sec sm" onclick="toggleWhatif()">🔀 What-if</button>
     <label class="chk" style="margin-left:8px"><input type="checkbox" id="showAll" onchange="render(LAST)"> 🗂️ Tüm alternatifleri göster</label>
     <span id="altInfo" class="muted" style="margin-left:auto;font-size:12px"></span>
   </div>
 
+  <div id="panelExtra" class="noprint"></div>
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v28</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v29</b> · anestezi sisteminden bağımsız</div>
 </div>
 
 <script src="asistan-scheduler.js?v=17"></script>
@@ -485,12 +489,13 @@ function loadCfg(){
 function flash(m){ const d=document.createElement('div'); d.textContent=m; d.style.cssText='position:fixed;bottom:20px;right:20px;background:#16a34a;color:#fff;padding:10px 16px;border-radius:8px;z-index:99'; document.body.appendChild(d); setTimeout(()=>d.remove(),1500); }
 
 // ===== ÜRETİM + RENDER =====
-let LAST=null, ALTS=[], ALT_I=0;
+let LAST=null, ALTS=[], ALT_I=0, PRECHECK_HTML='';
 function codeLabel(c){ const p=curProfile(); const base={M:p.mesaiLabel,NL:p.oncallLongLabel,NS:p.oncallShortLabel,NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UCI:'Ü.İ',OFF:'İ','':''};
   if(base[c]!==undefined)return base[c]; const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.label:''; }
 function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.color:null; }
 function generate(){ readRuleForm(); const cfg=readCfg(); if(!cfg.personnel.length){alert('En az 1 personel ekleyin.');return;}
   cfg.carry=buildCarry(CUR_YM);   // aylar arası adalet: diğer ayların birikimi
+  PRECHECK_HTML=precheckHtml(cfg); // AKILLI ÖN-KONTROL (üretmeden önce yapısal imkânsızlık)
   LAST=AsistanScheduler.buildSchedule(cfg); ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0;
   if(CUR_YM!=null){ if(!MONTHS_DATA[CUR_YM])MONTHS_DATA[CUR_YM]={holidays:cfg.holidays,personnel:cfg.personnel}; MONTHS_DATA[CUR_YM].summary=summarizeResult(LAST); }  // bu ayın özetini sakla
   render(LAST); if(!SRV.on)saveAll(); }
@@ -525,6 +530,84 @@ function diagnose(r){
   if(!items.length) return '';
   return `<div class="warns" style="background:#0b2030;border-color:#1e3a5f;color:#dbeafe"><b>🔍 Durum ve öneriler</b><ul style="margin:6px 0 0;padding-left:18px">`
     +items.map(it=>`<li style="margin-bottom:5px">${it[0]}<br><span style="color:#93c5fd;font-size:12px">${it[1]}</span></li>`).join('')+`</ul></div>`;
+}
+// ===== AKILLI ÖN-KONTROL: üretmeden önce yapısal imkânsızlığı yakala =====
+function precheckHtml(cfg){
+  const P=cfg.profile, y=cfg.year, m=cfg.month, nD=AsistanScheduler.daysInMonth(y,m);
+  const hol=new Set(cfg.holidays||[]); const bad=[];
+  for(let d=1;d<=nD;d++){
+    const w=new Date(y,m,d).getDay(), weekend=(w===0||w===6), holiday=hol.has(d);
+    const need=(weekend||holiday)?(P.weekendOncallPerDay||0):(P.oncallPerDay||0);
+    if(need<=0) continue;
+    let avail=0, busy=[];
+    (cfg.personnel||[]).forEach(p=>{
+      if(p.noNobet||p.dayOnly) return;                                  // nöbet tutmayanlar
+      if((p.leaveYI||[]).indexOf(d)>=0){ busy.push((p.name||'?')+' (izin)'); return; }
+      if((p.offReq||[]).indexOf(d)>=0){ busy.push((p.name||'?')+' (boş gün)'); return; }
+      if(p.offDay!=null && +p.offDay===w) return;                       // haftalık izin günü
+      avail++;
+    });
+    if(avail<need) bad.push({d, need, avail, busy});
+  }
+  if(!bad.length) return '';
+  const DOWs=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
+  const rows=bad.slice(0,10).map(x=>{ const w=new Date(y,m,x.d).getDay();
+    return `<li><b>${x.d} ${DOWs[w]}</b>: sadece <b>${x.avail}</b> kişi müsait, <b>${x.need}</b> nöbetçi gerekli`+(x.busy.length?` <span style="color:#fca5a5">(uygun olmayanlar: ${x.busy.join(', ')})</span>`:'')+`</li>`; }).join('');
+  const more=bad.length>10?`<li>… ve ${bad.length-10} gün daha</li>`:'';
+  return `<div class="warns" style="background:#3a0d0d;border-color:#7f1d1d;color:#fecaca;margin-bottom:12px">`
+    +`<b>⛔ Ön-kontrol: ${bad.length} günde nöbet MATEMATİKSEL OLARAK imkânsız</b>`
+    +`<ul style="margin:6px 0 0;padding-left:18px">${rows}${more}</ul>`
+    +`<div style="color:#fca5a5;font-size:12px;margin-top:6px"><b>Çözüm:</b> bu günlerdeki izin/boş gün isteklerini yayın · başka kişi ekleyin · veya o günün nöbetçi sayısını düşürün. (Aşağıdaki liste yine de en iyi haliyle üretildi.)</div></div>`;
+}
+// ===== ADALET PANOSU: aylar arası kümülatif nöbet/hafta sonu =====
+function toggleBoard(){ const box=document.getElementById('panelExtra');
+  if(box.getAttribute('data-show')==='board'){ box.innerHTML=''; box.removeAttribute('data-show'); return; }
+  const agg={}; let months=0;
+  Object.keys(MONTHS_DATA).forEach(k=>{ const s=MONTHS_DATA[k]&&MONTHS_DATA[k].summary; if(!s)return; months++;
+    Object.keys(s).forEach(n=>{ if(!agg[n])agg[n]={nc:0,wk:0}; agg[n].nc+=s[n].nc||0; agg[n].wk+=s[n].wk||0; }); });
+  const names=Object.keys(agg);
+  if(!names.length){ box.setAttribute('data-show','board'); box.innerHTML=`<div class="panel"><h2>📊 Adalet Panosu</h2><div class="note">Henüz kayıtlı ay özeti yok. Birkaç ay için liste oluşturun; kümülatif nöbet/hafta sonu dağılımı burada görünecek.</div></div>`; return; }
+  const totNc=names.reduce((a,n)=>a+agg[n].nc,0), totWk=names.reduce((a,n)=>a+agg[n].wk,0);
+  const fairNc=totNc/names.length, fairWk=totWk/names.length;
+  names.sort((a,b)=>agg[b].wk-agg[a].wk || agg[b].nc-agg[a].nc);
+  const col=v=>v>0?'#fca5a5':(v<0?'#86efac':'#94a3b8');
+  const rows=names.map((n,i)=>{ const dWk=agg[n].wk-fairWk, dNc=agg[n].nc-fairNc;
+    return `<tr><td style="text-align:left">${i+1}. ${n}</td><td>${agg[n].nc}</td><td style="color:${col(dNc)}">${dNc>0?'+':''}${dNc.toFixed(1)}</td><td><b>${agg[n].wk}</b></td><td style="color:${col(dWk)}">${dWk>0?'+':''}${dWk.toFixed(1)}</td></tr>`; }).join('');
+  box.setAttribute('data-show','board');
+  box.innerHTML=`<div class="panel"><h2>📊 Adalet Panosu <span class="muted" style="font-size:12px;font-weight:400">· ${months} ay birikimi</span></h2>`
+    +`<div class="note" style="margin-bottom:8px">Kümülatif dağılım. <span style="color:#fca5a5">Kırmızı</span> = ortalamanın üstünde (fazla yüklenmiş → bu ay rahatlatın), <span style="color:#86efac">yeşil</span> = altında (daha çok yüklenebilir).</div>`
+    +`<div class="gridwrap"><table class="grid" style="min-width:auto"><thead><tr><th class="name">Personel</th><th>Nöbet</th><th>Nöbet farkı</th><th>Hafta sonu</th><th>H.sonu farkı</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+// ===== WHAT-IF: senaryo karşılaştırma =====
+function scenSummary(r){ const W=(r.warnings||[]).filter(w=>!w.startsWith('💡'));
+  let ot=0; (r.totals||[]).forEach(t=>{ if(t.fark>0)ot+=t.fark; });
+  const wk=[]; (r.totals||[]).forEach(t=>{ if(!t.noNobet&&!t.dayOnly)wk.push(t.weekendNobet||0); });
+  const spread=wk.length?(Math.max(...wk)-Math.min(...wk)):0;
+  const P=r.profile||{}; let dgap=0; (r.days||[]).forEach(dd=>{ if(!dd.workday)return; let g=0; (r.totals||[]).forEach(t=>{ if(!t.noNobet){const c=(r.grid[t.name]||{})[dd.day]; if(c==='M'||(c==='NL'&&P.oncallLongDaytime)||(c==='NS'&&P.oncallShortDaytime))g++;} }); const need=dd.isExtra?P.daytimeExtra:P.daytimeMin; if(g<need)dgap++; });
+  return { uyari:W.length, fazlaMesai:ot, gunduzAcik:dgap, haftaSonuFark:spread };
+}
+function runScenario(mut){ const cfg=readCfg(); cfg.carry=buildCarry(CUR_YM); mut(cfg); cfg.__attempts=40; cfg.__lsIter=4000; return scenSummary(AsistanScheduler.buildSchedule(cfg)); }
+function toggleWhatif(){ const box=document.getElementById('panelExtra');
+  if(box.getAttribute('data-show')==='whatif'){ box.innerHTML=''; box.removeAttribute('data-show'); return; }
+  if(!LAST){ box.setAttribute('data-show','whatif'); box.innerHTML=`<div class="panel"><h2>🔀 What-if</h2><div class="note">Önce “Liste Oluştur” deyin, sonra senaryoları karşılaştırın.</div></div>`; return; }
+  const base=scenSummary(LAST);
+  const scen=[
+    { ad:'+1 kişi eklensem', run:()=>runScenario(cfg=>{ cfg.personnel=cfg.personnel.concat([{name:'+Yeni'}]); }) },
+    { ad:'Fazla mesaiye izin versem', run:()=>runScenario(cfg=>{ cfg.profile=Object.assign({},cfg.profile,{overtimeForCounts:true}); }) },
+    { ad:'Hafta içi 1 nöbetçi azalsa', run:()=>runScenario(cfg=>{ const mn=Math.max(1,(cfg.profile.oncallPerDay||2)-1); cfg.profile=Object.assign({},cfg.profile,{oncallPerDay:mn,oncallMax:Math.max(mn,cfg.profile.oncallMax||mn)}); }) }
+  ];
+  const fmt=(v,d)=>{ const s=(d>0?'+':'')+ (typeof v==='number'? (Number.isInteger(v)?v:v.toFixed(1)) : v); return s; };
+  const cell=(now,then,goodLow)=>{ const d=then-now; const good=goodLow?(d<0):(d>0); const c=d===0?'#94a3b8':(good?'#86efac':'#fca5a5');
+    return `<td><b>${then}</b> <span style="color:${c};font-size:11px">(${d>0?'+':''}${(Math.round(d*10)/10)})</span></td>`; };
+  box.setAttribute('data-show','whatif');
+  box.innerHTML=`<div class="panel"><h2>🔀 What-if Karşılaştırma</h2><div class="note" style="margin-bottom:8px">Mevcut listeye göre senaryolar. Yeşil = iyileşme, kırmızı = kötüleşme. (Yalnız önizleme; mevcut listeyi değiştirmez.)</div><div id="whatifBody"><div class="muted">Hesaplanıyor…</div></div></div>`;
+  setTimeout(()=>{ let rows='';
+    scen.forEach(s=>{ const r=s.run();
+      rows+=`<tr><td style="text-align:left">${s.ad}</td>`+cell(base.uyari,r.uyari,true)+cell(base.fazlaMesai,r.fazlaMesai,true)+cell(base.gunduzAcik,r.gunduzAcik,true)+cell(base.haftaSonuFark,r.haftaSonuFark,true)+`</tr>`; });
+    const body=document.getElementById('whatifBody'); if(body) body.innerHTML=
+      `<div class="gridwrap"><table class="grid" style="min-width:auto"><thead><tr><th class="name">Senaryo</th><th>Uyarı</th><th>Fazla mesai (s)</th><th>Gündüz açığı</th><th>H.sonu farkı</th></tr></thead>`
+      +`<tbody><tr style="background:var(--inset)"><td style="text-align:left"><b>ŞU AN</b></td><td>${base.uyari}</td><td>${base.fazlaMesai}</td><td>${base.gunduzAcik}</td><td>${base.haftaSonuFark}</td></tr>${rows}</tbody></table></div>`;
+  },30);
 }
 // tek bir listenin tam ızgarası (özet + lejant + uyarılar)
 function gridHtml(r){
@@ -561,7 +644,7 @@ function render(r){
   const out=document.getElementById('output'), p=curProfile();
   const showAll=document.getElementById('showAll') && document.getElementById('showAll').checked;
   const ai=document.getElementById('altInfo'); if(ai) ai.textContent=(ALTS.length>1?ALTS.length+' alternatif'+(LAST&&LAST.meta&&LAST.meta.tried?' ('+LAST.meta.tried+' deneme)':''):'');
-  let h=`<div class="panel"><h2>📋 ${MONTHS[r.month]} ${r.year} — ${p.name} Nöbet Listesi</h2>`;
+  let h=`<div class="panel">`+(PRECHECK_HTML||'')+`<h2>📋 ${MONTHS[r.month]} ${r.year} — ${p.name} Nöbet Listesi</h2>`;
   if(showAll && ALTS.length>1){
     // TÜM ALTERNATİFLER: her biri başlıklı kart, seçili olan vurgulu (yazdırınca yalnız seçili çıkar)
     ALTS.forEach((a,i)=>{ const w=warnCount(a); const act=i===ALT_I;
