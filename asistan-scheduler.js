@@ -262,6 +262,21 @@
     }
     function addMesai(Pp, day) { Pp.assign[day] = 'M'; Pp.hours += P.mesaiHours; }
 
+    // ---- 0.4) ÇALIŞMA TERCİHİ: belirli gün NÖBET TÜRÜ isteğini EN ÖNCE yerleştir (mutlak öncelik) ----
+    // "bazı gün kısa nöbet" (onlyN16) / "uzun nöbet" (onlyN24) = o gün o kişiye o türde nöbet yaz.
+    // Her şeyden ÖNCE (izin-öncesi nöbet + kapsama dahil) yerleştirilir; genel "Kısa nöbet kullanılsın"
+    // ayarından bağımsız. Yalnız fiziksel sınır (ardışık nöbet olmaz) + günün max nöbetçisi korunur.
+    people.forEach(function (Pp) {
+      if (Pp.noNobet || Pp.dayOnly) return;
+      days.forEach(function (dd) {
+        var d = dd.day, wants = Pp.onlyN16.has(d) ? 'NS' : (Pp.onlyN24.has(d) ? 'NL' : null);
+        if (!wants) return;
+        if (oncallCount(d) >= oncallCap(dd)) return;           // günün max nöbetçisini aşma
+        if (!coverEligible(Pp, dd, wants)) return;             // dinlenme/izin/uygunluk
+        placeCover(Pp, dd, wants);
+      });
+    });
+
     // ---- 0.5) İZİN ÖNCESİ NÖBET + BOŞLUK ----
     if (P.preLeaveOncall) people.forEach(function (Pp) {
       var starts = [];
@@ -273,6 +288,7 @@
           [P.preLeaveDaysBefore - 1, P.preLeaveDaysBeforeFallback - 1].some(function (ni) {
             var nd = wprev[ni];
             if (nd === undefined || Pp.assign[nd] !== '' || Pp.hours + HOURS[defType()] > Pp.target) return false;
+            if (oncallCount(nd) >= oncallCap(days[nd - 1])) return false;   // o gün max nöbetçi dolu -> başka güne
             placeOncall(Pp, days[nd - 1], defType());
             for (var g = nd + 1; g < bs; g++) { Pp.lockedOff.add(g); if (Pp.assign[g] === '') Pp.assign[g] = 'UCI'; }
             placed = true; return true;
@@ -330,22 +346,6 @@
       });
       return pool[0];
     }
-    // ---- 0.7) ÇALIŞMA TERCİHİ: belirli gün NÖBET TÜRÜ isteğini FİİLEN yerleştir (öncelik) ----
-    // "bazı gün kısa nöbet" (onlyN16) / "uzun nöbet" (onlyN24) = o gün o kişiye o türde nöbet yaz.
-    // Kapsamadan ÖNCE yerleştirilir; saat hedefe sayılır (mesai sonra tamamlar -> fazla mesai olmaz).
-    // ÇALIŞMA TERCİHİ HER ZAMAN ÖNCELİKLİ: istenen tür (kısa/uzun) genel "Kısa nöbet kullanılsın"
-    // ayarından bağımsız yazılır. Yalnız fiziksel sınır (ardışık nöbet olmaz) + günün max nöbetçisi korunur.
-    people.forEach(function (Pp) {
-      if (Pp.noNobet || Pp.dayOnly) return;
-      days.forEach(function (dd) {
-        var d = dd.day, wants = Pp.onlyN16.has(d) ? 'NS' : (Pp.onlyN24.has(d) ? 'NL' : null);
-        if (!wants) return;
-        if (oncallCount(d) >= oncallCap(dd)) return;           // günün max nöbetçisini aşma
-        if (!coverEligible(Pp, dd, wants)) return;             // dinlenme/izin/uygunluk
-        placeCover(Pp, dd, wants);
-      });
-    });
-
     days.forEach(function (dd) {
       var need = oncallNeed(dd);
       for (var slot = oncallCount(dd.day); slot < need; slot++) {

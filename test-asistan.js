@@ -170,6 +170,17 @@ section('Karşılanamayan istek (ardışık gün) için bilgi notu üretilir');
   ok(note.length >= 1, 'ardışık gün isteğinde (biri dinlenmeye denk) bilgi notu çıkmalı');
 })();
 
+section('Nöbet isteği izin-öncesi nöbetleri YENER (gün dolu olsa da istek yerleşir)');
+(function () {
+  // P2/P3/P4 izinleri -> izin-öncesi nöbetler 6. güne yığılır; ALİ 6'ya kısa istek
+  var ppl = people(13, { 1: { onlyN16: [6] }, 2: { leaveYI: [10, 11, 12, 13, 14] }, 3: { leaveYI: [9, 10, 11, 12, 13] }, 4: { leaveYI: [10, 11, 12, 13, 14] } });
+  ppl[0].name = 'ALI';
+  var r = S.buildSchedule({ year: Y, month: M, holidays: [], profile: S.defaultProfile(), personnel: ppl, __attempts: 40, __lsIter: 4000 });
+  ok(r.grid['ALI'][6] === 'NS', 'izin-öncesi baskısına rağmen istenen kısa nöbet 6. güne yazılmalı, çıkan: ' + r.grid['ALI'][6]);
+  var c6 = 0; r.totals.forEach(function (t) { var c = r.grid[t.name][6]; if (c === 'NL' || c === 'NS') c6++; });
+  ok(c6 <= 2, '6. gün nöbetçi max aşılmamalı (' + c6 + ')');
+})();
+
 // ---------------------------------------------------------------
 console.log('\n──────────────────────────────');
 console.log('SONUÇ: ' + pass + ' geçti, ' + fail + ' düştü.');
