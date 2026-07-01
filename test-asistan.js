@@ -157,12 +157,17 @@ section('Kısa nöbet isteği VARSAYILAN UZUN profilde bile yazılır (fiilen ye
   ok(ot === 0, 'kısa nöbet isteği fazla mesai yaratmamalı');
 })();
 
-section('Karşılanamayan nöbet-türü isteği için bilgi notu üretilir');
+section('Çalışma tercihi HER ZAMAN öncelikli: kısa istek, genel "Kısa nöbet" kapalı olsa bile yazılır');
 (function () {
-  var P = S.defaultProfile(); P.useShortOncall = false;   // kısa kapalı -> kısa istek uygulanamaz
+  var P = S.defaultProfile(); P.useShortOncall = false;   // genel kısa kapalı ama kişi açıkça kısa istiyor
   var r = S.buildSchedule({ year: Y, month: M, holidays: [], profile: P, personnel: people(13, { 1: { onlyN16: [8] } }), __attempts: 20, __lsIter: 2000 });
+  ok(r.grid['P1'][8] === 'NS', 'genel kısa kapalı olsa bile istenen günde kısa nöbet (NS) yazılmalı, çıkan: ' + r.grid['P1'][8]);
+})();
+section('Karşılanamayan istek (ardışık gün) için bilgi notu üretilir');
+(function () {
+  var r = S.buildSchedule({ year: Y, month: M, holidays: [], profile: S.defaultProfile(), personnel: people(13, { 1: { onlyN16: [1, 2, 3] } }), __attempts: 30, __lsIter: 3000 });
   var note = (r.warnings || []).filter(function (w) { return w.indexOf('💡') === 0 && /uygulanamadı/.test(w) && /P1/.test(w); });
-  ok(note.length >= 1, 'kısa nöbet isteği uygulanamayınca bilgi notu çıkmalı');
+  ok(note.length >= 1, 'ardışık gün isteğinde (biri dinlenmeye denk) bilgi notu çıkmalı');
 })();
 
 // ---------------------------------------------------------------

@@ -123,8 +123,7 @@
       if (best > P.maxConsecutiveOff) warnings.push(p.name + ': ' + best + ' iş günü üst üste izinli/boşta (en fazla ' + P.maxConsecutiveOff + ' olmalı).');
       // ÇALIŞMA TERCİHİ: karşılanamayan nöbet-türü isteği için BİLGİ notu (neden uygulanmadı)
       function noteReq(list, wanted, lbl) { (list || []).forEach(function (dn) { var c = a[dn] || ''; if (c === wanted) return;
-        var why = (wanted === 'NS' && !P.useShortOncall) ? '“Kısa nöbet kullanılsın” kapalı'
-          : (c === 'NI') ? 'dinlenme (ardışık nöbet olmaz)'
+        var why = (c === 'NI') ? 'dinlenme (ardışık nöbet olmaz)'
           : (c === 'YI' || c === 'OFF') ? 'izin günü'
           : (c === 'M') ? 'o gün gündüz mesaisi verildi'
           : (c === 'NL' || c === 'NS') ? 'diğer nöbet türü yazıldı'
@@ -328,13 +327,13 @@
     // ---- 0.7) ÇALIŞMA TERCİHİ: belirli gün NÖBET TÜRÜ isteğini FİİLEN yerleştir (öncelik) ----
     // "bazı gün kısa nöbet" (onlyN16) / "uzun nöbet" (onlyN24) = o gün o kişiye o türde nöbet yaz.
     // Kapsamadan ÖNCE yerleştirilir; saat hedefe sayılır (mesai sonra tamamlar -> fazla mesai olmaz).
-    // Dinlenme + günün max nöbetçi sınırı korunur; kısa istek için "Kısa nöbet kullanılsın" açık olmalı.
+    // ÇALIŞMA TERCİHİ HER ZAMAN ÖNCELİKLİ: istenen tür (kısa/uzun) genel "Kısa nöbet kullanılsın"
+    // ayarından bağımsız yazılır. Yalnız fiziksel sınır (ardışık nöbet olmaz) + günün max nöbetçisi korunur.
     people.forEach(function (Pp) {
       if (Pp.noNobet || Pp.dayOnly) return;
       days.forEach(function (dd) {
         var d = dd.day, wants = Pp.onlyN16.has(d) ? 'NS' : (Pp.onlyN24.has(d) ? 'NL' : null);
         if (!wants) return;
-        if (wants === 'NS' && !P.useShortOncall) return;      // kısa nöbet kapalıysa yapılamaz
         if (oncallCount(d) >= oncallCap(dd)) return;           // günün max nöbetçisini aşma
         if (!coverEligible(Pp, dd, wants)) return;             // dinlenme/izin/uygunluk
         placeCover(Pp, dd, wants);
