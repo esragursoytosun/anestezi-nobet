@@ -112,16 +112,14 @@ section('Nöbetçi aralığı: hafta sonu "2 veya 3" -> kadro yeterse 3, max aş
   ok(maxW <= 3, 'hafta sonu max 3 aşılmaz (max=' + maxW + ')');
 })();
 
-section('Aylar arası adalet: carry ile yük kayar');
+section('Aylar arası adalet: ağır carry olan kişi bu ay daha az hafta sonu alır');
 (function () {
   var wk = [4, 5, 11, 12, 18, 19, 25, 26];
-  function wkAvg(r, names) { var s = 0; names.forEach(function (n) { wk.forEach(function (d) { if (isOncall(r.grid[n][d])) s++; }); }); return s / names.length; }
-  var A = ['P1', 'P2', 'P3', 'P4', 'P5'];
-  var carry = { byName: {}, months: 2 }; A.forEach(function (n) { carry.byName[n] = { nc: 8, wk: 6 }; });
-  var r0 = run({ personnel: people(10), __attempts: 50, __lsIter: 5000 });
-  var r1 = run({ personnel: people(10), __attempts: 50, __lsIter: 5000, carry: carry });
-  ok(wkAvg(r1, A) <= wkAvg(r0, A) + 1e-9, 'carry sonrası A grubu hafta sonu artmamalı (önce ' + wkAvg(r0, A).toFixed(2) + ' sonra ' + wkAvg(r1, A).toFixed(2) + ')');
-  ok(wkAvg(r1, A) < wkAvg(r0, A) || wkAvg(r1, A) <= 1.0, 'carry A grubunu hafifletmeli');
+  function wkCnt(r, n) { var s = 0; wk.forEach(function (d) { if (isOncall(r.grid[n][d])) s++; }); return s; }
+  var carry = { byName: { P1: { nc: 12, wk: 10 } }, months: 3 };   // P1 önceki aylarda çok hafta sonu tuttu
+  var r = run({ personnel: people(13), __attempts: 50, __lsIter: 5000, carry: carry });
+  var p1 = wkCnt(r, 'P1'); var others = 0; for (var i = 2; i <= 13; i++) others += wkCnt(r, 'P' + i); var oavg = others / 12;
+  ok(p1 < oavg, 'ağır carry olan P1 hafta sonu diğerlerinin ortalamasından AZ olmalı (P1=' + p1 + ' ort=' + oavg.toFixed(2) + ')');
 })();
 
 section('Boş gün isteği: o günlerde ne nöbet ne mesai');

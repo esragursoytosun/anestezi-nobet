@@ -324,8 +324,7 @@
     // sonra "sadece nöbet" kişi (başka çalışma yolu yok) -> tercihlere kararlarda öncelik.
     function prefRank(Pp, d, kind) {
       if ((kind === 'NL' && Pp.onlyN24.has(d)) || (kind === 'NS' && Pp.onlyN16.has(d))) return 0;
-      if (Pp.onlyNobet) return 1;
-      return 2;
+      return 2;   // NOT: "sadece nöbet" artık öne yığılmaz (gün aşırı yükü önlemek için) — adil paya bırakılır
     }
     // ---- 1) NÖBET KAPSAMA (greedy) ----
     function pickCandidate(dd, kind, strict) {
@@ -507,7 +506,7 @@
         for (var i = 0; i < people.length; i++) {
           var Pp = people[i], h = Pp.hours;
           if (h > Pp.target) s += (h - Pp.target) * 7;                      // fazla mesai
-          else if (h < Pp.target && !Pp.noNobet) s += (Pp.target - h) * 7;  // eksik saat
+          else if (h < Pp.target && !Pp.noNobet && !Pp.onlyNobet) s += (Pp.target - h) * 7;  // eksik saat (sadece-nöbet HARİÇ: hedefe zorlanmaz -> gün aşırı yığılmaz)
           var run = 0, nc = 0, wk = 0, onDays = [];
           for (var d = 1; d <= nDays; d++) { var c = Pp.assign[d];
             if (isOncall(c)) { nc++; onDays.push(d); if (days[d - 1].weekend || days[d - 1].holiday) wk++; }
@@ -518,7 +517,7 @@
             if (onDays.length > 1) { var ideal = nDays / onDays.length; for (var q = 1; q < onDays.length; q++) { var gap = onDays[q] - onDays[q - 1]; if (gap < ideal) spacing += (ideal - gap); } }
             // GÜN AŞIRI NÖBET (2 gün arayla: N _ N): mecbur kalmadıkça kaçın — nöbetleri yay.
             // İlk gün-aşırı çiftinden itibaren cezalı, zincir uzadıkça ARTAN (nöbet-boş-nöbet-boş... engellenir).
-            var gaRun = 1; for (var ga = 1; ga < onDays.length; ga++) { if (onDays[ga] - onDays[ga - 1] === 2) { gaRun++; s += (gaRun - 1) * 14; } else gaRun = 1; }
+            var gaRun = 1; for (var ga = 1; ga < onDays.length; ga++) { if (onDays[ga] - onDays[ga - 1] === 2) { gaRun++; s += gaRun * gaRun * 6; } else gaRun = 1; }
           }
         }
         // gündüz min (sert) + DAĞILIM ŞEKİLLENDİRME (ekstra gün = normal ort + 1..2, aşırı yığma yok)
@@ -734,7 +733,7 @@
       if (run >= 2) s += run * run * 0.1;
       // GÜN AŞIRI NÖBET (N _ N): ilk çiftten itibaren cezalı, artan -> nöbetler yayılır
       var onD = []; for (var od = 1; od <= (r.nDays || 31); od++) if (isOncall(g[od])) onD.push(od);
-      var gr = 1; for (var j = 1; j < onD.length; j++) { if (onD[j] - onD[j - 1] === 2) { gr++; s += (gr - 1) * 8; } else gr = 1; }
+      var gr = 1; for (var j = 1; j < onD.length; j++) { if (onD[j] - onD[j - 1] === 2) { gr++; s += gr * gr * 3; } else gr = 1; }
     });
     // ADALET (KÜMÜLATİF): nöbet ve hafta sonu nöbeti, önceki aylar (carry) + bu ay birlikte, hedef-oranlı adil paydan sapma
     var totNc = 0, totWk = 0, sumW = 0, arr = [], totCrNc = 0, totCrWk = 0;
