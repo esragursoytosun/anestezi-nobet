@@ -292,10 +292,10 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v26</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v27</b> · anestezi sisteminden bağımsız</div>
 </div>
 
-<script src="asistan-scheduler.js?v=16"></script>
+<script src="asistan-scheduler.js?v=17"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -445,8 +445,12 @@ function ymNow(){ return document.getElementById('year').value+'-'+document.getE
 // kimlik (isim, Sorumlu, Haftalık izin günü) korunur; aylık İSTEKLER sıfırlanır
 function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, dayOnly:p.dayOnly, onlyNobet:p.onlyNobet, senior:p.senior, offDay:p.offDay,
   startNI:false, yiRanges:[], leaveYI:[], offReq:[], onlyDay:[], onlyN16:[] })); }
-function captureMonth(){ if(CUR_YM==null)return;
-  MONTHS_DATA[CUR_YM]={ holidays:parseDays(document.getElementById('holidays').value), personnel:readPersonnel() }; }
+function captureMonth(){ if(CUR_YM==null)return; const prev=MONTHS_DATA[CUR_YM]||{};
+  MONTHS_DATA[CUR_YM]={ holidays:parseDays(document.getElementById('holidays').value), personnel:readPersonnel(), summary:prev.summary }; }
+// AYLAR ARASI ADALET: her ayın kişi-başı nöbet/hafta sonu özeti; diğer ayların birikimi carry olur.
+function summarizeResult(r){ const m={}; (r.totals||[]).forEach(t=>{ m[t.name]={ nc:(t.nl||0)+(t.ns||0), wk:t.weekendNobet||0 }; }); return m; }
+function buildCarry(ym){ const by={}; let months=0; Object.keys(MONTHS_DATA).forEach(k=>{ if(k===ym)return; const s=MONTHS_DATA[k]&&MONTHS_DATA[k].summary; if(!s)return; months++;
+  Object.keys(s).forEach(n=>{ if(!by[n])by[n]={nc:0,wk:0}; by[n].nc+=s[n].nc||0; by[n].wk+=s[n].wk||0; }); }); return { byName:by, months:months }; }
 function showMonth(ym){
   const md=MONTHS_DATA[ym];
   if(md){ document.getElementById('holidays').value=(md.holidays||[]).join(','); applyPersonnel(md.personnel||[]); }
@@ -486,8 +490,11 @@ function codeLabel(c){ const p=curProfile(); const base={M:p.mesaiLabel,NL:p.onc
   if(base[c]!==undefined)return base[c]; const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.label:''; }
 function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.color:null; }
 function generate(){ readRuleForm(); const cfg=readCfg(); if(!cfg.personnel.length){alert('En az 1 personel ekleyin.');return;}
-  LAST=AsistanScheduler.buildSchedule(cfg); ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0; render(LAST); if(!SRV.on)saveAll(); }
-function pickAlt(i){ if(!ALTS[i])return; ALT_I=i; LAST=ALTS[i]; render(LAST); }
+  cfg.carry=buildCarry(CUR_YM);   // aylar arası adalet: diğer ayların birikimi
+  LAST=AsistanScheduler.buildSchedule(cfg); ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0;
+  if(CUR_YM!=null){ if(!MONTHS_DATA[CUR_YM])MONTHS_DATA[CUR_YM]={holidays:cfg.holidays,personnel:cfg.personnel}; MONTHS_DATA[CUR_YM].summary=summarizeResult(LAST); }  // bu ayın özetini sakla
+  render(LAST); if(!SRV.on)saveAll(); }
+function pickAlt(i){ if(!ALTS[i])return; ALT_I=i; LAST=ALTS[i]; if(CUR_YM!=null&&MONTHS_DATA[CUR_YM])MONTHS_DATA[CUR_YM].summary=summarizeResult(LAST); render(LAST); }
 function warnCount(a){ return (a.warnings||[]).filter(x=>!x.startsWith('💡')).length; }
 // tek bir listenin tam ızgarası (özet + lejant + uyarılar)
 function gridHtml(r){
