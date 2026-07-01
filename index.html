@@ -292,7 +292,7 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v27</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v28</b> · anestezi sisteminden bağımsız</div>
 </div>
 
 <script src="asistan-scheduler.js?v=17"></script>
@@ -496,6 +496,36 @@ function generate(){ readRuleForm(); const cfg=readCfg(); if(!cfg.personnel.leng
   render(LAST); if(!SRV.on)saveAll(); }
 function pickAlt(i){ if(!ALTS[i])return; ALT_I=i; LAST=ALTS[i]; if(CUR_YM!=null&&MONTHS_DATA[CUR_YM])MONTHS_DATA[CUR_YM].summary=summarizeResult(LAST); render(LAST); }
 function warnCount(a){ return (a.warnings||[]).filter(x=>!x.startsWith('💡')).length; }
+// FİZİBİLİTE AÇIKLAYICI: uyarıları "neden + somut çözüm" özetine çevirir (yalnız gerçek sorun varsa)
+function diagnose(r){
+  const W=(r.warnings||[]).filter(w=>!w.startsWith('💡'));
+  if(!W.length) return '';
+  const cov=W.filter(w=>/sadece \d+ nöbetçi/.test(w));
+  const day=W.filter(w=>/gündüzde \d+ kişi/.test(w));
+  const srN=W.filter(w=>/nöbette \d+ kıdemli/.test(w));
+  const srD=W.filter(w=>/gündüzde \d+ kıdemli/.test(w));
+  const over=W.filter(w=>/FAZLA MESAİ/.test(w));
+  const under=W.filter(w=>/EKSİK/.test(w));
+  const cluster=W.filter(w=>/üst üste izinli/.test(w));
+  const tot=r.totals||[];
+  const nobetci=tot.filter(t=>!t.noNobet&&!t.dayOnly&&!t.onlyNobet).length;   // nöbet tutabilen kişi
+  const items=[];
+  if(cov.length) items.push(['<b>'+cov.length+'</b> günde yeterli nöbetçi bulunamadı',
+    'Nöbet tutabilen '+nobetci+' kişi var. En sık sebep: aynı haftaya yığılan yıllık izinler. <b>Çözüm:</b> 1 kişi daha ekleyin ya da çakışan izinleri farklı haftalara yayın.']);
+  if(day.length) items.push(['<b>'+day.length+'</b> iş gününde gündüz kişi sayısı hedefin altında',
+    '<b>Çözüm:</b> üstteki “⚡ Gerekirse fazla mesai ver” kutusunu işaretleyin (o günleri fazla mesaiyle tamamlar) · veya “Hafta içi gündüz min”i düşürün · veya kişi ekleyin.']);
+  if(over.length) items.push(['<b>'+over.length+'</b> kişi aylık hedefini aştı (fazla mesai)',
+    'Bu ayın yükü kadrodan fazla. <b>Çözüm:</b> kişi ekleyin · nöbetçi sayısını azaltın · veya bazı izinleri başka aya kaydırın.']);
+  if(under.length) items.push(['<b>'+under.length+'</b> kişi aylık hedefin altında kaldı',
+    'Kadro bu ayın yüküne göre fazla (kalan saatler Ü.İ ile dolduruldu). <b>Çözüm:</b> istersen nöbetçi/gündüz sayısını artır ya da bu kişileri başka aya değerlendir.']);
+  if(srN.length||srD.length) items.push(['<b>'+(srN.length+srD.length)+'</b> günde yeterli kıdemli bulunamadı',
+    '<b>Çözüm:</b> daha çok kişiyi “Kıdemli” işaretleyin · veya gelişmiş ayarlardan “en az kıdemli” sayısını düşürün.']);
+  if(cluster.length) items.push(['<b>'+cluster.length+'</b> kişide üst üste boş gün sınırı aşıldı',
+    'İzin yoğunluğu yüksek. <b>Çözüm:</b> izinleri farklı haftalara yayın · veya kişi ekleyin.']);
+  if(!items.length) return '';
+  return `<div class="warns" style="background:#0b2030;border-color:#1e3a5f;color:#dbeafe"><b>🔍 Durum ve öneriler</b><ul style="margin:6px 0 0;padding-left:18px">`
+    +items.map(it=>`<li style="margin-bottom:5px">${it[0]}<br><span style="color:#93c5fd;font-size:12px">${it[1]}</span></li>`).join('')+`</ul></div>`;
+}
 // tek bir listenin tam ızgarası (özet + lejant + uyarılar)
 function gridHtml(r){
   const p=curProfile(); let h=`<div class="gridwrap"><table class="grid"><thead><tr><th class="name">Personel</th>`;
@@ -521,7 +551,8 @@ function gridHtml(r){
     <span><i class="sw" style="background:var(--c-RT)"></i> Resmi tatil</span><span><i class="sw" style="background:var(--c-OFF)"></i> Haftalık izin</span>`
     +customShiftsOf().map(s=>`<span><i class="sw" style="background:${s.color}"></i> ${s.label}${s.daytime?' · gündüz':''}</span>`).join('')+`</div>`;
   const _notes=(r.warnings||[]).filter(w=>w.startsWith('💡')); const _reals=(r.warnings||[]).filter(w=>!w.startsWith('💡'));
-  if(_reals.length){ h+=`<div class="warns"><b>⚠️ ${_reals.length} uyarı</b><ul>`+_reals.map(w=>`<li>${w}</li>`).join('')+`</ul></div>`; }
+  h+=diagnose(r);
+  if(_reals.length){ h+=`<div class="warns"><b>⚠️ ${_reals.length} uyarı (detay)</b><ul>`+_reals.map(w=>`<li>${w}</li>`).join('')+`</ul></div>`; }
   else h+=`<div class="warns ok"><b>✓ Liste hazır.</b> Herkes hedefini tuttu, her gün yeterli nöbetçi var.</div>`;
   if(_notes.length) h+=`<div class="warns" style="background:#0b2030;border-color:#1e3a5f;color:#bae6fd"><b>💡 ${_notes.length} not</b><ul>`+_notes.map(w=>`<li>${w}</li>`).join('')+`</ul></div>`;
   return h;
