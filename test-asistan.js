@@ -157,6 +157,14 @@ section('Kısa nöbet isteği VARSAYILAN UZUN profilde bile yazılır (fiilen ye
   ok(ot === 0, 'kısa nöbet isteği fazla mesai yaratmamalı');
 })();
 
+section('Karşılanamayan nöbet-türü isteği için bilgi notu üretilir');
+(function () {
+  var P = S.defaultProfile(); P.useShortOncall = false;   // kısa kapalı -> kısa istek uygulanamaz
+  var r = S.buildSchedule({ year: Y, month: M, holidays: [], profile: P, personnel: people(13, { 1: { onlyN16: [8] } }), __attempts: 20, __lsIter: 2000 });
+  var note = (r.warnings || []).filter(function (w) { return w.indexOf('💡') === 0 && /uygulanamadı/.test(w) && /P1/.test(w); });
+  ok(note.length >= 1, 'kısa nöbet isteği uygulanamayınca bilgi notu çıkmalı');
+})();
+
 // ---------------------------------------------------------------
 console.log('\n──────────────────────────────');
 console.log('SONUÇ: ' + pass + ' geçti, ' + fail + ' düştü.');

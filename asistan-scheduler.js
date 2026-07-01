@@ -121,8 +121,19 @@
         else if (daysArr[d2 - 1].workday && (c2 === 'NI' || c2 === 'UCI') && !locked[d2]) { run++; if (run > best) best = run; }
       }
       if (best > P.maxConsecutiveOff) warnings.push(p.name + ': ' + best + ' iş günü üst üste izinli/boşta (en fazla ' + P.maxConsecutiveOff + ' olmalı).');
+      // ÇALIŞMA TERCİHİ: karşılanamayan nöbet-türü isteği için BİLGİ notu (neden uygulanmadı)
+      function noteReq(list, wanted, lbl) { (list || []).forEach(function (dn) { var c = a[dn] || ''; if (c === wanted) return;
+        var why = (wanted === 'NS' && !P.useShortOncall) ? '“Kısa nöbet kullanılsın” kapalı'
+          : (c === 'NI') ? 'dinlenme (ardışık nöbet olmaz)'
+          : (c === 'YI' || c === 'OFF') ? 'izin günü'
+          : (c === 'M') ? 'o gün gündüz mesaisi verildi'
+          : (c === 'NL' || c === 'NS') ? 'diğer nöbet türü yazıldı'
+          : 'o gün nöbet kadrosu dolu (kapasite)';
+        warnings.push('💡 ' + p.name + ': ' + dn + '. gün ' + lbl + ' isteği uygulanamadı (' + why + ').'); }); }
+      noteReq(p.onlyN16, 'NS', 'kısa nöbet'); noteReq(p.onlyN24, 'NL', 'uzun nöbet');
       return { name: p.name, target: p.target, hours: hours, fark: fark, mesai: mesai, nl: nl, ns: ns,
-        ni: ni, uci: uci, weekendNobet: wkn, noNobet: !!p.noNobet, onlyNobet: !!p.onlyNobet, senior: !!p.senior, lockedOff: p.lockedOff || [] };
+        ni: ni, uci: uci, weekendNobet: wkn, noNobet: !!p.noNobet, onlyNobet: !!p.onlyNobet, senior: !!p.senior,
+        onlyN16: p.onlyN16 || [], onlyN24: p.onlyN24 || [], lockedOff: p.lockedOff || [] };
     });
 
     daysArr.forEach(function (dd) {
@@ -691,7 +702,7 @@
     });
 
     var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });
-    var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, noNobet: Pp.noNobet, onlyNobet: Pp.onlyNobet, senior: Pp.senior, lockedOff: Array.from(Pp.lockedOff) }; });
+    var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, noNobet: Pp.noNobet, onlyNobet: Pp.onlyNobet, senior: Pp.senior, onlyN16: Array.from(Pp.onlyN16), onlyN24: Array.from(Pp.onlyN24), lockedOff: Array.from(Pp.lockedOff) }; });
     var av = analyze(gridA, plist, days, nDays, P);
     return { year: year, month: month, nDays: nDays, days: days, grid: gridA, totals: av.totals, warnings: av.warnings,
       profile: P, meta: { base: baseTarget } };
@@ -766,7 +777,7 @@
   }
   function recompute(result) {
     var P = clampProfile(result.profile);
-    var plist = (result.totals || []).map(function (t) { return { name: t.name, target: t.target, noNobet: t.noNobet, onlyNobet: t.onlyNobet, senior: t.senior, lockedOff: t.lockedOff || [] }; });
+    var plist = (result.totals || []).map(function (t) { return { name: t.name, target: t.target, noNobet: t.noNobet, onlyNobet: t.onlyNobet, senior: t.senior, onlyN16: t.onlyN16 || [], onlyN24: t.onlyN24 || [], lockedOff: t.lockedOff || [] }; });
     return analyze(result.grid, plist, result.days, result.nDays, P);
   }
 
