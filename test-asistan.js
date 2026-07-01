@@ -181,6 +181,15 @@ section('Nöbet isteği izin-öncesi nöbetleri YENER (gün dolu olsa da istek y
   ok(c6 <= 2, '6. gün nöbetçi max aşılmamalı (' + c6 + ')');
 })();
 
+section('Gün aşırı yayılım: kimse uzun gün-aşırı zinciri çalışmaz (istek yokken)');
+(function () {
+  var r = S.buildSchedule({ year: Y, month: M, holidays: [], profile: S.defaultProfile(), personnel: people(13), __attempts: 40, __lsIter: 4000 });
+  var worst = 0;
+  r.totals.forEach(function (t) { var on = []; for (var d = 1; d <= r.nDays; d++) { var c = r.grid[t.name][d]; if (c === 'NL' || c === 'NS') on.push(d); }
+    var run = 1, mx = 1; for (var i = 1; i < on.length; i++) { if (on[i] - on[i - 1] === 2) { run++; if (run > mx) mx = run; } else run = 1; } if (mx > worst) worst = mx; });
+  ok(worst <= 3, 'en uzun gün-aşırı zinciri <=3 olmalı (çıkan ' + worst + ')');
+})();
+
 // ---------------------------------------------------------------
 console.log('\n──────────────────────────────');
 console.log('SONUÇ: ' + pass + ' geçti, ' + fail + ' düştü.');
