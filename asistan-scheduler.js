@@ -122,7 +122,13 @@
       }
       if (best > P.maxConsecutiveOff) warnings.push(p.name + ': ' + best + ' iş günü üst üste izinli/boşta (en fazla ' + P.maxConsecutiveOff + ' olmalı).');
       // ÇALIŞMA TERCİHİ: karşılanamayan nöbet-türü isteği için BİLGİ notu (neden uygulanmadı)
-      function noteReq(list, wanted, lbl) { (list || []).forEach(function (dn) { var c = a[dn] || ''; if (c === wanted) return;
+      var odSet = {}; (p.onlyDay || []).forEach(function (x) { odSet[x] = 1; });
+      function noteReq(list, wanted, lbl) { (list || []).forEach(function (dn) {
+        // ÖNCE çelişki: bu kişi o gün zaten nöbet tutmuyor mu?
+        if (p.noNobet) { warnings.push('💡 ' + p.name + ': ' + dn + '. gün ' + lbl + ' isteği uygulanamadı (bu kişi “Sorumlu” — nöbet tutmuyor).'); return; }
+        if (p.dayOnly) { warnings.push('💡 ' + p.name + ': ' + dn + '. gün ' + lbl + ' isteği uygulanamadı (bu kişi “sadece gündüz” — nöbet tutmuyor).'); return; }
+        if (odSet[dn]) { warnings.push('💡 ' + p.name + ': ' + dn + '. gün ' + lbl + ' isteği uygulanamadı (o gün “sadece gündüz” seçili).'); return; }
+        var c = a[dn] || ''; if (c === wanted) return;
         var why = (c === 'NI') ? 'dinlenme (ardışık nöbet olmaz)'
           : (c === 'YI' || c === 'OFF') ? 'izin günü'
           : (c === 'M') ? 'o gün gündüz mesaisi verildi'
@@ -131,8 +137,8 @@
         warnings.push('💡 ' + p.name + ': ' + dn + '. gün ' + lbl + ' isteği uygulanamadı (' + why + ').'); }); }
       noteReq(p.onlyN16, 'NS', 'kısa nöbet'); noteReq(p.onlyN24, 'NL', 'uzun nöbet');
       return { name: p.name, target: p.target, hours: hours, fark: fark, mesai: mesai, nl: nl, ns: ns,
-        ni: ni, uci: uci, weekendNobet: wkn, noNobet: !!p.noNobet, onlyNobet: !!p.onlyNobet, senior: !!p.senior,
-        onlyN16: p.onlyN16 || [], onlyN24: p.onlyN24 || [], lockedOff: p.lockedOff || [] };
+        ni: ni, uci: uci, weekendNobet: wkn, noNobet: !!p.noNobet, dayOnly: !!p.dayOnly, onlyNobet: !!p.onlyNobet, senior: !!p.senior,
+        onlyN16: p.onlyN16 || [], onlyN24: p.onlyN24 || [], onlyDay: p.onlyDay || [], lockedOff: p.lockedOff || [] };
     });
 
     daysArr.forEach(function (dd) {
@@ -701,7 +707,7 @@
     });
 
     var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });
-    var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, noNobet: Pp.noNobet, onlyNobet: Pp.onlyNobet, senior: Pp.senior, onlyN16: Array.from(Pp.onlyN16), onlyN24: Array.from(Pp.onlyN24), lockedOff: Array.from(Pp.lockedOff) }; });
+    var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, noNobet: Pp.noNobet, dayOnly: Pp.dayOnly, onlyNobet: Pp.onlyNobet, senior: Pp.senior, onlyN16: Array.from(Pp.onlyN16), onlyN24: Array.from(Pp.onlyN24), onlyDay: Array.from(Pp.onlyDay), lockedOff: Array.from(Pp.lockedOff) }; });
     var av = analyze(gridA, plist, days, nDays, P);
     return { year: year, month: month, nDays: nDays, days: days, grid: gridA, totals: av.totals, warnings: av.warnings,
       profile: P, meta: { base: baseTarget } };
@@ -776,7 +782,7 @@
   }
   function recompute(result) {
     var P = clampProfile(result.profile);
-    var plist = (result.totals || []).map(function (t) { return { name: t.name, target: t.target, noNobet: t.noNobet, onlyNobet: t.onlyNobet, senior: t.senior, onlyN16: t.onlyN16 || [], onlyN24: t.onlyN24 || [], lockedOff: t.lockedOff || [] }; });
+    var plist = (result.totals || []).map(function (t) { return { name: t.name, target: t.target, noNobet: t.noNobet, dayOnly: t.dayOnly, onlyNobet: t.onlyNobet, senior: t.senior, onlyN16: t.onlyN16 || [], onlyN24: t.onlyN24 || [], onlyDay: t.onlyDay || [], lockedOff: t.lockedOff || [] }; });
     return analyze(result.grid, plist, result.days, result.nDays, P);
   }
 
