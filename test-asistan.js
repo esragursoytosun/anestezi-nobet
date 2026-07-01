@@ -132,6 +132,18 @@ section('Boş gün isteği: o günlerde ne nöbet ne mesai');
   ok(!busy(g[10]) && !busy(g[15]), 'boş gün isteği (10,15) çalışma olmamalı');
 })();
 
+section('Çalışma tercihi önceliği: uzun nöbet isteği o günlerde nöbete önceler');
+(function () {
+  var wd = [1, 2, 3, 7, 8, 9, 10, 14];
+  function hits(pref) {
+    var ppl = people(13); if (pref) ppl[0].onlyN24 = wd;
+    var r = S.buildSchedule({ year: Y, month: M, holidays: [], profile: S.defaultProfile(), personnel: ppl, __attempts: 40, __lsIter: 4000 });
+    var h = 0; wd.forEach(function (d) { if (r.grid['P1'][d] === 'NL') h++; }); return h;
+  }
+  var base = hits(false), withPref = hits(true);
+  ok(withPref > base, 'uzun nöbet isteği verilince istenen günlerde NL artmalı (önce ' + base + ' sonra ' + withPref + ')');
+})();
+
 // ---------------------------------------------------------------
 console.log('\n──────────────────────────────');
 console.log('SONUÇ: ' + pass + ' geçti, ' + fail + ' düştü.');

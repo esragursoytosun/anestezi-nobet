@@ -288,6 +288,13 @@
       }
     });
 
+    // ÇALIŞMA TERCİHİ ÖNCELİĞİ (düşük = önce): o gün o TİPTE nöbet İSTEYEN kişi en önce,
+    // sonra "sadece nöbet" kişi (başka çalışma yolu yok) -> tercihlere kararlarda öncelik.
+    function prefRank(Pp, d, kind) {
+      if ((kind === 'NL' && Pp.onlyN24.has(d)) || (kind === 'NS' && Pp.onlyN16.has(d))) return 0;
+      if (Pp.onlyNobet) return 1;
+      return 2;
+    }
     // ---- 1) NÖBET KAPSAMA (greedy) ----
     function pickCandidate(dd, kind, strict) {
       var pool = people.filter(function (Pp) { return eligible(Pp, dd, kind, strict); });
@@ -296,6 +303,7 @@
       var needSr = (P.minSeniorOncall > 0) && (seniorOncallCount(dd.day) < P.minSeniorOncall);   // bu gün kıdemli açığı varsa öne al
       pool.sort(function (a, b) {
         if (needSr && a.senior !== b.senior) return a.senior ? -1 : 1;
+        var pra = prefRank(a, dd.day, kind), prb = prefRank(b, dd.day, kind); if (pra !== prb) return pra - prb;   // çalışma tercihi önceliği
         if (dd.weekend || dd.holiday) { var aw = a.weekendNobet + (a.carryWk || 0), bw = b.weekendNobet + (b.carryWk || 0); if (aw !== bw) return aw - bw; }
         var pa = a.hours / (a.target || 1), pb = b.hours / (b.target || 1);
         var band = variant ? 0.10 : 0.0001;
@@ -352,7 +360,7 @@
       if (!pool.length) return false;
       if (variant) pool.forEach(function (Pp) { Pp._rk = rnd(); });
       var needSrC = (P.minSeniorOncall > 0) && (seniorOncallCount(dd.day) < P.minSeniorOncall);
-      pool.sort(function (a, b) { if (needSrC && a.senior !== b.senior) return a.senior ? -1 : 1; var ra = a.target - a.hours, rb = b.target - b.hours; if (ra !== rb) return rb - ra; if (variant) return a._rk - b._rk; return a.lastNobet - b.lastNobet; });
+      pool.sort(function (a, b) { if (needSrC && a.senior !== b.senior) return a.senior ? -1 : 1; var pra = prefRank(a, dd.day, kind), prb = prefRank(b, dd.day, kind); if (pra !== prb) return pra - prb; var ra = a.target - a.hours, rb = b.target - b.hours; if (ra !== rb) return rb - ra; if (variant) return a._rk - b._rk; return a.lastNobet - b.lastNobet; });
       function attempt(Pp, allowBreak) {
         var over = (Pp.hours + (addH - (HOURS[Pp.assign[d]] || 0))) - Pp.target;
         if (over <= 0) { placeCover(Pp, dd, kind); return true; }
