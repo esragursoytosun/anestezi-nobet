@@ -186,7 +186,7 @@
       var target = baseTarget - (leaveWork + offDays) * P.targetPerWorkday;
       return { name: p.name, idx: idx, noNobet: !!p.noNobet, dayOnly: !!p.dayOnly, startNI: !!p.startNI,
         onlyNobet: !!p.onlyNobet, senior: !!p.senior,
-        onlyDay: new Set(p.onlyDay || []), onlyN16: new Set(p.onlyN16 || []), offReq: new Set(p.offReq || []),
+        onlyDay: new Set(p.onlyDay || []), onlyN16: new Set(p.onlyN16 || []), onlyN24: new Set(p.onlyN24 || []), offReq: new Set(p.offReq || []),
         assign: assign, target: target, hours: 0, nobetDays: [], lastNobet: -99, weekendNobet: 0,
         lockedOff: lockedOff, mustMesai: mustMesai };
     });
@@ -221,6 +221,7 @@
       if (Pp.noNobet || Pp.dayOnly) return false;   // Sorumlu ve "sadece gündüz" nöbet tutmaz
       if (Pp.onlyDay.has(d)) return false;
       if (Pp.onlyN16.has(d) && kind === 'NL') return false;
+      if (Pp.onlyN24.has(d) && kind === 'NS') return false;
       if (Pp.lockedOff.has(d) || Pp.offReq.has(d)) return false;
       if (cur !== '' ) return false;
       if (d > 1 && isOncall(Pp.assign[d - 1])) return false;
@@ -317,6 +318,7 @@
       var d = dd.day, cur = Pp.assign[d];
       if (Pp.noNobet || Pp.dayOnly || Pp.onlyDay.has(d)) return false;
       if (Pp.onlyN16.has(d) && kind === 'NL') return false;
+      if (Pp.onlyN24.has(d) && kind === 'NS') return false;
       if (Pp.lockedOff.has(d) || Pp.offReq.has(d)) return false;
       if (cur === 'YI' || cur === 'OFF' || cur === 'NI' || isOncall(cur)) return false;
       if (d > 1 && isOncall(Pp.assign[d - 1])) return false;
@@ -441,7 +443,7 @@
     if (P.useShortOncall) people.forEach(function (Pp) {
       if (Pp.noNobet) return;
       for (var d = 1; d <= nDays && Pp.hours > Pp.target; d++) {
-        if (Pp.assign[d] !== 'NL' || !days[d - 1].workday) continue;
+        if (Pp.assign[d] !== 'NL' || !days[d - 1].workday || Pp.onlyN24.has(d)) continue;   // uzun-istek günü indirilmez
         // uzun gündüzü kapsıyorsa indirince gündüz düşer -> koru
         if (P.oncallLongDaytime && !P.oncallShortDaytime && daytimeCount(d) - 1 < dayNeed(days[d - 1])) continue;
         Pp.assign[d] = 'NS'; Pp.hours -= (P.oncallLongHours - P.oncallShortHours);
@@ -551,7 +553,7 @@
         if (run.length > P.maxConsecutiveOff && !best) best = run.slice();
         if (!best) return null;
         var uci = best.filter(function (d) { return Pp.assign[d] === 'UCI' && !Pp.offReq.has(d); }); if (!uci.length) return null;
-        var NLs = []; for (var d4 = 1; d4 <= nDays; d4++) if (Pp.assign[d4] === 'NL' && days[d4 - 1].workday && !Pp.onlyN16.has(d4)) NLs.push(d4);
+        var NLs = []; for (var d4 = 1; d4 <= nDays; d4++) if (Pp.assign[d4] === 'NL' && days[d4 - 1].workday && !Pp.onlyN16.has(d4) && !Pp.onlyN24.has(d4)) NLs.push(d4);
         if (!NLs.length) return null;
         var dOn = NLs[(rnd() * NLs.length) | 0], dM = uci[(rnd() * uci.length) | 0];
         Pp.assign[dOn] = 'NS'; Pp.hours -= freed; Pp.assign[dM] = 'M'; Pp.hours += P.mesaiHours;
@@ -574,6 +576,7 @@
         if (!Os.length) return null;
         var dd = Os[(rnd() * Os.length) | 0], cur = Pp.assign[dd], to = cur === 'NL' ? 'NS' : 'NL';
         if (to === 'NL' && Pp.onlyN16.has(dd)) return null;
+        if (to === 'NS' && Pp.onlyN24.has(dd)) return null;
         var dh = HOURS[to] - HOURS[cur]; Pp.assign[dd] = to; Pp.hours += dh;
         return function () { Pp.assign[dd] = cur; Pp.hours -= dh; };
       }
@@ -585,6 +588,7 @@
         for (var j = 0; j < people.length; j++) { var B = people[j];
           if (B === A || B.noNobet || B.dayOnly || B.onlyDay.has(d)) continue;
           if (kind === 'NL' && B.onlyN16.has(d)) continue;
+          if (kind === 'NS' && B.onlyN24.has(d)) continue;
           if (B.lockedOff.has(d) || B.offReq.has(d)) continue;
           var cell = B.assign[d]; if (!(cell === 'M' || cell === 'UCI' || cell === '')) continue;
           if (d > 1 && isOncall(B.assign[d - 1])) continue;

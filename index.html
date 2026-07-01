@@ -292,10 +292,10 @@
   </div>
 
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v24</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v25</b> · anestezi sisteminden bağımsız</div>
 </div>
 
-<script src="asistan-scheduler.js?v=15"></script>
+<script src="asistan-scheduler.js?v=16"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -397,7 +397,8 @@ function addPerson(name){
         <label class="chk" style="font-size:11px" title="TÜM AY yalnızca nöbet; hiç gündüz mesaisi (M) yazılmaz."><input type="checkbox" class="p-onlynobet" onchange="pmode(this)"> sadece nöbet</label>
       </div>
       <input type="text" class="p-onlyday" placeholder="bazı gün gündüz: 7,8" title="Yalnız bu günlerde nöbet verilmez (gündüz)">
-      <input type="text" class="p-onlyn16" placeholder="bazı gün kısa nöbet: 12" title="Bu günlerde uzun değil kısa nöbet"></div>
+      <input type="text" class="p-onlyn16" placeholder="bazı gün kısa nöbet: 12" title="Bu günlerde nöbet uzun değil KISA (16s) olsun">
+      <input type="text" class="p-onlyn24" placeholder="bazı gün uzun nöbet: 20" title="Bu günlerde nöbet kısa değil UZUN (24s) olsun"></div>
     <div class="rowact">
       <button class="sm" onclick="moveRow(this,-1)" title="Yukarı taşı">↑</button>
       <button class="sm" onclick="moveRow(this,1)" title="Aşağı taşı">↓</button>
@@ -419,7 +420,7 @@ function readPersonnel(){
     offDay:r.querySelector('.p-offday').value===''?null:parseInt(r.querySelector('.p-offday').value,10),
     leaveYI:leaveDaysOf(r), yiRanges:rangesOf(r),
     offReq:parseDays(r.querySelector('.p-off').value), onlyNobet:r.querySelector('.p-onlynobet').checked,
-    onlyDay:parseDays(r.querySelector('.p-onlyday').value), onlyN16:parseDays(r.querySelector('.p-onlyn16').value)
+    onlyDay:parseDays(r.querySelector('.p-onlyday').value), onlyN16:parseDays(r.querySelector('.p-onlyn16').value), onlyN24:parseDays(r.querySelector('.p-onlyn24').value)
   })).filter(p=>p.name!=='?');
 }
 function applyPersonnel(list){
@@ -430,7 +431,7 @@ function applyPersonnel(list){
     let ranges=(p.yiRanges&&p.yiRanges.length)?p.yiRanges:[]; if(!ranges.length)ranges=[{s:'',e:''}];
     r.querySelector('.yi-list').innerHTML=ranges.map(x=>yiRangeHtml(x.s,x.e)).join(''); updateYiX(r.querySelector('.leave'));
     r.querySelector('.p-onlynobet').checked=!!p.onlyNobet;
-    r.querySelector('.p-off').value=(p.offReq||[]).join(','); r.querySelector('.p-onlyday').value=(p.onlyDay||[]).join(','); r.querySelector('.p-onlyn16').value=(p.onlyN16||[]).join(',');
+    r.querySelector('.p-off').value=(p.offReq||[]).join(','); r.querySelector('.p-onlyday').value=(p.onlyDay||[]).join(','); r.querySelector('.p-onlyn16').value=(p.onlyN16||[]).join(','); r.querySelector('.p-onlyn24').value=(p.onlyN24||[]).join(',');
   });
   updateDateBounds();
 }
