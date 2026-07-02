@@ -511,7 +511,7 @@
           for (var d = 1; d <= nDays; d++) { var c = Pp.assign[d];
             if (isOncall(c)) { nc++; onDays.push(d); if (days[d - 1].weekend || days[d - 1].holiday) wk++; }
             if (c === 'M' || isOncall(c)) run = 0;
-            else if (days[d - 1].workday && (c === 'NI' || c === 'UCI') && !Pp.lockedOff.has(d)) { run++; if (run > P.maxConsecutiveOff) s += 75; else if (run >= 2) s += run * run * 0.5; } }
+            else if (days[d - 1].workday && (c === 'NI' || c === 'UCI') && !Pp.lockedOff.has(d)) { run++; if (run > P.maxConsecutiveOff) s += 75; else if (run >= 2) s += run * run * 2.5; } }   // boş seriler tekli boşluklara yayılsın (koca boş hafta görünümü olmasın)
           if (!Pp.noNobet) { var w = Pp.target || 1; ncArr.push(nc); wkArr.push(wk); wArr.push(w); crNc.push(Pp.carryNc || 0); crWk.push(Pp.carryWk || 0); totNc += nc; totWk += wk; sumW += w; totCrNc += (Pp.carryNc || 0); totCrWk += (Pp.carryWk || 0);
             // YAYILIM: kişinin kendi nöbetleri aya eşit aralıklı mı (kısa aralık cezalı)
             if (onDays.length > 1) { var ideal = nDays / onDays.length; for (var q = 1; q < onDays.length; q++) { var gap = onDays[q] - onDays[q - 1]; if (gap < ideal) spacing += (ideal - gap); } }
@@ -539,7 +539,7 @@
         var cumTotNc = totNc + totCrNc, cumTotWk = totWk + totCrWk;
         for (var f = 0; f < ncArr.length; f++) {
           var fairNc = cumTotNc * wArr[f] / sumW, fairWk = cumTotWk * wArr[f] / sumW;
-          s += Math.abs((ncArr[f] + crNc[f]) - fairNc) * 9;    // nöbet sayısı adaleti (kümülatif)
+          s += Math.abs((ncArr[f] + crNc[f]) - fairNc) * 16;   // nöbet sayısı adaleti (kümülatif) — gün-aşırı yayılımı dengeyi EZEMEZ
           s += Math.abs((wkArr[f] + crWk[f]) - fairWk) * 14;   // hafta sonu/tatil nöbeti adaleti (kümülatif, daha değerli)
         }
         s += spacing * 2.5;                           // nöbetleri aya eşit yay (kümeleşme/sıkışma)
@@ -729,8 +729,8 @@
     (r.totals || []).forEach(function (t) {
       if (t.noNobet) return; var locked = {}; (t.lockedOff || []).forEach(function (d) { locked[d] = 1; });
       var g = r.grid[t.name] || {}, run = 0;
-      for (var i = 0; i < wd.length; i++) { var c = g[wd[i]], idle = (c === 'NI' || c === 'UCI') && !locked[wd[i]]; if (idle) run++; else { if (run >= 2) s += run * run * 0.1; run = 0; } }
-      if (run >= 2) s += run * run * 0.1;
+      for (var i = 0; i < wd.length; i++) { var c = g[wd[i]], idle = (c === 'NI' || c === 'UCI') && !locked[wd[i]]; if (idle) run++; else { if (run >= 2) s += run * run * 1; run = 0; } }
+      if (run >= 2) s += run * run * 1;
       // GÜN AŞIRI NÖBET (N _ N): ilk çiftten itibaren cezalı, artan -> nöbetler yayılır
       var onD = []; for (var od = 1; od <= (r.nDays || 31); od++) if (isOncall(g[od])) onD.push(od);
       var gr = 1; for (var j = 1; j < onD.length; j++) { if (onD[j] - onD[j - 1] === 2) { gr++; s += gr * gr * 3; } else gr = 1; }
@@ -741,7 +741,7 @@
       var cy = (carry && carry[t.name]) || null, cn = cy ? (cy.nc || 0) : 0, cw = cy ? (cy.wk || 0) : 0;
       arr.push({ nc: nc, wk: t.weekendNobet || 0, w: w, cn: cn, cw: cw }); totNc += nc; totWk += t.weekendNobet || 0; sumW += w; totCrNc += cn; totCrWk += cw; });
     var cumNc = totNc + totCrNc, cumWk = totWk + totCrWk;
-    arr.forEach(function (a) { s += Math.abs((a.nc + a.cn) - cumNc * a.w / sumW) * 4 + Math.abs((a.wk + a.cw) - cumWk * a.w / sumW) * 6; });
+    arr.forEach(function (a) { s += Math.abs((a.nc + a.cn) - cumNc * a.w / sumW) * 7 + Math.abs((a.wk + a.cw) - cumWk * a.w / sumW) * 6; });
     // EKSTRA gündüz: normal günlerin ortalaması + 1..2 olsun (aşırı yığma değil)
     var prof = r.profile || {};
     function dcount(day) { var g = 0; (r.totals || []).forEach(function (t) { if (!t.noNobet && coversDaytime((r.grid[t.name] || {})[day], prof)) g++; }); return g; }
