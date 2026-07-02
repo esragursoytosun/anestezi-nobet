@@ -188,6 +188,22 @@ section('Gün aşırı yayılım: kimse uzun gün-aşırı zinciri çalışmaz (
   ok(worst <= 3, 'en uzun gün-aşırı zinciri <=3 olmalı (çıkan ' + worst + ')');
 })();
 
+section('Gün aşırı onarım: normal senaryoda N _ N çifti kalmaz; kişinin kendi isteği korunur');
+(function () {
+  var ppl = people(13, { 2: { leaveYI: [13, 14, 15, 16, 17] }, 4: { leaveYI: [20, 21, 22, 23, 24] } });
+  var r = S.buildSchedule({ year: Y, month: M, holidays: [], profile: S.defaultProfile(), personnel: ppl, __attempts: 60, __lsIter: 5000 });
+  var ga = 0;
+  r.totals.forEach(function (t) { if (t.noNobet) return; var g = r.grid[t.name], on = [];
+    for (var d = 1; d <= r.nDays; d++) if (isOncall(g[d])) on.push(d);
+    for (var i = 1; i < on.length; i++) if (on[i] - on[i - 1] === 2) ga++; });
+  ok(ga === 0, 'onarım sonrası gün-aşırı çift kalmamalı (' + ga + ' çift)');
+  var ot = r.totals.filter(function (t) { return t.fark > 0; }).length;
+  ok(ot === 0, 'onarım fazla mesai yaratmamalı');
+  // kendi isteği 2 gün arayla: DOKUNULMAZ
+  var r2 = S.buildSchedule({ year: Y, month: M, holidays: [], profile: S.defaultProfile(), personnel: people(13, { 1: { onlyN16: [6, 8] } }), __attempts: 40, __lsIter: 4000 });
+  ok(r2.grid['P1'][6] === 'NS' && r2.grid['P1'][8] === 'NS', 'kişinin kendi 2-gün-aralı isteği korunmalı');
+})();
+
 // ---------------------------------------------------------------
 console.log('\n──────────────────────────────');
 console.log('SONUÇ: ' + pass + ' geçti, ' + fail + ' düştü.');

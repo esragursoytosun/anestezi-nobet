@@ -687,6 +687,51 @@
       }
     });
 
+    // ---- 3.2) GÜN AŞIRI ONARIM: N _ N çiftlerini HEDEFLİ devirle kır ----
+    // LS rastgele hamlelerle bazı gün-aşırı çiftleri kaçırabiliyor. Burada tek tek bulup, çiftin
+    // (İSTEK OLMAYAN) nöbetini, yeni gün-aşırı yaratmayacak uygun birine devrederiz. Saatler dengelenir
+    // (devreden eksikse boş iş günlerine mesai; devralan taşarsa hafta içi mesaisi gündüz-min bozulmadan açılır).
+    // Kişinin KENDİ istediği günler 2 gün arayla ise dokunulmaz (kendi tercihi). Kapsama değişmez.
+    (function repairGunAsiri() {
+      function freeCell(dd) { return dd.holiday ? 'RT' : (dd.weekend ? 'HT' : 'UCI'); }
+      function isReq(Pp, d) { return Pp.onlyN16.has(d) || Pp.onlyN24.has(d); }
+      for (var guard = 0; guard < 80; guard++) {
+        var moved = false;
+        for (var pi = 0; pi < people.length && !moved; pi++) {
+          var A = people[pi];
+          for (var d1 = 1; d1 + 2 <= nDays && !moved; d1++) {
+            if (!isOncall(A.assign[d1]) || !isOncall(A.assign[d1 + 2])) continue;   // gün-aşırı çift
+            var cands = [d1 + 2, d1].filter(function (d) { return !isReq(A, d); }); // istek gününe dokunma
+            for (var ci = 0; ci < cands.length && !moved; ci++) {
+              var d = cands[ci], kind = A.assign[d], dd = days[d - 1];
+              var pool = people.filter(function (B) {
+                if (B === A || !coverEligible(B, dd, kind)) return false;
+                if ((d > 2 && isOncall(B.assign[d - 2])) || (d + 2 <= nDays && isOncall(B.assign[d + 2]))) return false;   // B'de YENİ çift oluşmasın
+                return true;
+              });
+              if (!pool.length) continue;
+              pool.sort(function (a, b) { var an = a.nobetDays.length, bn = b.nobetDays.length; if (an !== bn) return an - bn; return (b.target - b.hours) - (a.target - a.hours); });
+              var B = pool[0];
+              var over = (B.hours + (HOURS[kind] - (HOURS[B.assign[d]] || 0))) - B.target;
+              if (over > 0) { var fb = freeBudget(B, over, d, false);
+                if (fb.freed < over) { fb.conv.forEach(function (dm) { B.assign[dm] = 'M'; B.hours += P.mesaiHours; }); continue; } }
+              // A bırakır (hücre + ertesi günün N.İ'si geri alınır, sayaçlar düzeltilir)
+              A.hours -= HOURS[kind]; A.assign[d] = freeCell(dd);
+              A.nobetDays = A.nobetDays.filter(function (x) { return x !== d; });
+              if (dd.weekend || dd.holiday) A.weekendNobet--;
+              if (d < nDays && A.assign[d + 1] === 'NI') A.assign[d + 1] = freeCell(days[d]);
+              // A eksik kaldıysa boş iş günlerine mesai ekle (hedefe geri tuttur)
+              if (!A.onlyNobet) for (var d3 = 1; d3 <= nDays && A.hours + P.mesaiHours <= A.target; d3++) {
+                var dw = days[d3 - 1]; if (dw.workday && A.assign[d3] === 'UCI' && !A.lockedOff.has(d3) && !A.offReq.has(d3)) { A.assign[d3] = 'M'; A.hours += P.mesaiHours; } }
+              placeCover(B, dd, kind);   // B devralır (kapsama aynı gün/tür korunur)
+              moved = true;
+            }
+          }
+        }
+        if (!moved) break;
+      }
+    })();
+
     // ---- 3.0) (opsiyonel) GEREKİRSE FAZLA MESAİ — LS'den SONRA, MİNİMUM ----
     // LS gündüz açıklarını saat-korumalı taşımalarla zaten en aza indirdi. Burada yalnız KALAN
     // (kaçınılmaz) açıklar için, o gün boşta (UCI) + EN AZ fazla mesaisi olan uygun kişiye sırayla
