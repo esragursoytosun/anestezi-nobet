@@ -120,7 +120,7 @@
         if (present(c2)) run = 0;
         else if (daysArr[d2 - 1].workday && (c2 === 'NI' || c2 === 'UCI') && !locked[d2]) { run++; if (run > best) best = run; }
       }
-      if (best > P.maxConsecutiveOff) warnings.push(p.name + ': ' + best + ' iş günü üst üste izinli/boşta (en fazla ' + P.maxConsecutiveOff + ' olmalı).');
+      if (best > P.maxConsecutiveOff) warnings.push((p.onlyNobet ? '💡 ' : '') + p.name + ': ' + best + ' iş günü üst üste izinli/boşta' + (p.onlyNobet ? ' (sadece nöbet — mesai yazılmadığı için doğal).' : ' (en fazla ' + P.maxConsecutiveOff + ' olmalı).'));
       // ÇALIŞMA TERCİHİ: karşılanamayan nöbet-türü isteği için BİLGİ notu (neden uygulanmadı)
       var odSet = {}; (p.onlyDay || []).forEach(function (x) { odSet[x] = 1; });
       function noteReq(list, wanted, lbl) { (list || []).forEach(function (dn) {
@@ -419,15 +419,20 @@
     }
     guaranteeCoverage();
 
-    // ---- 2) MESAİ İLE HEDEFE TAMAMLA ----
+    // ---- 2) MESAİ İLE HEDEFE TAMAMLA (EŞİT YAYILI) ----
+    // Mesailer ayın başından sırayla doldurulursa kalan boşluklar (Ü.İ) ay sonuna yığılır
+    // ("son hafta koca boşluk" görünümü). Bütçe tüm boş günlere yetmiyorsa mesai günleri
+    // EŞİT ARALIKLI seçilir -> boşluklar aya tekli dağılır.
     people.forEach(function (Pp) {
       if (Pp.onlyNobet) return;                            // "sadece nöbet": hiç mesai yazılmaz
-      if (Pp.target - Pp.hours < P.mesaiHours) return;
-      // izin dönüşü ilk iş günü zorunlu çalışma korunur (mustMesai) — basit: izin sonrası ilk boş iş günü
-      days.forEach(function (dd) {
-        if (Pp.target - Pp.hours < P.mesaiHours) return;
-        if (dd.workday && Pp.assign[dd.day] === '' && !Pp.offReq.has(dd.day)) addMesai(Pp, dd.day);
-      });
+      var free = []; days.forEach(function (dd) { if (dd.workday && Pp.assign[dd.day] === '' && !Pp.offReq.has(dd.day)) free.push(dd.day); });
+      var budget = Math.floor((Pp.target - Pp.hours) / P.mesaiHours);
+      if (budget <= 0 || !free.length) return;
+      if (budget >= free.length) { free.forEach(function (d) { addMesai(Pp, d); }); return; }
+      var picked = {}, cnt = 0;
+      for (var k = 0; k < budget; k++) { var ix = Math.min(free.length - 1, Math.floor((k + 0.5) * free.length / budget)); if (!picked[free[ix]]) { picked[free[ix]] = 1; cnt++; } }
+      for (var i2 = 0; i2 < free.length && cnt < budget; i2++) if (!picked[free[i2]]) { picked[free[i2]] = 1; cnt++; }   // yuvarlama çakışması tamamla
+      free.forEach(function (d) { if (picked[d]) addMesai(Pp, d); });
     });
 
     // ---- 2.5) KALAN BOŞ İŞ GÜNLERİ -> ÜCRETLİ İZİN ----
@@ -711,20 +716,43 @@
               });
               if (!pool.length) continue;
               pool.sort(function (a, b) { var an = a.nobetDays.length, bn = b.nobetDays.length; if (an !== bn) return an - bn; return (b.target - b.hours) - (a.target - a.hours); });
-              var B = pool[0];
-              var over = (B.hours + (HOURS[kind] - (HOURS[B.assign[d]] || 0))) - B.target;
-              if (over > 0) { var fb = freeBudget(B, over, d, false);
-                if (fb.freed < over) { fb.conv.forEach(function (dm) { B.assign[dm] = 'M'; B.hours += P.mesaiHours; }); continue; } }
-              // A bırakır (hücre + ertesi günün N.İ'si geri alınır, sayaçlar düzeltilir)
-              A.hours -= HOURS[kind]; A.assign[d] = freeCell(dd);
-              A.nobetDays = A.nobetDays.filter(function (x) { return x !== d; });
-              if (dd.weekend || dd.holiday) A.weekendNobet--;
-              if (d < nDays && A.assign[d + 1] === 'NI') A.assign[d + 1] = freeCell(days[d]);
-              // A eksik kaldıysa boş iş günlerine mesai ekle (hedefe geri tuttur)
-              if (!A.onlyNobet) for (var d3 = 1; d3 <= nDays && A.hours + P.mesaiHours <= A.target; d3++) {
-                var dw = days[d3 - 1]; if (dw.workday && A.assign[d3] === 'UCI' && !A.lockedOff.has(d3) && !A.offReq.has(d3)) { A.assign[d3] = 'M'; A.hours += P.mesaiHours; } }
-              placeCover(B, dd, kind);   // B devralır (kapsama aynı gün/tür korunur)
-              moved = true;
+              function releaseA() {   // A bırakır (hücre + ertesi günün N.İ'si geri alınır, sayaçlar düzeltilir)
+                A.hours -= HOURS[kind]; A.assign[d] = freeCell(dd);
+                A.nobetDays = A.nobetDays.filter(function (x) { return x !== d; });
+                if (dd.weekend || dd.holiday) A.weekendNobet--;
+                if (d < nDays && A.assign[d + 1] === 'NI') A.assign[d + 1] = freeCell(days[d]);
+              }
+              // STRATEJİ 1: B'nin saat yeri var ya da hafta içi mesaisinden açılabiliyor (gündüz-min bozulmadan)
+              for (var bi = 0; bi < pool.length && !moved; bi++) { var B = pool[bi];
+                var over = (B.hours + (HOURS[kind] - (HOURS[B.assign[d]] || 0))) - B.target;
+                if (over > 0) { var fb = freeBudget(B, over, d, false);
+                  if (fb.freed < over) { fb.conv.forEach(function (dm) { B.assign[dm] = 'M'; B.hours += P.mesaiHours; }); continue; } }
+                releaseA();
+                if (!A.onlyNobet) for (var d3 = 1; d3 <= nDays && A.hours + P.mesaiHours <= A.target; d3++) {
+                  var dw = days[d3 - 1]; if (dw.workday && A.assign[d3] === 'UCI' && !A.lockedOff.has(d3) && !A.offReq.has(d3)) { A.assign[d3] = 'M'; A.hours += P.mesaiHours; } }
+                placeCover(B, dd, kind);   // B devralır (kapsama aynı gün/tür korunur)
+                moved = true;
+              }
+              // STRATEJİ 2 (SAAT-NÖTR TAKAS): B o gün mesaide -> A'nın nöbeti B'ye, A o güne M;
+              // fark saat için B'nin başka M günleri A'ya taşınır. Kapsama/gündüz/saatler DEĞİŞMEZ.
+              if (!moved && dd.workday && !A.onlyNobet) {
+                var kMove = Math.round((HOURS[kind] - P.mesaiHours) / P.mesaiHours);   // NL:2, NS:1 (8s mesai)
+                for (var bj = 0; bj < pool.length && !moved; bj++) { var B2 = pool[bj];
+                  if (B2.assign[d] !== 'M' || B2.mustMesai.has(d) || B2.onlyNobet) continue;
+                  var dms = [];   // B'nin M'si + A'nın UCI'si olan dengeleme günleri
+                  for (var dm2 = 1; dm2 <= nDays && dms.length < kMove; dm2++) { var dwd = days[dm2 - 1];
+                    if (dm2 === d || !dwd.workday) continue;
+                    if (B2.assign[dm2] !== 'M' || B2.mustMesai.has(dm2)) continue;
+                    if (A.assign[dm2] !== 'UCI' || A.lockedOff.has(dm2) || A.offReq.has(dm2)) continue;
+                    dms.push(dm2); }
+                  if (dms.length < kMove) continue;
+                  releaseA();
+                  A.assign[d] = 'M'; A.hours += P.mesaiHours;                       // A aynı gün mesaiye geçer (gündüz sabit)
+                  dms.forEach(function (dm3) { B2.assign[dm3] = 'UCI'; B2.hours -= P.mesaiHours; A.assign[dm3] = 'M'; A.hours += P.mesaiHours; });
+                  placeCover(B2, dd, kind);                                          // B nöbeti devralır (M'si düşer, saati placeCover dengeler)
+                  moved = true;
+                }
+              }
             }
           }
         }
