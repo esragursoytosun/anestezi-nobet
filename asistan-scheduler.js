@@ -47,6 +47,10 @@
       overtimeForCounts: false,                            // açıksa: gündüz sayıları tutmazsa o günlerde FAZLA MESAİ verilir
       minSeniorOncall: 0,                                  // her gün nöbette EN AZ kaç KIDEMLİ olsun (0=kapalı)
       minSeniorDaytime: 0,                                 // her hafta içi gündüzde EN AZ kaç KIDEMLİ olsun (0=kapalı)
+      // ÖNCELİK SIRASI: aynı güne birden çok kural denk gelirse ÜSTTEKİ (öndeki) kazanır.
+      // pref=çalışma tercihi (gün nöbet isteği) · offReq=boş gün isteği · leave=yıllık izin ·
+      // offDay=haftalık izin günü (doluysa aynı haftada kaydırılır) · startNI=aya N.İ başla · preLeave=izin öncesi nöbet+boşluk
+      priorityOrder: ['pref', 'offReq', 'leave', 'offDay', 'startNI', 'preLeave'],
       // ÖZEL VARDİYALAR (kullanıcı ekler): ızgarada ELLE atanır; saat/gündüz/lejantta sayılır.
       // (Otomatik dağıtım çekirdek vardiyalarla yapılır; özel vardiyaların otomatiğe girmesi sonra.)
       //   { code:'C1', label:'12s', hours:12, daytime:true, color:'#0891b2' }
@@ -65,6 +69,11 @@
     if (p && p.weekendOncallMax === undefined) r.weekendOncallMax = r.weekendOncallPerDay;
     r.oncallMax = Math.max(r.oncallMax || 0, r.oncallPerDay);
     r.weekendOncallMax = Math.max(r.weekendOncallMax || 0, r.weekendOncallPerDay);
+    // ÖNCELİK SIRASI normalize: bilinmeyen anahtarlar atılır, eksikler varsayılan sırayla sona eklenir
+    var PRIO_ALL = ['pref', 'offReq', 'leave', 'offDay', 'startNI', 'preLeave'];
+    var po = (p && Array.isArray(p.priorityOrder)) ? p.priorityOrder.filter(function (k) { return PRIO_ALL.indexOf(k) >= 0; }) : [];
+    PRIO_ALL.forEach(function (k) { if (po.indexOf(k) < 0) po.push(k); });
+    r.priorityOrder = po;
     return r; }
 
   // Vardiya kodları sabit arketip: M(mesai), NL(uzun nöbet), NS(kısa nöbet) + izin türleri.
@@ -189,32 +198,98 @@
       var YI = new Set(p.leaveYI || []);
       var offDow = (p.offDay != null) ? p.offDay : null;
       var assign = {}, lockedOff = new Set(), mustMesai = new Set();
-      var offDays = 0;
-      days.forEach(function (dd) {
+      days.forEach(function (dd) {   // kurulumda YALNIZ takvim yazılır; YI/OFF/istekler ÖNCELİK KATMANLARINDA
         var dn = dd.day;
-        if (YI.has(dn)) { assign[dn] = 'YI'; }
-        else if (offDow != null && dd.dow === offDow && dd.workday) { assign[dn] = 'OFF'; offDays++; }
-        else if (dd.holiday) assign[dn] = 'RT';
+        if (dd.holiday) assign[dn] = 'RT';
         else if (dd.weekend) assign[dn] = 'HT';
         else assign[dn] = '';
       });
       // hedef: iş günü başına targetPerWorkday; yıllık izin + haftalık izin günü DÜŞER (gün×targetPerWorkday)
+      // (offDays öngörüsü: haftalık izin kaydırılsa da haftada 1 OFF yazılır -> sayı aynı)
       var leaveWork = workdayNums.filter(function (x) { return YI.has(x); }).length;
+      var offDays = (offDow == null) ? 0 : days.filter(function (dd) { return dd.workday && dd.dow === offDow && !YI.has(dd.day); }).length;
       var target = baseTarget - (leaveWork + offDays) * P.targetPerWorkday;
       var cy = (carry && carry[p.name]) || null;   // AYLAR ARASI: önceki ayların birikimi (rotasyon hafızası)
       return { name: p.name, idx: idx, noNobet: !!p.noNobet, dayOnly: !!p.dayOnly, startNI: !!p.startNI,
-        onlyNobet: !!p.onlyNobet, senior: !!p.senior,
+        onlyNobet: !!p.onlyNobet, senior: !!p.senior, YI: YI, offDow: offDow,
         onlyDay: new Set(p.onlyDay || []), onlyN16: new Set(p.onlyN16 || []), onlyN24: new Set(p.onlyN24 || []), offReq: new Set(p.offReq || []),
         assign: assign, target: target, hours: 0, nobetDays: [], lastNobet: -99, weekendNobet: 0,
         carryNc: cy ? (cy.nc || 0) : 0, carryWk: cy ? (cy.wk || 0) : 0,
         lockedOff: lockedOff, mustMesai: mustMesai };
     });
-    // aylar arası devir: önceki ayın son nöbetçisi 1. gün N.İ
-    people.forEach(function (Pp) {
-      if (Pp.startNI && Pp.assign[1] === '') { Pp.assign[1] = 'NI'; }
-      // boş gün isteği -> kesin boş (UCI sayılmaz; sadece nöbet/mesai yazılmaz)
-      Pp.offReq.forEach(function (dn) { if (Pp.assign[dn] === '') Pp.assign[dn] = 'UCI'; Pp.lockedOff.add(dn); });
-    });
+
+    // ===== ÖNCELİK KATMANLARI: kurallar P.priorityOrder SIRASIYLA uygulanır — önce gelen GÜNÜ KAPAR =====
+    // (dolu hücreye sonraki kural yazamaz; tek istisna: haftalık izin dolu güne denk gelirse AYNI HAFTADA kaydırılır)
+    function prefEligible(Pp, d, kind) {
+      if (Pp.noNobet || Pp.dayOnly) return false;
+      if (Pp.onlyDay.has(d)) return false;
+      if (Pp.assign[d] !== '') return false;
+      if (d > 1 && isOncall(Pp.assign[d - 1])) return false;
+      if (d < nDays) { var nx = Pp.assign[d + 1]; if (isOncall(nx) || nx === 'YI') return false; }
+      return true;
+    }
+    var LAYERS = {
+      pref: function () {            // ÇALIŞMA TERCİHİ: belirli gün nöbet TÜRÜ isteğini fiilen yerleştir
+        people.forEach(function (Pp) {
+          days.forEach(function (dd) {
+            var d = dd.day, wants = Pp.onlyN16.has(d) ? 'NS' : (Pp.onlyN24.has(d) ? 'NL' : null);
+            if (!wants) return;
+            if (oncallCount(d) >= oncallCap(dd)) return;          // günün max nöbetçisini aşma
+            if (!prefEligible(Pp, d, wants)) return;              // dinlenme/uygunluk (sıra kararı: hücre durumu)
+            placeCover(Pp, dd, wants);
+          });
+        });
+      },
+      offReq: function () {          // BOŞ GÜN İSTEĞİ: boş hücreyi kesin kilitle
+        people.forEach(function (Pp) { Pp.offReq.forEach(function (dn) { if (Pp.assign[dn] === '') { Pp.assign[dn] = 'UCI'; Pp.lockedOff.add(dn); } }); });
+      },
+      leave: function () {           // YILLIK İZİN
+        people.forEach(function (Pp) { Pp.YI.forEach(function (dn) { var c = Pp.assign[dn]; if (c === '' || c === 'HT' || c === 'RT') Pp.assign[dn] = 'YI'; }); });
+      },
+      offDay: function () {          // HAFTALIK İZİN GÜNÜ (gün doluysa izin AYNI HAFTANIN boş iş gününe kaydırılır)
+        people.forEach(function (Pp) {
+          if (Pp.offDow == null) return;
+          days.forEach(function (dd) {
+            if (!dd.workday || dd.dow !== Pp.offDow) return;
+            var d = dd.day, c = Pp.assign[d];
+            if (c === '') { Pp.assign[d] = 'OFF'; return; }
+            if (c === 'YI' || c === 'OFF' || c === 'UCI' || c === 'NI') return;   // o gün zaten çalışmıyor -> kaydırma gerekmez
+            var ws = d - ((dd.dow + 6) % 7);                       // haftanın Pazartesi'si
+            for (var k = 0; k < 7; k++) { var d2 = ws + k;
+              if (d2 < 1 || d2 > nDays || d2 === d) continue;
+              if (days[d2 - 1].workday && Pp.assign[d2] === '') { Pp.assign[d2] = 'OFF'; return; }
+            }
+          });
+        });
+      },
+      startNI: function () {         // AYA N.İ İLE BAŞLA (önceki ayın son nöbetçisi)
+        people.forEach(function (Pp) { if (Pp.startNI && Pp.assign[1] === '') Pp.assign[1] = 'NI'; });
+      },
+      preLeave: function () {        // YILLIK İZİN ÖNCESİ NÖBET + BOŞLUK (izin & boşluk kuralı)
+        if (!P.preLeaveOncall) return;
+        people.forEach(function (Pp) {
+          var starts = [];
+          for (var d = 1; d <= nDays; d++) if (Pp.assign[d] === 'YI' && (d === 1 || Pp.assign[d - 1] !== 'YI')) starts.push(d);
+          starts.forEach(function (bs) {
+            var wprev = workdayNums.filter(function (x) { return x < bs; }).sort(function (a, b) { return b - a; });
+            var placed = false;
+            if (!Pp.noNobet && !Pp.dayOnly) {
+              [P.preLeaveDaysBefore - 1, P.preLeaveDaysBeforeFallback - 1].some(function (ni) {
+                var nd = wprev[ni];
+                if (nd === undefined || Pp.assign[nd] !== '' || Pp.hours + HOURS[defType()] > Pp.target) return false;
+                if (oncallCount(nd) >= oncallCap(days[nd - 1])) return false;   // o gün max nöbetçi dolu
+                placeOncall(Pp, days[nd - 1], defType());
+                for (var g = nd + 1; g < bs; g++) { Pp.lockedOff.add(g); if (Pp.assign[g] === '') Pp.assign[g] = 'UCI'; }
+                placed = true; return true;
+              });
+            }
+            // "sadece gündüz"/Sorumlu kişiye Ü.İ boşluk YAZILMAZ (izinli olsa bile tüm iş günleri mesai)
+            if (!placed && !Pp.noNobet && !Pp.dayOnly) for (var i = 0; i < P.preLeaveGap; i++) { var dd2 = wprev[i]; if (dd2 !== undefined && Pp.assign[dd2] === '') { Pp.assign[dd2] = 'UCI'; Pp.lockedOff.add(dd2); } }
+          });
+        });
+      }
+    };
+    P.priorityOrder.forEach(function (k) { if (LAYERS[k]) LAYERS[k](); });
 
     function hoursOf(Pp) { var h = 0; for (var d = 1; d <= nDays; d++) h += HOURS[Pp.assign[d]] || 0; return h; }
     function daytimeCount(day) { var c = 0; people.forEach(function (Pp) { if (!Pp.noNobet && coversDaytime(Pp.assign[day], P)) c++; }); return c; }
@@ -262,41 +337,7 @@
     }
     function addMesai(Pp, day) { Pp.assign[day] = 'M'; Pp.hours += P.mesaiHours; }
 
-    // ---- 0.4) ÇALIŞMA TERCİHİ: belirli gün NÖBET TÜRÜ isteğini EN ÖNCE yerleştir (mutlak öncelik) ----
-    // "bazı gün kısa nöbet" (onlyN16) / "uzun nöbet" (onlyN24) = o gün o kişiye o türde nöbet yaz.
-    // Her şeyden ÖNCE (izin-öncesi nöbet + kapsama dahil) yerleştirilir; genel "Kısa nöbet kullanılsın"
-    // ayarından bağımsız. Yalnız fiziksel sınır (ardışık nöbet olmaz) + günün max nöbetçisi korunur.
-    people.forEach(function (Pp) {
-      if (Pp.noNobet || Pp.dayOnly) return;
-      days.forEach(function (dd) {
-        var d = dd.day, wants = Pp.onlyN16.has(d) ? 'NS' : (Pp.onlyN24.has(d) ? 'NL' : null);
-        if (!wants) return;
-        if (oncallCount(d) >= oncallCap(dd)) return;           // günün max nöbetçisini aşma
-        if (!coverEligible(Pp, dd, wants)) return;             // dinlenme/izin/uygunluk
-        placeCover(Pp, dd, wants);
-      });
-    });
-
-    // ---- 0.5) İZİN ÖNCESİ NÖBET + BOŞLUK ----
-    if (P.preLeaveOncall) people.forEach(function (Pp) {
-      var starts = [];
-      for (var d = 1; d <= nDays; d++) if (Pp.assign[d] === 'YI' && (d === 1 || Pp.assign[d - 1] !== 'YI')) starts.push(d);
-      starts.forEach(function (bs) {
-        var wprev = workdayNums.filter(function (x) { return x < bs; }).sort(function (a, b) { return b - a; });
-        var placed = false;
-        if (!Pp.noNobet) {
-          [P.preLeaveDaysBefore - 1, P.preLeaveDaysBeforeFallback - 1].some(function (ni) {
-            var nd = wprev[ni];
-            if (nd === undefined || Pp.assign[nd] !== '' || Pp.hours + HOURS[defType()] > Pp.target) return false;
-            if (oncallCount(nd) >= oncallCap(days[nd - 1])) return false;   // o gün max nöbetçi dolu -> başka güne
-            placeOncall(Pp, days[nd - 1], defType());
-            for (var g = nd + 1; g < bs; g++) { Pp.lockedOff.add(g); if (Pp.assign[g] === '') Pp.assign[g] = 'UCI'; }
-            placed = true; return true;
-          });
-        }
-        if (!placed) for (var i = 0; i < P.preLeaveGap; i++) { var dd2 = wprev[i]; if (dd2 !== undefined && Pp.assign[dd2] === '') { Pp.assign[dd2] = 'UCI'; Pp.lockedOff.add(dd2); } }
-      });
-    });
+    // (0.4 çalışma tercihi ve 0.5 izin-öncesi fazları yukarıdaki ÖNCELİK KATMANLARINA taşındı)
 
     // ---- 0.6) İZİN DÖNÜŞÜ: İLK İŞ GÜNÜ ZORUNLU ÇALIŞMA ----
     // Yıllık izin biten kişi, dönüşte ilk İŞ GÜNÜnde kesin çalışır (mustMesai ile korunur).

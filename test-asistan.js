@@ -204,6 +204,38 @@ section('Gün aşırı onarım: normal senaryoda N _ N çifti kalmaz; kişinin k
   ok(r2.grid['P1'][6] === 'NS' && r2.grid['P1'][8] === 'NS', 'kişinin kendi 2-gün-aralı isteği korunmalı');
 })();
 
+section('Öncelik sırası: üstteki kural günü kapar (pref vs boş gün isteği)');
+(function () {
+  // varsayılan sıra: pref > offReq -> nöbet yazılır
+  var r1 = run({ personnel: people(13, { 1: { onlyN16: [8], offReq: [8] } }), __attempts: 20, __lsIter: 2000 });
+  ok(r1.grid['P1'][8] === 'NS', 'varsayılan sırada çalışma tercihi kazanmalı (8. gün NS, çıkan ' + r1.grid['P1'][8] + ')');
+  // ters sıra: offReq > pref -> o gün nöbet/mesai YOK
+  var P2 = S.defaultProfile(); P2.priorityOrder = ['offReq', 'pref', 'leave', 'offDay', 'startNI', 'preLeave'];
+  var r2 = run({ profile: P2, personnel: people(13, { 1: { onlyN16: [8], offReq: [8] } }), __attempts: 20, __lsIter: 2000 });
+  var c2 = r2.grid['P1'][8];
+  ok(c2 !== 'NS' && c2 !== 'NL' && c2 !== 'M', 'ters sırada boş gün isteği kazanmalı (8. gün çalışma yok, çıkan ' + c2 + ')');
+})();
+
+section('Haftalık izin kaydırma: öncelikli kural günü alırsa OFF aynı haftaya kayar');
+(function () {
+  // 7 Tem 2026 Salı; VELİ offDay=Salı + 7'ye uzun nöbet isteği
+  var r = run({ personnel: people(13, { 1: { offDay: 2, onlyN24: [7] } }), __attempts: 20, __lsIter: 2000 });
+  var g = r.grid['P1'];
+  ok(g[7] === 'NL', '7 Tem (Salı) istenen uzun nöbet olmalı (çıkan ' + g[7] + ')');
+  var offInWeek = 0; for (var d = 6; d <= 12; d++) if (g[d] === 'OFF') offInWeek++;
+  ok(offInWeek >= 1, 'izin aynı haftada başka güne kaymalı');
+  var offTotal = 0; for (var d2 = 1; d2 <= r.nDays; d2++) if (g[d2] === 'OFF') offTotal++;
+  ok(offTotal === 4, 'toplam OFF sayısı korunmalı (4 Salı, çıkan ' + offTotal + ')');
+})();
+
+section('Sadece gündüz / Sorumlu: yıllık izin alsa bile Ü.İ KULLANAMAZ');
+(function () {
+  var r = run({ personnel: people(13, { 1: { dayOnly: true, leaveYI: [13, 14, 15, 16, 17] }, 2: { noNobet: true, leaveYI: [6, 7, 8, 9, 10] } }), __attempts: 20, __lsIter: 2000 });
+  var u1 = 0, u2 = 0; for (var d = 1; d <= r.nDays; d++) { if (r.grid['P1'][d] === 'UCI') u1++; if (r.grid['P2'][d] === 'UCI') u2++; }
+  ok(u1 === 0, 'sadece gündüz + izinli kişide Ü.İ olmamalı (' + u1 + ')');
+  ok(u2 === 0, 'Sorumlu + izinli kişide Ü.İ olmamalı (' + u2 + ')');
+})();
+
 // ---------------------------------------------------------------
 console.log('\n──────────────────────────────');
 console.log('SONUÇ: ' + pass + ' geçti, ' + fail + ' düştü.');

@@ -193,6 +193,11 @@
           </div>
         </div>
         <div class="advgrp">
+          <h4>Öncelik sırası (çakışan talepler)</h4>
+          <p class="help">Aynı güne birden fazla kural denk gelirse <b>ÜSTTEKİ kazanır</b> ve günü kapar; alttaki o güne uygulanmaz. ↑/↓ ile sıralayın. Özel durum: <b>Haftalık izin günü</b> daha öncelikli bir kurala denk gelirse iptal olmaz — izin <b>aynı haftanın başka boş gününe kaydırılır</b>.</p>
+          <div id="prioList"></div>
+        </div>
+        <div class="advgrp">
           <h4>Kıdem (kıdemli personel zorunluluğu)</h4>
           <p class="help">Personel tablosunda <b>“Kıdemli”</b> işaretli kişiler kıdemli sayılır. Burada her gün <b>nöbette</b> ve her hafta içi <b>gündüzde</b> en az kaç kıdemli bulunması gerektiğini belirleyin. <b>0</b> = kapalı. Yeterli kıdemli yoksa o günler uyarı olarak listelenir (kapsama yine bozulmaz).</p>
           <div class="row">
@@ -298,10 +303,10 @@
 
   <div id="panelExtra" class="noprint"></div>
   <div id="output"></div>
-  <div class="foot">Nöbet Planlama Asistanı · <b>v41</b> · anestezi sisteminden bağımsız</div>
+  <div class="foot">Nöbet Planlama Asistanı · <b>v42</b> · anestezi sisteminden bağımsız</div>
 </div>
 
-<script src="asistan-scheduler.js?v=28"></script>
+<script src="asistan-scheduler.js?v=29"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -328,12 +333,25 @@ function refreshProfSel(){ const s=document.getElementById('profSel');
 // nöbetçi sayısı ARALIĞI: "2", "2-3", "2 veya 3", "3 ya da 4" -> [min,max]
 function parseRange(s){ const n=(String(s||'').match(/\d+/g)||[]).map(x=>parseInt(x,10)); let a=n.length?n[0]:1, b=n.length>1?n[1]:a; if(isNaN(a))a=1; if(isNaN(b))b=a; if(b<a){const t=a;a=b;b=t;} return [a,b]; }
 function fmtRange(min,max){ min=min||0; return (max&&max>min)?(min+'-'+max):String(min); }
+// ÖNCELİK SIRASI (çakışan talepler): üstteki kazanır; motor bu sırayla katman uygular
+const PRIO_LABELS={ pref:'Çalışma tercihi (bazı gün kısa/uzun nöbet)', offReq:'Boş gün isteği', leave:'Yıllık izin',
+  offDay:'Haftalık izin günü (doluysa aynı haftada kaydırılır)', startNI:'Aya N.İ ile başla', preLeave:'Yıllık izin öncesi nöbet + boşluk kuralı' };
+function prioOf(p){ const ALL=Object.keys(PRIO_LABELS); let po=Array.isArray(p.priorityOrder)?p.priorityOrder.filter(k=>ALL.indexOf(k)>=0):[];
+  ALL.forEach(k=>{ if(po.indexOf(k)<0)po.push(k); }); return po; }
+function renderPrio(){ const box=document.getElementById('prioList'); if(!box)return; const po=prioOf(curProfile());
+  box.innerHTML=po.map((k,i)=>`<div class="shiftrow" style="padding:6px 10px;gap:8px">
+    <b style="width:20px;text-align:center;color:var(--accent2)">${i+1}</b>
+    <span style="flex:1;font-size:12.5px">${PRIO_LABELS[k]}</span>
+    <button type="button" class="sm" onclick="movePrio(${i},-1)" ${i===0?'disabled':''}>↑</button>
+    <button type="button" class="sm" onclick="movePrio(${i},1)" ${i===po.length-1?'disabled':''}>↓</button></div>`).join(''); }
+function movePrio(i,dir){ const p=curProfile(); const po=prioOf(p); const j=i+dir; if(j<0||j>=po.length)return;
+  const t=po[i]; po[i]=po[j]; po[j]=t; p.priorityOrder=po; saveProfiles(); renderPrio(); }
 function fillRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; if(el.type==='checkbox')el.checked=!!p[f]; else el.value=p[f];});
   exWrap.querySelectorAll('input[data-dow]').forEach(cb=>{cb.checked=(p.daytimeExtraDays||[]).indexOf(parseInt(cb.dataset.dow,10))>=0;});
   document.getElementById('oncallPerDay').value=fmtRange(p.oncallPerDay,p.oncallMax);
   document.getElementById('weekendOncallPerDay').value=fmtRange(p.weekendOncallPerDay,p.weekendOncallMax);
-  renderCustomShifts(); }
+  renderPrio(); renderCustomShifts(); }
 function readRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return;
     if(el.type==='checkbox')p[f]=el.checked; else if(el.type==='number')p[f]=parseFloat(el.value)||0; else p[f]=el.value;});
