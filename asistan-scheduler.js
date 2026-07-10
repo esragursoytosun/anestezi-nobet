@@ -223,7 +223,8 @@
     function prefEligible(Pp, d, kind) {
       if (Pp.noNobet || Pp.dayOnly) return false;
       if (Pp.onlyDay.has(d)) return false;
-      if (Pp.assign[d] !== '') return false;
+      var cur = Pp.assign[d];
+      if (cur !== '' && cur !== 'HT' && cur !== 'RT') return false;   // hafta sonu/tatil hücresi de yazılabilir (istek her güne olabilir)
       if (d > 1 && isOncall(Pp.assign[d - 1])) return false;
       if (d < nDays) { var nx = Pp.assign[d + 1]; if (isOncall(nx) || nx === 'YI') return false; }
       return true;
