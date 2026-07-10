@@ -230,12 +230,13 @@
       return true;
     }
     var LAYERS = {
-      pref: function () {            // ÇALIŞMA TERCİHİ: belirli gün nöbet TÜRÜ isteğini fiilen yerleştir
+      pref: function () {            // ÇALIŞMA TERCİHİ: belirli gün nöbet TÜRÜ isteği KOŞULSUZ yerleştirilir
+        // Açık istek, günün max nöbetçi sayısından bile özgüldür -> sayı sınırı UYGULANMAZ.
+        // Tek engel FİZİKSEL: üst üste nöbet olmaz + kişinin o günkü daha öncelikli kendi kaydı.
         people.forEach(function (Pp) {
           days.forEach(function (dd) {
             var d = dd.day, wants = Pp.onlyN16.has(d) ? 'NS' : (Pp.onlyN24.has(d) ? 'NL' : null);
             if (!wants) return;
-            if (oncallCount(d) >= oncallCap(dd)) return;          // günün max nöbetçisini aşma
             if (!prefEligible(Pp, d, wants)) return;              // dinlenme/uygunluk (sıra kararı: hücre durumu)
             placeCover(Pp, dd, wants);
           });

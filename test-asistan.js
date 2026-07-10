@@ -224,6 +224,14 @@ section('HAFTA SONU nöbet isteği de öncelik katmanında yerleşir (HT hücres
   ok(r.grid['P2'][11] === 'NS', 'hafta sonu kısa isteği yazılmalı (11 Tem ' + r.grid['P2'][11] + ')');
 })();
 
+section('İstek KOŞULSUZ: günün max nöbetçi sınırını bile aşar (açık istek > genel sınır)');
+(function () {
+  var r = run({ personnel: people(13, { 1: { onlyN16: [8] }, 2: { onlyN16: [8] }, 3: { onlyN16: [8] } }), __attempts: 20, __lsIter: 2000 });
+  ok(r.grid['P1'][8] === 'NS' && r.grid['P2'][8] === 'NS' && r.grid['P3'][8] === 'NS', '3 istek de yazılmalı (sınır 2 olsa bile)');
+  var c = 0; r.totals.forEach(function (t) { var x = r.grid[t.name][8]; if (x === 'NL' || x === 'NS') c++; });
+  ok(c === 3, 'fazladan nöbetçi eklenmemeli (gün ' + c + ')');
+})();
+
 section('Haftalık izin kaydırma: öncelikli kural günü alırsa OFF aynı haftaya kayar');
 (function () {
   // 7 Tem 2026 Salı; VELİ offDay=Salı + 7'ye uzun nöbet isteği
