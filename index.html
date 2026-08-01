@@ -110,9 +110,6 @@
   .help{font-size:11.5px;color:var(--muted);margin:0 0 10px;line-height:1.55}
   /* Kural özeti: panelin ilk gördüğün şeyi olsun */
   .savedinfo{font-size:11.5px;color:var(--muted);font-weight:400;margin-left:6px}
-  /* Salt-okunur paylaşım görünümü: düzenleme arayüzünün tamamı gizlenir */
-  body.readonly #rulePanel,body.readonly #monthPanel,body.readonly .toolbar,
-  body.readonly #personelPanel,body.readonly .ovl{display:none!important}
   .rsum{background:var(--inset);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
   .rsum-head{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
   .rsum-t{font-size:13px;font-weight:600;color:var(--txt)}
@@ -267,7 +264,6 @@
         <button class="sm" onclick="srvAddUnit()">Yeni birim</button>
         <button class="sm" onclick="srvAssignManager()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Yönetici ata</button>
         <button class="sm" onclick="srvRenameUnit()">Ad değiştir</button>
-        <button class="sm" onclick="srvShare()">Paylaşım linki</button>
         <span style="display:inline-block;width:1px;height:18px;background:var(--line2);margin:0 6px;vertical-align:middle"></span><button class="sm danger" onclick="srvDelUnit()">Birim sil</button>
       </span>
       <span id="savedInfo" class="savedinfo"></span>
@@ -970,7 +966,7 @@ async function loadUnit(id){ try{ const r=await fetch('/api/asistan/unit?id='+en
     if(r.status===401){location.reload();return;} if(!r.ok){flash('Birim yüklenemedi');return;}
     const un=await r.json();
     ACT={id:un.id,name:un.name,profile:un.profile||AsistanScheduler.defaultProfile(),cfg:un.cfg||null,
-         rev:un.rev||0,savedAt:un.savedAt||null,savedBy:un.savedBy||null,shareToken:un.shareToken||null};
+         rev:un.rev||0,savedAt:un.savedAt||null,savedBy:un.savedBy||null};
     fillRuleForm(); applyCfgServer(ACT.cfg); refreshProfSel(); generate();
     renderSavedInfo(); clearDirty();     // taze yüklendi → kirli değil
   }catch(e){ flash('Birim yüklenemedi'); } }
@@ -990,30 +986,6 @@ async function saveManager(){ const u=(document.getElementById('mgrUser').value|
 async function srvDelUnit(){ if(!ACT)return; if(!confirm('“'+ACT.name+'” birimi ve yöneticisi kalıcı silinsin mi?'))return;
   await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'delUnit',id:ACT.id})});
   await reloadUnits(); if(UNITS.length)await loadUnit(UNITS[0].id); else { ACT=null; document.getElementById('output').innerHTML=''; refreshProfSel(); } flash('Birim silindi'); }
-/* Paylaşım linki: nöbetçiler hesap açmadan kendi listelerini görsün.
-   Link salt-okunur; iptal edilince anında geçersiz olur. */
-async function srvShare(){
-  if(!ACT){ alert('Önce bir birim seçin'); return; }
-  if(ACT.shareToken){
-    const url=location.origin+'/?goruntule='+ACT.shareToken;
-    const sec=confirm('“'+ACT.name+'” için paylaşım linki zaten var:\n\n'+url+
-      '\n\nTamam = linki panoya kopyala\nİptal = linki İPTAL ET (eski link çalışmaz olur)');
-    if(sec){ try{ await navigator.clipboard.writeText(url); flash('Link kopyalandı ✓'); }catch(e){ prompt('Linki kopyalayın:',url); } return; }
-    const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),
-      body:JSON.stringify({action:'shareOff',id:ACT.id})});
-    if(r.ok){ ACT.shareToken=null; flash('Paylaşım linki iptal edildi'); } else flash('İptal edilemedi');
-    return;
-  }
-  const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),
-    body:JSON.stringify({action:'shareOn',id:ACT.id})});
-  const j=await r.json().catch(()=>({}));
-  if(!r.ok||!j.shareToken){ alert(j.error||'Link oluşturulamadı (yalnız admin yapabilir).'); return; }
-  ACT.shareToken=j.shareToken;
-  const url=location.origin+'/?goruntule='+j.shareToken;
-  try{ await navigator.clipboard.writeText(url); }catch(e){}
-  prompt('Paylaşım linki hazır — panoya kopyalandı.\n'+
-         'Bu linki açan kişi listeyi yalnızca GÖRÜNTÜLER, değiştiremez:',url);
-}
 async function srvRenameUnit(){ if(!ACT)return; const n=(prompt('Birim adı:',ACT.name)||'').trim(); if(!n)return;
   await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'renameUnit',id:ACT.id,name:n})}); ACT.name=n; await reloadUnits(); }
 
@@ -1025,39 +997,8 @@ if(location.hostname.endsWith('github.io')){
   location.replace('https://nobetasistani.vercel.app/'+location.search+location.hash);
 }
 
-/* ===== SALT-OKUNUR PAYLAŞIM GÖRÜNÜMÜ =====
-   ?goruntule=<anahtar> ile açılırsa: giriş istemez, yalnız o birimin
-   listesini üretip gösterir. Düzenleme arayüzünün tamamı gizlenir; hiçbir
-   yazma isteği atılmaz (uçta da yazma yolu yok). */
-async function publicView(token){
-  document.body.classList.add('readonly');
-  document.getElementById('loginOvl').style.display='none';
-  try{
-    const r=await fetch('/api/asistan/public?token='+encodeURIComponent(token),{cache:'no-store'});
-    const j=await r.json().catch(()=>({}));
-    if(!r.ok){ document.getElementById('output').innerHTML=
-      '<div class="warns">'+((j&&j.error)||'Bu bağlantı geçerli değil.')+'</div>'; return; }
-    document.querySelector('header .sub').textContent=j.name+' · nöbet listesi (görüntüleme)';
-    // SRV.on AÇIK kalmalı: curProfile() birimin profilini bu bayrağa göre
-    // seçiyor ve generate() yalnız kapalıyken yerel kayıt deniyor. Yazma
-    // riski yok — kaydeden tüm düğmeler gizli, kimlik başlığı da boş.
-    SRV.on=true; SRV.role='viewer';
-    ACT={id:null,name:j.name,profile:j.profile||AsistanScheduler.defaultProfile(),cfg:j.cfg||null};
-    fillRuleForm(); applyCfgServer(ACT.cfg);
-    if(document.querySelectorAll('#pbody .prow').length) generate();
-    else document.getElementById('output').innerHTML='<div class="warns">Bu birim için henüz liste hazırlanmamış.</div>';
-    const not=document.createElement('div'); not.className='note viewnote'; not.style.margin='0 0 12px';
-    not.textContent='Bu sayfa yalnızca görüntülemek içindir; değişiklik yapılamaz.'+
-      (j.savedAt?(' Son güncelleme: '+fmtSaved(j.savedAt)):'');
-    const out=document.getElementById('output'); out.parentNode.insertBefore(not,out);
-  }catch(e){ document.getElementById('output').innerHTML='<div class="warns">Liste yüklenemedi.</div>'; }
-}
-
 // ===== BAŞLAT =====
-(function(){
-  const t=new URLSearchParams(location.search).get('goruntule');
-  if(t) publicView(t); else asInit();
-})();
+asInit();
 </script>
 </body>
 </html>
