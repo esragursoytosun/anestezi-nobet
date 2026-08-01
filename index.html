@@ -119,6 +119,9 @@
   .reqtag{font-size:11px;color:var(--muted);border:1px solid var(--line2);border-radius:4px;padding:1px 6px;margin-left:6px}
   .reqdet{font-size:12.5px;color:var(--txt);margin-top:3px}
   .reqnot{font-size:12px;color:var(--muted);margin-top:3px}
+  .talepnot{background:var(--inset);border:1px solid var(--line);border-left:3px solid var(--accent2);
+    border-radius:6px;padding:11px 13px;font-size:12.5px;color:var(--muted);line-height:1.6;margin-bottom:14px}
+  .talepnot b{color:var(--txt)}
   .reqlinkhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:13px}
   .reqhelp{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
   .reqhelp-t{font-size:12.5px;font-weight:600;color:var(--txt);margin-bottom:6px}
@@ -175,6 +178,12 @@
   .daterange span{color:var(--muted)} .daterange input[type=date]{width:122px;min-width:0;padding:5px 6px}
   /* ---- toolbar ---- */
   .toolbar{position:sticky;top:0;z-index:5;background:rgba(13,17,23,.94);backdrop-filter:blur(8px);padding:11px 0;display:flex;gap:9px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--line)}
+  .dirtyflag{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#e3b341;
+    background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.4);border-radius:6px;padding:5px 10px}
+  .dirtyflag::before{content:'';width:7px;height:7px;border-radius:50%;background:#e3b341;flex-shrink:0}
+  @keyframes kaydetVurgu{0%,100%{box-shadow:0 0 0 0 rgba(46,160,67,.5)}50%{box-shadow:0 0 0 5px rgba(46,160,67,0)}}
+  button.save.pulse{animation:kaydetVurgu 1.8s ease-out infinite}
+  @media(prefers-reduced-motion:reduce){button.save.pulse{animation:none;outline:2px solid #2ea043;outline-offset:2px}}
   button.save{background:var(--ok);color:#fff;font-weight:600;padding:8px 20px;font-size:13.5px;border-color:rgba(255,255,255,.09)}
   button.save:hover{background:#2ea043}
   /* ---- alternatif şerit ---- */
@@ -470,6 +479,7 @@
 
   <div class="toolbar noprint">
     <button class="save" onclick="saveAll()">Kaydet</button>
+    <span id="dirtyFlag" class="dirtyflag" style="display:none">Kaydedilmemiş değişiklik var</span>
     <button onclick="generate()">Liste Oluştur</button>
     <span style="width:1px;height:24px;background:var(--line)"></span>
     <button class="sec sm" onclick="exportXLS()">Excel</button>
@@ -768,8 +778,16 @@ function readCfg(){ return { year:parseInt(document.getElementById('year').value
    başarılı olunca temizlenir. Programatik doldurma (fillRuleForm vb.)
    olay tetiklemediği için yanlış uyarı çıkmaz. */
 let DIRTY=false;
-function markDirty(){ DIRTY=true; }
-function clearDirty(){ DIRTY=false; }
+/* Tarayıcı uyarısı yalnız SAYFADAN ÇIKARKEN görünüyor. Kullanıcı sayfadayken
+   de kaydedilmemiş değişiklik olduğunu görmeli: Kaydet düğmesi yanında kalıcı
+   bir uyarı çıkar ve düğme vurgulanır. */
+function paintDirty(){
+  const b=document.getElementById('dirtyFlag'); if(b) b.style.display=DIRTY?'':'none';
+  const k=document.querySelector('.toolbar button.save'); if(k) k.classList.toggle('pulse',DIRTY);
+  document.title=(DIRTY?'• ':'')+'Nöbet Planlama Asistanı';
+}
+function markDirty(){ if(!DIRTY){ DIRTY=true; paintDirty(); } }
+function clearDirty(){ if(DIRTY){ DIRTY=false; paintDirty(); } else paintDirty(); }
 ['input','change'].forEach(ev=>document.addEventListener(ev,e=>{
   const t=e.target; if(!t||t.id==='showAll'||t.id==='hlPerson'||t.id==='pSearch') return;   // görünüm kontrolleri sayılmaz
   if(t.closest('#rulePanel,#pbody,#monthPanel')){ markDirty(); scheduleCapWarn(); }
@@ -1401,8 +1419,12 @@ async function talepSayfasi(token){
     kok.innerHTML=`
       <div class="panel">
         <h2>Merhaba ${escapeHtml(j.ad)}</h2>
-        ${acik?`<p class="help">Yıllık izin, boş gün gibi taleplerinizi buradan iletebilirsiniz.
-          Talepler <b>otomatik uygulanmaz</b>; birim yöneticiniz görüp değerlendirir.</p>
+        ${acik?`<div class="talepnot"><b>Nasıl işliyor?</b>
+          Buradan gönderdiğiniz talepler nöbet listesine <b>otomatik işlenmez</b>.
+          Birim yöneticiniz talebinizi görür, uygun olup olmadığını değerlendirir ve
+          uygunsa listeyi kendisi düzenler. Yani <b>talep göndermek onay anlamına gelmez</b> —
+          kesinleşip kesinleşmediğini yayımlanan nöbet listesinden takip edin.
+          Yanlış gönderdiyseniz aşağıdan <b>Geri al</b> diyebilirsiniz.</div>
         <div class="row" style="align-items:flex-start">
           <div class="fld"><label>Talep türü</label>
             <select id="tTur" onchange="talepAlanlar()">
