@@ -1,312 +1,100 @@
 /* =====================================================================
-   ANESTEZİ NÖBET — ORTAK/CANLI sunucu (Utopya benzeri)
+   ANESTEZİ NÖBET — YEREL GELİŞTİRME SUNUCUSU
    ---------------------------------------------------------------------
-   - Statik dosyaları (index.html, scheduler.js) sunar.
-   - /api/state  GET  -> kayıtlı ortak durumu döndürür { cfg, grid, rev, savedAt, by }
-                 POST -> ortak durumu kaydeder (gövdede cfg/grid). rev artar.
-   - Depo: MongoDB (MONGODB_URI varsa) yoksa data/state.json dosyası.
-   - İstemci ~2 sn'de bir poll eder; rev değişince (arkadaş kaydetti) güncellenir.
-   - Aynı anda iki kişi çalışabilir; kayıt "son yazan" mantığıyla birleşir (rev ile çakışma görünür).
+   Canlı yayın artık Vercel'de: statik dosyalar kökten, API'ler api/*.js
+   serverless fonksiyonlarından servis edilir. Bu dosya aynı rotaları
+   YEREL'de tek süreçte ayağa kaldırır (npm start), böylece geliştirirken
+   Vercel CLI'ya gerek kalmaz.
+
+   Tüm iş mantığı lib/core.js'te — TEK KAYNAK. Buradaki kod yalnız HTTP
+   yönlendirmesi ve statik dosya sunumudur; kural değişikliği core'da
+   yapılır ve hem burada hem Vercel'de aynı anda geçerli olur.
    ===================================================================== */
 'use strict';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
+const core = require('./lib/core');
 
 const PORT = process.env.PORT || 8090;
 const ROOT = __dirname;
-const DATA_DIR = path.join(ROOT, 'data');
-const FILE = path.join(DATA_DIR, 'state.json');
-const MONGODB_URI = process.env.MONGODB_URI;
-const DOC_ID = 'anestezi_state';
-// Kullanıcılar state.users içinde saklanır. İlk kurulumda yönetici tohumlanır:
-//   kullanıcı adı: ADMIN_USER (vars. "admin"), şifre: APP_PASSWORD (vars. "anestezi2026").
-// Render'da bu ikisini ortam değişkeniyle değiştirin. Yöneticiler "Ayarlar"dan kullanıcı yönetir.
-const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASS = process.env.APP_PASSWORD || 'anestezi2026';
 
-// ---- ŞİFRE HASH (scrypt+salt) + OTURUM TOKEN'I (imzalı, durumsuz) ----
-// Şifreler artık düz metin saklanmaz. Oturumlar imzalı token ile yürür; şifre yalnız
-// GİRİŞTE doğrulanır (yavaş scrypt), sonraki her istekte ucuz HMAC token doğrulaması yapılır.
-const TOKEN_SECRET = process.env.SESSION_SECRET || ADMIN_PASS || 'asistan-secret';
-function hashPw(pw) { const salt = crypto.randomBytes(16).toString('hex');
-  return 'scrypt$' + salt + '$' + crypto.scryptSync(String(pw), salt, 32).toString('hex'); }
-function verifyPw(pw, stored) { const parts = String(stored || '').split('$');
-  if (parts[0] !== 'scrypt' || parts.length !== 3) return false;
-  const h = crypto.scryptSync(String(pw), parts[1], 32);
-  const b = Buffer.from(parts[2], 'hex');
-  return h.length === b.length && crypto.timingSafeEqual(h, b); }
-function makeToken(u, role, unitId) {
-  const p = Buffer.from(JSON.stringify({ u: u, role: role, unitId: unitId == null ? null : unitId })).toString('base64url');
-  const sig = crypto.createHmac('sha256', TOKEN_SECRET).update(p).digest('base64url');
-  return p + '.' + sig; }
-function verifyToken(t) { if (!t || String(t).indexOf('.') < 0) return null;
-  const ix = t.indexOf('.'), p = t.slice(0, ix), sig = t.slice(ix + 1);
-  const exp = crypto.createHmac('sha256', TOKEN_SECRET).update(p).digest('base64url');
-  try { if (sig.length !== exp.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(exp))) return null;
-    return JSON.parse(Buffer.from(p, 'base64url').toString()); } catch (e) { return null; } }
-function findUser(st, u, p) {
-  // ANA YÖNETİCİ ANAHTARI: ortam değişkenindeki ADMIN_USER+APP_PASSWORD HER ZAMAN geçerli
-  // (kayıtlı kullanıcılardan bağımsız) -> asla kilitlenme, şifre sonradan değişse de env ile girilir.
-  if (u === ADMIN_USER && p === ADMIN_PASS) return { u: ADMIN_USER, p: ADMIN_PASS, admin: true };
-  return (st.users || []).find(x => x.u === u && x.p === p) || null;
+const MIME = {
+    '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
+    '.csv': 'text/csv; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon',
+};
+
+function sendJSON(res, code, obj) {
+    res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(obj));
 }
-// Her /api/* isteği X-User + X-Auth taşır; geçerli kullanıcıyı döndürür (yoksa null).
-async function reqUser(req) { const st = await loadState(); return findUser(st, req.headers['x-user'] || '', req.headers['x-auth'] || ''); }
-
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.csv': 'text/csv; charset=utf-8',
-  '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
-
-function emptyState() { return { cfg: null, grid: null, rev: 0, savedAt: null, by: null, users: [] }; }
-
-// ---- MongoDB (opsiyonel) ----
-let _col = null, _mongoTried = false;
-async function getCol() {
-  if (!MONGODB_URI) return null;
-  if (_col) return _col;
-  if (_mongoTried && !_col) return null;
-  _mongoTried = true;
-  try {
-    const { MongoClient } = require('mongodb');
-    const client = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
-    await client.connect();
-    _col = client.db('anestezi').collection('state');
-    console.log('[db] MongoDB bağlandı.');
-    return _col;
-  } catch (e) {
-    console.error('[db] MongoDB bağlanamadı, dosya kullanılacak:', e.message);
-    return null;
-  }
-}
-async function loadState() {
-  const col = await getCol();
-  if (col) {
-    try {
-      const doc = await col.findOne({ _id: DOC_ID });
-      if (!doc) return seed(emptyState());
-      const { _id, ...rest } = doc; return seed(Object.assign(emptyState(), rest));
-    } catch (e) { console.error('[db] load hata, dosya:', e.message); }
-  }
-  try { if (fs.existsSync(FILE)) return seed(Object.assign(emptyState(), JSON.parse(fs.readFileSync(FILE, 'utf8')))); }
-  catch (e) { console.error('[db] dosya okuma hata:', e.message); }
-  return seed(emptyState());
-}
-// Hiç kullanıcı yoksa yöneticiyi tohumla (kilitlenmeyi önler; admin asla yok olmaz).
-function seed(st) { if (!st.users || !st.users.length) st.users = [{ u: ADMIN_USER, p: ADMIN_PASS, admin: true }]; return st; }
-async function saveState(st) {
-  const col = await getCol();
-  if (col) {
-    try { await col.replaceOne({ _id: DOC_ID }, Object.assign({ _id: DOC_ID }, st), { upsert: true }); return; }
-    catch (e) { console.error('[db] save hata, dosya:', e.message); }
-  }
-  try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(FILE, JSON.stringify(st), 'utf8'); }
-  catch (e) { console.error('[db] dosya yazma hata:', e.message); }
+function readBody(req, cb) {
+    let b = '';
+    req.on('data', c => { b += c; if (b.length > 6e6) req.destroy(); });
+    req.on('end', () => { try { cb(JSON.parse(b || '{}')); } catch (e) { cb(null); } });
 }
 
-function sendJSON(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
-function pub(st) { const r = Object.assign({}, st); delete r.users; return r; }   // şifreleri istemciye gönderme
-
-// ===================== NÖBET PLANLAMA ASİSTANI (çok birimli, ayrı doc) =====================
-// Anestezi uçlarından BAĞIMSIZ. Ayrı doc 'asistan_state' / dosya 'asistan.json'.
-//   { units:[{id,name,profile,cfg}], users:[{u,p,role:'admin'|'manager',unitId}], rev }
-// Admin: env ADMIN_USER+APP_PASSWORD HER ZAMAN geçerli (süper-admin) + kayıtlı 'admin' rollü kullanıcılar.
-const A_DOC = 'asistan_state';
-const A_FILE = path.join(DATA_DIR, 'asistan.json');
-function aEmpty() { return { units: [], users: [], rev: 0 }; }
-async function loadAsistan() {
-  const col = await getCol();
-  if (col) { try { const d = await col.findOne({ _id: A_DOC }); if (d) { const { _id, ...r } = d; return Object.assign(aEmpty(), r); } return aEmpty(); }
-    catch (e) { console.error('[db] asistan load hata:', e.message); } }
-  try { if (fs.existsSync(A_FILE)) return Object.assign(aEmpty(), JSON.parse(fs.readFileSync(A_FILE, 'utf8'))); } catch (e) {}
-  return aEmpty();
-}
-async function saveAsistan(st) {
-  const col = await getCol();
-  if (col) { try { await col.replaceOne({ _id: A_DOC }, Object.assign({ _id: A_DOC }, st), { upsert: true }); return; }
-    catch (e) { console.error('[db] asistan save hata:', e.message); } }
-  try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(A_FILE, JSON.stringify(st), 'utf8'); } catch (e) {}
-}
-function aFindUser(st, u, p) {
-  if (u && u === ADMIN_USER && p === ADMIN_PASS) return { u: ADMIN_USER, role: 'admin', unitId: null };
-  var usr = (st.users || []).find(x => x.u === u); if (!usr) return null;
-  if (usr.pw) return verifyPw(p, usr.pw) ? usr : null;          // hash'li (yeni)
-  if (usr.p !== undefined) return usr.p === p ? usr : null;      // eski düz metin (girişte hash'e yükseltilir)
-  return null;
-}
-async function aReqUser(req) {
-  const u = req.headers['x-user'] || '', auth = req.headers['x-auth'] || '';
-  const tk = verifyToken(auth);                                  // yeni oturum: imzalı token (ucuz doğrulama)
-  if (tk && tk.u === u) return tk;
-  const st = await loadAsistan(); return aFindUser(st, u, auth); // eski oturum: X-Auth düz metin şifre (geçiş)
-}
-function aCanAccess(me, unitId) { return me && (me.role === 'admin' || me.unitId === unitId); }
-function aReadBody(req, cb) { let b = ''; req.on('data', c => { b += c; if (b.length > 6e6) req.destroy(); }); req.on('end', () => { try { cb(JSON.parse(b || '{}')); } catch (e) { cb(null); } }); }
-
-const server = http.createServer(async (req, res) => {
-  const u = new URL(req.url, 'http://x');
-
-  // ---- Giriş: kullanıcı adı + şifre ----
-  if (u.pathname === '/api/login' && req.method === 'POST') {
-    let body = '';
-    req.on('data', c => { body += c; if (body.length > 1e4) req.destroy(); });
-    req.on('end', async () => {
-      try { const b = JSON.parse(body || '{}'); const st = await loadState();
-        const usr = findUser(st, (b.username || '').trim(), b.password || '');
-        if (usr) return sendJSON(res, 200, { ok: true, username: usr.u, admin: !!usr.admin });
-        return sendJSON(res, 401, { ok: false, error: 'Kullanıcı adı veya şifre hatalı' });
-      } catch (e) { return sendJSON(res, 400, { error: e.message }); }
+/** api/*.js fonksiyonlarını Node'un http sunucusunda çalıştırmak için ince köprü:
+ *  Vercel'in verdiği req.body / req.query / res.status().json() arayüzünü taklit eder. */
+function runHandler(handler, req, res, query, body) {
+    req.body = body;
+    req.query = query;
+    res.status = code => { res._code = code; return res; };
+    res.json = obj => sendJSON(res, res._code || 200, obj);
+    const origSetHeader = res.setHeader.bind(res);
+    res.setHeader = (k, v) => { if (!res.headersSent) origSetHeader(k, v); };
+    Promise.resolve(handler(req, res)).catch(err => {
+        console.error('[api] hata:', err);
+        if (!res.headersSent) sendJSON(res, 500, { error: 'Sunucu hatası' });
     });
-    return;
-  }
+}
 
-  // ---- Şifre değiştir (giriş yapan kendi şifresini) ----
-  if (u.pathname === '/api/changepw' && req.method === 'POST') {
-    const me = await reqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
-    let body = ''; req.on('data', c => { body += c; });
-    req.on('end', async () => { try {
-      const np = ((JSON.parse(body || '{}').newPass) || '').trim();
-      if (np.length < 3) return sendJSON(res, 400, { error: 'Şifre en az 3 karakter olmalı' });
-      const st = await loadState(); const usr = st.users.find(x => x.u === me.u);
-      if (usr) { usr.p = np; await saveState(st); }
-      return sendJSON(res, 200, { ok: true, newPass: np });
-    } catch (e) { sendJSON(res, 400, { error: e.message }); } });
-    return;
-  }
+// Yol -> fonksiyon eşlemesi (Vercel'deki dosya-tabanlı yönlendirmenin aynısı)
+const ROUTES = {
+    '/api/login': require('./api/login'),
+    '/api/changepw': require('./api/changepw'),
+    '/api/users': require('./api/users'),
+    '/api/state': require('./api/state'),
+    '/api/asistan/login': require('./api/asistan/login'),
+    '/api/asistan/units': require('./api/asistan/units'),
+    '/api/asistan/unit': require('./api/asistan/unit'),
+    '/api/asistan/admin': require('./api/asistan/admin'),
+};
 
-  // ---- Kullanıcı yönetimi (liste herkese; ekle/sil/şifre yalnız yönetici) ----
-  if (u.pathname === '/api/users') {
-    const me = await reqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
-    if (req.method === 'GET') { const st = await loadState();
-      return sendJSON(res, 200, { users: st.users.map(x => ({ u: x.u, admin: !!x.admin })), admin: !!me.admin, me: me.u }); }
-    if (req.method === 'POST') {
-      if (!me.admin) return sendJSON(res, 403, { error: 'Bu işlem için yönetici olmalısınız' });
-      let body = ''; req.on('data', c => { body += c; });
-      req.on('end', async () => { try {
-        const b = JSON.parse(body || '{}'); const st = await loadState(); const list = st.users;
-        if (b.action === 'add') { const uu = (b.u || '').trim(), pp = (b.p || '').trim();
-          if (!uu || !pp) return sendJSON(res, 400, { error: 'Kullanıcı adı ve şifre gerekli' });
-          if (list.some(x => x.u === uu)) return sendJSON(res, 400, { error: 'Bu kullanıcı adı zaten var' });
-          list.push({ u: uu, p: pp, admin: !!b.admin }); }
-        else if (b.action === 'remove') { if (b.u === me.u) return sendJSON(res, 400, { error: 'Kendinizi silemezsiniz' });
-          const i = list.findIndex(x => x.u === b.u); if (i >= 0) list.splice(i, 1); }
-        else if (b.action === 'setpass') { const usr = list.find(x => x.u === b.u); if (usr && b.p) usr.p = b.p; }
-        else return sendJSON(res, 400, { error: 'bilinmeyen işlem' });
-        await saveState(st);
-        return sendJSON(res, 200, { ok: true, users: list.map(x => ({ u: x.u, admin: !!x.admin })) });
-      } catch (e) { sendJSON(res, 400, { error: e.message }); } });
-      return;
+const server = http.createServer((req, res) => {
+    const u = new URL(req.url, 'http://x');
+    const handler = ROUTES[u.pathname];
+
+    if (handler) {
+        const query = Object.fromEntries(u.searchParams.entries());
+        if (req.method === 'GET' || req.method === 'HEAD') return runHandler(handler, req, res, query, {});
+        return readBody(req, body => runHandler(handler, req, res, query, body || {}));
     }
-    return sendJSON(res, 405, { error: 'method' });
-  }
 
-  // ---- Ortak durum (giriş gerekli; yanıtta şifreler GİZLENİR) ----
-  if (u.pathname === '/api/state') {
-    const me = await reqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
-    if (req.method === 'GET') { const st = await loadState(); return sendJSON(res, 200, pub(st)); }
-    if (req.method === 'POST') {
-      let body = '';
-      req.on('data', c => { body += c; if (body.length > 5e6) req.destroy(); });
-      req.on('end', async () => {
-        try {
-          const incoming = JSON.parse(body || '{}');
-          const cur = await loadState();
-          const next = Object.assign({}, cur, {
-            cfg: incoming.cfg !== undefined ? incoming.cfg : cur.cfg,
-            grid: incoming.grid !== undefined ? incoming.grid : cur.grid,
-            rev: (cur.rev || 0) + 1, savedAt: new Date().toISOString(), by: incoming.by || me.u });
-          await saveState(next);
-          sendJSON(res, 200, pub(next));
-        } catch (e) { sendJSON(res, 400, { error: e.message }); }
-      });
-      return;
-    }
-    return sendJSON(res, 405, { error: 'method' });
-  }
-
-  // ===================== ASİSTAN ROTALARI =====================
-  if (u.pathname === '/api/asistan/login' && req.method === 'POST') {
-    aReadBody(req, async b => { if (!b) return sendJSON(res, 400, { error: 'gövde' });
-      const st = await loadAsistan(); const pass = b.password || ''; const usr = aFindUser(st, (b.username || '').trim(), pass);
-      if (usr) {
-        if (usr.role !== 'admin' && usr.p !== undefined && !usr.pw) { usr.pw = hashPw(pass); delete usr.p; await saveAsistan(st); }  // eski düz-metni yükselt
-        const token = makeToken(usr.u, usr.role, usr.unitId == null ? null : usr.unitId);
-        return sendJSON(res, 200, { ok: true, username: usr.u, role: usr.role, unitId: usr.unitId == null ? null : usr.unitId, token: token });
-      }
-      return sendJSON(res, 401, { ok: false, error: 'Kullanıcı adı veya şifre hatalı' }); });
-    return;
-  }
-  if (u.pathname === '/api/asistan/units' && req.method === 'GET') {
-    const me = await aReqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
-    const st = await loadAsistan();
-    const mgr = uid => (st.users || []).filter(x => x.role === 'manager' && x.unitId === uid).map(x => x.u);
-    let list = (st.units || []).map(un => ({ id: un.id, name: un.name, managers: mgr(un.id) }));
-    if (me.role !== 'admin') list = list.filter(un => un.id === me.unitId);
-    return sendJSON(res, 200, { units: list, role: me.role, unitId: me.unitId == null ? null : me.unitId, me: me.u });
-  }
-  if (u.pathname === '/api/asistan/unit') {
-    const me = await aReqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
-    const id = u.searchParams.get('id');
-    if (!aCanAccess(me, id)) return sendJSON(res, 403, { error: 'Bu birime erişim yetkiniz yok' });
-    if (req.method === 'GET') { const st = await loadAsistan(); const un = (st.units || []).find(x => x.id === id);
-      if (!un) return sendJSON(res, 404, { error: 'birim yok' }); return sendJSON(res, 200, { id: un.id, name: un.name, profile: un.profile || null, cfg: un.cfg || null }); }
-    if (req.method === 'POST') { aReadBody(req, async b => { if (!b) return sendJSON(res, 400, { error: 'gövde' });
-      const st = await loadAsistan(); const un = (st.units || []).find(x => x.id === id); if (!un) return sendJSON(res, 404, { error: 'birim yok' });
-      if (b.profile !== undefined) un.profile = b.profile; if (b.cfg !== undefined) un.cfg = b.cfg; if (b.name && me.role === 'admin') un.name = b.name;
-      st.rev = (st.rev || 0) + 1; await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }); return; }
-    return sendJSON(res, 405, { error: 'method' });
-  }
-  if (u.pathname === '/api/asistan/admin' && req.method === 'POST') {
-    const me = await aReqUser(req); if (!me) return sendJSON(res, 401, { error: 'Giriş gerekli' });
-    if (me.role !== 'admin') return sendJSON(res, 403, { error: 'Yalnız admin' });
-    aReadBody(req, async b => { if (!b) return sendJSON(res, 400, { error: 'gövde' });
-      const st = await loadAsistan(); st.units = st.units || []; st.users = st.users || [];
-      if (b.action === 'addUnit') { const id = 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
-        st.units.push({ id, name: (b.name || 'Birim').trim(), profile: b.profile || null, cfg: b.cfg || null });
-        st.rev = (st.rev || 0) + 1; await saveAsistan(st); return sendJSON(res, 200, { ok: true, id }); }
-      if (b.action === 'delUnit') { st.units = st.units.filter(x => x.id !== b.id); st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id));
-        await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
-      if (b.action === 'setManager') { const uu = (b.username || '').trim(), pp = (b.password || '').trim();
-        if (!uu || !pp) return sendJSON(res, 400, { error: 'Kullanıcı adı ve şifre gerekli' });
-        if (st.users.some(x => x.u === uu && !(x.role === 'manager' && x.unitId === b.id))) return sendJSON(res, 400, { error: 'Bu kullanıcı adı başka yerde kullanılıyor' });
-        st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id));   // birimde tek yönetici (değiştir)
-        st.users.push({ u: uu, pw: hashPw(pp), role: 'manager', unitId: b.id }); await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
-      if (b.action === 'removeManager') { st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id)); await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
-      if (b.action === 'renameUnit') { const un = st.units.find(x => x.id === b.id); if (un) un.name = (b.name || un.name).trim(); await saveAsistan(st); return sendJSON(res, 200, { ok: true }); }
-      return sendJSON(res, 400, { error: 'bilinmeyen işlem' });
+    // ---- statik dosyalar ----
+    let p = decodeURIComponent(u.pathname);
+    if (p === '/' || p === '') p = '/index.html';
+    const fp = path.join(ROOT, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
+    if (!fp.startsWith(ROOT)) { res.writeHead(403); return res.end('forbidden'); }
+    fs.readFile(fp, (err, data) => {
+        if (err) { res.writeHead(404); return res.end('not found'); }
+        const ext = path.extname(fp);
+        const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
+        // HTML'i ASLA önbelleğe alma -> her açılışta en güncel sürüm gelir.
+        if (ext === '.html') headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+        res.writeHead(200, headers);
+        res.end(data);
     });
-    return;
-  }
-
-  // ---- statik dosyalar ----
-  let p = decodeURIComponent(u.pathname);
-  if (p === '/' || p === '') p = '/index.html';
-  const fp = path.join(ROOT, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
-  if (!fp.startsWith(ROOT)) { res.writeHead(403); return res.end('forbidden'); }
-  fs.readFile(fp, (err, data) => {
-    if (err) { res.writeHead(404); return res.end('not found'); }
-    var ext = path.extname(fp);
-    var headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
-    // HTML'i ASLA önbelleğe alma -> kullanıcı her açılışta en güncel sürümü (ve ?v=N ile en güncel motoru) alır.
-    // (Tekrarlayan "değişmiyor" sorununun kalıcı çözümü.) JS/CSS ?v=N ile zaten sürümlenir, onlar cache'lenebilir.
-    if (ext === '.html') headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-    res.writeHead(200, headers);
-    res.end(data);
-  });
 });
 
-// Sağlık ucu (uyumama ping'i buraya gelir, hafif).
-// (statik handler '/healthz' yolunu dosya arar; aşağıdaki kısayolu eklemek için handler'da değil
-//  burada basit tutuyoruz: '/' zaten index.html veriyor, ping '/' veya RENDER_EXTERNAL_URL'a gider.)
+server.listen(PORT, () => console.log(
+    'Anestezi yerel sunucu: http://localhost:' + PORT +
+    (process.env.MONGODB_URI ? ' (MongoDB)' : ' (dosya: data/)')
+));
 
-server.listen(PORT, () => console.log('Anestezi ortak sunucu: http://localhost:' + PORT + (MONGODB_URI ? ' (MongoDB)' : ' (dosya)')));
-
-// ---- UYUMAMA: Render Free 15 dk hareketsizlikte uyur. Kendi genel adresimize ~13 dk'da bir
-//      istek atarak uyanık tutarız (RENDER_EXTERNAL_URL'i Render otomatik verir). Bedava, ek servis yok.
-const SELF_URL = process.env.RENDER_EXTERNAL_URL;
-if (SELF_URL && typeof fetch === 'function') {
-  setInterval(() => { fetch(SELF_URL).catch(() => {}); }, 13 * 60 * 1000);
-  console.log('[keepalive] uyumama aktif:', SELF_URL);
-}
+// NOT: Eskiden burada Render'ın 15 dakikalık uykusuna karşı 13 dakikada bir
+// kendimize istek atan bir "uyumama" zamanlayıcısı vardı. Servisi 7/24 uyanık
+// tuttuğu için ücretsiz kotayı tek başına tüketiyordu. Vercel'de uyuma diye bir
+// şey olmadığından tamamen kaldırıldı.
