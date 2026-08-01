@@ -441,8 +441,8 @@
     </div></div>
     <div style="margin-top:10px;display:flex;gap:8px">
       <div id="capWarn"></div>
-      <button class="sec sm" onclick="addPerson()">+ Personel ekle</button>
-      <button class="sec sm" onclick="resetNames()">Varsayılan 12 isim</button>
+      <button class="sec sm" onclick="addPerson();markDirty()">+ Personel ekle</button>
+      <button class="sec sm" onclick="resetNames();markDirty();scheduleCapWarn()">Varsayılan 12 isim</button>
     </div>
     <div class="note" style="margin-top:8px"><b>Yıllık izin</b>: tarih aralığı (başlangıç–bitiş) seçin; isterseniz "+ izin ekle" ile birden çok dönem. İzin başka aylara taşsa bile yalnız bu ayın günleri sayılır.</div>
   </div>
@@ -539,7 +539,7 @@ function renderPrio(){ const box=document.getElementById('prioList'); if(!box)re
     <span style="flex:1;font-size:12.5px">${PRIO_LABELS[k]}</span>
     <button type="button" class="sm" onclick="movePrio(${i},-1)" ${i===0?'disabled':''}>↑</button>
     <button type="button" class="sm" onclick="movePrio(${i},1)" ${i===po.length-1?'disabled':''}>↓</button></div>`).join(''); }
-function movePrio(i,dir){ const p=curProfile(); const po=prioOf(p); const j=i+dir; if(j<0||j>=po.length)return;
+function movePrio(i,dir){ markDirty(); const p=curProfile(); const po=prioOf(p); const j=i+dir; if(j<0||j>=po.length)return;
   const t=po[i]; po[i]=po[j]; po[j]=t; p.priorityOrder=po; saveProfiles(); renderPrio(); }
 function fillRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; if(el.type==='checkbox')el.checked=!!p[f]; else el.value=p[f];});
@@ -569,10 +569,10 @@ function readCustomShifts(){ const p=curProfile(); const rows=[...document.query
     return { code: old.code||('C'+Date.now().toString(36)+i), label:(r.querySelector('.cs-label').value||('Özel '+(i+1))),
       hours:parseFloat(r.querySelector('.cs-hours').value)||0, daytime:r.querySelector('.cs-daytime').checked,
       color: old.color||CUSTOM_COLORS[i%CUSTOM_COLORS.length] }; }); }
-function addCustomShift(){ const p=curProfile(); p.customShifts=p.customShifts||[]; const i=p.customShifts.length;
+function addCustomShift(){ markDirty(); const p=curProfile(); p.customShifts=p.customShifts||[]; const i=p.customShifts.length;
   p.customShifts.push({code:'C'+Date.now().toString(36)+i, label:'Özel '+(i+1), hours:12, daytime:true, color:CUSTOM_COLORS[i%CUSTOM_COLORS.length]});
   saveProfiles(); renderCustomShifts(); }
-function rmCustomShift(i){ const p=curProfile(); (p.customShifts||[]).splice(i,1); saveProfiles(); renderCustomShifts(); }
+function rmCustomShift(i){ markDirty(); const p=curProfile(); (p.customShifts||[]).splice(i,1); saveProfiles(); renderCustomShifts(); }
 document.getElementById('rulePanel').addEventListener('input',e=>{ if(e.target.closest('#ruleBody')) readRuleForm(); });
 document.getElementById('profSel').addEventListener('change',e=>{ if(SRV.on){ loadUnit(e.target.value); } else { PROF_I=parseInt(e.target.value,10); saveProfiles(); fillRuleForm(); } });
 function newProfile(){ const n=(prompt('Yeni birim adı (örn. Anestezi, Yenidoğan Yakın İzlem):','Yenidoğan Yakın İzlem')||'').trim(); if(!n)return; const p=AsistanScheduler.defaultProfile(); p.name=n; PROFILES.push(p); PROF_I=PROFILES.length-1; saveProfiles(); refreshProfSel(); fillRuleForm(); }
@@ -640,8 +640,8 @@ function yiRangeHtml(s,e){ return `<div class="daterange"><input type="date" cla
   +`<input type="date" class="p-yi-e" value="${e||''}"><button type="button" class="sm danger yix" onclick="rmYi(this)" title="Sil" style="padding:2px 7px;display:none">×</button></div>`; }
 function yiCellHtml(){ return `<div class="yi-list">${yiRangeHtml('','')}</div><button type="button" class="sm sec" onclick="addYi(this)" style="margin-top:4px">+ izin ekle</button>`; }
 function updateYiX(cell){ const list=cell.querySelector('.yi-list'); const multi=list.children.length>1; list.querySelectorAll('.yix').forEach(x=>x.style.display=multi?'inline-block':'none'); }
-function addYi(btn){ const cell=btn.closest('.leave'); cell.querySelector('.yi-list').insertAdjacentHTML('beforeend',yiRangeHtml('','')); updateDateBounds(); updateYiX(cell); }
-function rmYi(btn){ const cell=btn.closest('.leave'),row=btn.closest('.daterange'),list=cell.querySelector('.yi-list');
+function addYi(btn){ markDirty(); const cell=btn.closest('.leave'); cell.querySelector('.yi-list').insertAdjacentHTML('beforeend',yiRangeHtml('','')); updateDateBounds(); updateYiX(cell); }
+function rmYi(btn){ markDirty(); scheduleCapWarn(); const cell=btn.closest('.leave'),row=btn.closest('.daterange'),list=cell.querySelector('.yi-list');
   if(list.children.length>1)row.remove(); else {row.querySelector('.p-yi-s').value='';row.querySelector('.p-yi-e').value='';} updateYiX(cell); }
 function rangesOf(tr){ return [...tr.querySelectorAll('.yi-list .daterange')].map(d=>({s:d.querySelector('.p-yi-s').value,e:d.querySelector('.p-yi-e').value})).filter(r=>r.s); }
 function leaveDaysOf(tr){ const set=new Set(); rangesOf(tr).forEach(r=>rangeToDays(r.s,r.e).forEach(d=>set.add(d))); return [...set].sort((a,b)=>a-b); }
@@ -670,11 +670,11 @@ function addPerson(name){
     <div class="rowact">
       <button class="sm" onclick="moveRow(this,-1)" title="Yukarı taşı">↑</button>
       <button class="sm" onclick="moveRow(this,1)" title="Aşağı taşı">↓</button>
-      <button class="sm danger" onclick="this.closest('.prow').remove();renumber()" title="Sil">×</button></div>`;
+      <button class="sm danger" onclick="this.closest('.prow').remove();renumber();markDirty();scheduleCapWarn()" title="Sil">×</button></div>`;
   document.getElementById('pbody').appendChild(row); renumber(); updateDateBounds();
 }
 function pmode(el){ const row=el.closest('.prow'); if(!el.checked)return; ['p-sorumlu','p-dayonly','p-onlynobet'].forEach(c=>{ if(!el.classList.contains(c)){ const o=row.querySelector('.'+c); if(o)o.checked=false; } }); }
-function moveRow(btn,dir){ const row=btn.closest('.prow'), p=row.parentNode;
+function moveRow(btn,dir){ markDirty(); const row=btn.closest('.prow'), p=row.parentNode;
   if(dir<0){ const prev=row.previousElementSibling; if(prev)p.insertBefore(row,prev); }
   else { const next=row.nextElementSibling; if(next)p.insertBefore(next,row); }
   renumber(); }
@@ -1126,7 +1126,7 @@ function filterPersonnel(){
   if(bilgi) bilgi.textContent=q?(gorunen+' kişi gösteriliyor'):'';
 }
 const EDIT_CODES=['M','NL','NS','NI','UCI','YI','HT','RT','OFF',''];
-function editCell(td){ if(!LAST||td.querySelector('select'))return;
+function editCell(td){ if(!LAST||td.querySelector('select'))return; markDirty();
   const ti=+td.dataset.ti,d=+td.dataset.d,name=LAST.totals[ti].name,cur=LAST.grid[name][d]||'';
   const sel=document.createElement('select'); sel.style.cssText='width:100%;font-size:11px';
   EDIT_CODES.concat(customShiftsOf().map(s=>s.code)).forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=codeLabel(c)||'(boş)';if(c===cur)o.selected=true;sel.appendChild(o);});
