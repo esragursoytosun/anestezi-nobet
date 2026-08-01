@@ -422,6 +422,9 @@
     <button class="sec sm" onclick="exportXLS()">Excel</button>
     <button class="sec sm" onclick="exportCSV()">CSV</button>
     <button class="sec sm" onclick="window.print()">Yazdır / PDF</button>
+      <button class="sec sm" onclick="backupExport()" title="Tüm ayları ve kural ayarlarını tek dosyaya indir">Yedek al</button>
+      <button class="sec sm" onclick="backupImportPick()" title="Daha önce indirilmiş bir yedeği geri yükle">Geri yükle</button>
+      <input type="file" id="backupFile" accept="application/json,.json" style="display:none" onchange="backupImport(this)">
     <span style="width:1px;height:24px;background:var(--line)"></span>
     <button class="sec sm" onclick="toggleBoard()">Adalet panosu</button>
     <button class="sec sm" onclick="toggleWhatif()">What-if</button>
@@ -1080,6 +1083,59 @@ function exportXLS(){ if(!LAST){alert('Önce liste oluşturun.');return;} const 
   h+='</table>'; dl(new Blob(['﻿<html><head><meta charset="utf-8"></head><body>'+h+'</body></html>'],{type:'application/vnd.ms-excel'}),fname('xls')); }
 function fname(ext){ const p=curProfile(); return (p.name||'liste').replace(/\s+/g,'_')+'_'+MONTHS[parseInt(document.getElementById('month').value,10)]+'_'+document.getElementById('year').value+'.'+ext; }
 function dl(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},100); }
+
+/* ===== YEDEK AL / GERİ YÜKLE =====
+   Verinin tamamı tek bir JSON dosyasına iner: kural profili + bütün aylar
+   (personel, izinler, tatiller). Hesaba, sunucuya, veritabanına bağımlılığı
+   olmayan bir kopya. Geri yükleme ÜZERİNE YAZAR, bu yüzden önce dosyanın
+   bizim biçimimiz olduğu doğrulanır ve kullanıcıdan açık onay alınır. */
+const YEDEK_TURU='nobet-asistani-yedek';
+function backupExport(){
+  readRuleForm(); captureMonth();
+  const p=curProfile();
+  const veri={
+    tur:YEDEK_TURU, surum:1,
+    alindi:new Date().toISOString(),
+    birim:(ACT&&ACT.name)||p.name||'Birim',
+    profile:p,
+    aylar:MONTHS_DATA,
+    seciliAy:CUR_YM
+  };
+  const ad=((ACT&&ACT.name)||p.name||'birim').replace(/\s+/g,'_')+'_yedek_'+
+    new Date().toISOString().slice(0,10)+'.json';
+  dl(new Blob([JSON.stringify(veri,null,1)],{type:'application/json'}),ad);
+  flash('Yedek indirildi ✓');
+}
+function backupImportPick(){ document.getElementById('backupFile').click(); }
+function backupImport(inp){
+  const f=inp.files&&inp.files[0]; inp.value='';
+  if(!f) return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    let v;
+    try{ v=JSON.parse(fr.result); }
+    catch(e){ alert('Dosya okunamadı — geçerli bir JSON değil.'); return; }
+    if(!v||v.tur!==YEDEK_TURU||!v.aylar||typeof v.aylar!=='object'){
+      alert('Bu dosya bir Nöbet Planlama Asistanı yedeği değil.'); return;
+    }
+    const ayS=Object.keys(v.aylar).length;
+    const kisi=(()=>{ const k=Object.keys(v.aylar)[0]; return k&&v.aylar[k].personnel?v.aylar[k].personnel.length:0; })();
+    const tarih=v.alindi?new Date(v.alindi).toLocaleString('tr-TR'):'bilinmiyor';
+    if(!confirm('YEDEK GERİ YÜKLENECEK\n\n'+
+      'Birim: '+(v.birim||'?')+'\nAlınma: '+tarih+'\nAy sayısı: '+ayS+'\nİlk aydaki kişi: '+kisi+
+      '\n\nBu işlem şu anki kural ayarlarının ve TÜM ayların üzerine yazar.\nDevam edilsin mi?')) return;
+    // Uygula
+    if(v.profile){ const hedef=curProfile(); Object.keys(v.profile).forEach(k=>{ hedef[k]=v.profile[k]; }); }
+    MONTHS_DATA=v.aylar; CUR_YM=null;
+    const ay=(v.seciliAy&&v.aylar[v.seciliAy])?v.seciliAy:Object.keys(v.aylar)[0];
+    if(ay){ const pr=String(ay).split('-');
+      document.getElementById('year').value=pr[0]; document.getElementById('month').value=pr[1]; showMonth(ay); }
+    fillRuleForm(); markDirty(); scheduleCapWarn();
+    if(document.querySelectorAll('#pbody .prow').length) generate();
+    alert('Yedek yüklendi.\n\nKontrol edin; doğruysa KAYDET ile sunucuya yazın.\nYanlışsa kaydetmeden sayfayı yenileyin — sunucudaki veri bozulmaz.');
+  };
+  fr.readAsText(f);
+}
 
 // ===== SUNUCU / ÇOK-KULLANICILI (birim-bazlı yönetici + izolasyon) =====
 const SRV={on:false,role:null,unitId:null,me:null}; let UNITS=[], ACT=null;
