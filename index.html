@@ -642,7 +642,36 @@ function ymNow(){ return document.getElementById('year').value+'-'+document.getE
 function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, dayOnly:p.dayOnly, onlyNobet:p.onlyNobet, senior:p.senior, offDay:p.offDay,
   startNI:false, yiRanges:[], leaveYI:[], offReq:[], onlyDay:[], onlyN16:[] })); }
 function captureMonth(){ if(CUR_YM==null)return; const prev=MONTHS_DATA[CUR_YM]||{};
-  MONTHS_DATA[CUR_YM]={ holidays:parseDays(document.getElementById('holidays').value), personnel:readPersonnel(), summary:prev.summary }; }
+  MONTHS_DATA[CUR_YM]={ holidays:parseDays(document.getElementById('holidays').value), personnel:readPersonnel(),
+    summary:prev.summary, lastNight:prev.lastNight }; }
+
+/* ---- AYLAR ARASI DEVİR: önceki ayın SON GECE nöbetçileri ----
+   Ayın son günü nöbet tutan kişi, ertesi ayın 1. günü dinlenmeye (N.İ)
+   başlar. Bu daha önce elle işaretleniyor ve sık sık unutuluyordu; artık
+   yeni ay açılınca kendiliğinden işaretlenir. */
+function lastNightWorkers(r){
+  const gunler=(r&&r.days)||[]; if(!gunler.length) return [];
+  const sonGun=gunler[gunler.length-1].day;
+  return (r.totals||[]).filter(t=>{ const c=((r.grid||{})[t.name]||{})[sonGun]; return c==='NL'||c==='NS'; })
+                       .map(t=>t.name);
+}
+/** 'YYYY-M' (ay 0-tabanlı) anahtarının bir öncesi. */
+function prevYM(ym){
+  const p=String(ym).split('-'); let y=parseInt(p[0],10), m=parseInt(p[1],10);
+  if(isNaN(y)||isNaN(m)) return null;
+  if(m===0){ y--; m=11; } else { m--; }
+  return y+'-'+m;
+}
+/** Verilen isimlerin 'Aya N.İ ile başla' kutusunu işaretler. */
+function applyStartNI(isimler){
+  if(!isimler||!isimler.length) return [];
+  const set=new Set(isimler), bulunan=[];
+  document.querySelectorAll('#pbody .prow').forEach(r=>{
+    const ad=(r.querySelector('.p-name')||{}).value;
+    if(set.has(ad)){ const cb=r.querySelector('.p-startni'); if(cb&&!cb.checked){ cb.checked=true; bulunan.push(ad); } }
+  });
+  return bulunan;
+}
 // AYLAR ARASI ADALET: her ayın kişi-başı nöbet/hafta sonu özeti; diğer ayların birikimi carry olur.
 function summarizeResult(r){ const m={}; (r.totals||[]).forEach(t=>{ m[t.name]={ nc:(t.nl||0)+(t.ns||0), wk:t.weekendNobet||0 }; }); return m; }
 function buildCarry(ym){ const by={}; let months=0; Object.keys(MONTHS_DATA).forEach(k=>{ if(k===ym)return; const s=MONTHS_DATA[k]&&MONTHS_DATA[k].summary; if(!s)return; months++;
@@ -654,7 +683,16 @@ function showMonth(ym){
     let prevList;
     if(CUR_YM!=null&&MONTHS_DATA[CUR_YM]) prevList=MONTHS_DATA[CUR_YM].personnel;
     else { const ks=Object.keys(MONTHS_DATA); prevList=ks.length?MONTHS_DATA[ks[ks.length-1]].personnel:readPersonnel(); }
-    document.getElementById('holidays').value=''; applyPersonnel(rosterOnly(prevList)); }
+    document.getElementById('holidays').value=''; applyPersonnel(rosterOnly(prevList));
+    // Önceki ayın son gece nöbetçileri bu ayda N.İ ile başlasın (elle
+    // işaretlemeye gerek kalmasın). Yalnız YENİ ay açılırken uygulanır;
+    // var olan bir ayda kullanıcının kendi tercihi korunur.
+    const onc=MONTHS_DATA[prevYM(ym)];
+    if(onc&&onc.lastNight&&onc.lastNight.length){
+      const iş=applyStartNI(onc.lastNight);
+      if(iş.length) setTimeout(()=>flash(iş.join(', ')+' → önceki ayın son nöbetçisi, N.İ ile başlatıldı'),60);
+    }
+  }
   CUR_YM=ym; updateDateBounds(); captureMonth(); }
 function persistMonths(){ if(SRV.on)return; try{ localStorage.setItem('asistan_months',JSON.stringify({cur:CUR_YM,data:MONTHS_DATA})); }catch(e){} }
 function onPeriodChange(){ captureMonth(); showMonth(ymNow()); generate(); }   // generate -> (yerel) saveAll kaydeder
@@ -733,7 +771,9 @@ function generate(){ readRuleForm(); const cfg=readCfg(); if(!cfg.personnel.leng
   cfg.carry=buildCarry(CUR_YM);   // aylar arası adalet: diğer ayların birikimi
   PRECHECK_HTML=precheckHtml(cfg); // AKILLI ÖN-KONTROL (üretmeden önce yapısal imkânsızlık)
   LAST=AsistanScheduler.buildSchedule(cfg); ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0;
-  if(CUR_YM!=null){ if(!MONTHS_DATA[CUR_YM])MONTHS_DATA[CUR_YM]={holidays:cfg.holidays,personnel:cfg.personnel}; MONTHS_DATA[CUR_YM].summary=summarizeResult(LAST); }  // bu ayın özetini sakla
+  if(CUR_YM!=null){ if(!MONTHS_DATA[CUR_YM])MONTHS_DATA[CUR_YM]={holidays:cfg.holidays,personnel:cfg.personnel};
+    MONTHS_DATA[CUR_YM].summary=summarizeResult(LAST);
+    MONTHS_DATA[CUR_YM].lastNight=lastNightWorkers(LAST); }   // özet + son gece nöbetçileri (devir için)
   render(LAST); if(!SRV.on)saveAll(); }
 function pickAlt(i){ if(!ALTS[i])return; ALT_I=i; LAST=ALTS[i]; if(CUR_YM!=null&&MONTHS_DATA[CUR_YM])MONTHS_DATA[CUR_YM].summary=summarizeResult(LAST); render(LAST); }
 function warnCount(a){ return (a.warnings||[]).filter(x=>!x.startsWith('💡')).length; }
