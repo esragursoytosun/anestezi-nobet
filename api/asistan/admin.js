@@ -10,7 +10,7 @@ const core = require('../../lib/core');
 const { json, ensureStorage } = require('../../lib/http');
 
 // Birim yöneticisinin KENDİ biriminde yapabildiği işlemler
-const YONETICI_ISLEMLERI = ['reqTokens', 'reqOpen', 'reqDelete'];
+const YONETICI_ISLEMLERI = ['reqTokens', 'reqOpen', 'reqDelete', 'reqRotate'];
 
 module.exports = async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method' });
@@ -82,6 +82,16 @@ module.exports = async (req, res) => {
         });
         un.reqTokens = yeni;
         return persist({ ok: true, reqTokens: yeni });
+    }
+    /* TEK KİŞİNİN linkini yeniler (sızma/kaybolma durumu). Eski link anında
+       ölür; diğer kişilerin linkleri etkilenmez. */
+    if (b.action === 'reqRotate') {
+        const un = st.units.find(x => x.id === b.id);
+        if (!un) return json(res, 404, { error: 'birim yok' });
+        const ad = (b.name || '').trim();
+        if (!ad || !un.reqTokens || !un.reqTokens[ad]) return json(res, 404, { error: 'Kişi bulunamadı' });
+        un.reqTokens[ad] = require('crypto').randomBytes(18).toString('base64url');
+        return persist({ ok: true, name: ad, token: un.reqTokens[ad] });
     }
     if (b.action === 'reqOpen') {
         const un = st.units.find(x => x.id === b.id);

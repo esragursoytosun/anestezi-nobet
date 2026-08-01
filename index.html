@@ -119,6 +119,7 @@
   .reqtag{font-size:11px;color:var(--muted);border:1px solid var(--line2);border-radius:4px;padding:1px 6px;margin-left:6px}
   .reqdet{font-size:12.5px;color:var(--txt);margin-top:3px}
   .reqnot{font-size:12px;color:var(--muted);margin-top:3px}
+  .reqlink{font-size:11.5px;color:var(--muted);word-break:break-all;margin-top:3px;font-family:ui-monospace,Consolas,monospace}
   /* Talep sayfası: planlama arayüzünün tamamı gizli */
   body.talep-modu #rulePanel,body.talep-modu #monthPanel,body.talep-modu #personelPanel,
   body.talep-modu #reqPanel,body.talep-modu .toolbar,body.talep-modu #output,
@@ -438,6 +439,7 @@
       </span>
     </h2>
     <p class="help">Personelin gönderdiği istekler burada birikir. <b>Plana otomatik işlenmez</b> — okuyup uygun gördüğünüzü personel tablosuna kendiniz girersiniz.</p>
+    <div id="reqLinks" style="display:none;margin-bottom:14px"></div>
     <div id="reqList"></div>
   </div>
 
@@ -1304,25 +1306,45 @@ async function reqToggleOpen(){
   const j=await reqPost({action:'reqOpen',acik:yeni});
   if(j){ ACT.reqOpen=j.reqOpen; renderRequests(); flash('Talep dönemi '+(j.reqOpen?'açıldı':'kapatıldı')); }
 }
+/* Talep linkleri: kişi kişi listelenir. Linkler KALICIDIR — tekrar
+   üretildiğinde mevcut kişilerinki korunur, yalnız yeni kişiler için
+   üretilir. Sızma/kaybolma durumunda tek kişininki yenilenebilir. */
 async function reqMakeLinks(){
   const adlar=[...document.querySelectorAll('#pbody .p-name')].map(i=>i.value.trim()).filter(Boolean);
   if(!adlar.length){ alert('Önce personel listesini doldurun.'); return; }
   const j=await reqPost({action:'reqTokens',names:adlar});
   if(!j) return;
   ACT.reqTokens=j.reqTokens;
-  const satirlar=adlar.map(a=>a+'\n'+location.origin+'/?talep='+j.reqTokens[a]).join('\n\n');
-  const w=window.open('','_blank');
-  if(w){
-    w.document.write('<meta charset="utf-8"><title>Talep linkleri</title>'+
-      '<body style="font:14px system-ui;padding:24px;max-width:760px"><h2>Kişiye özel talep linkleri</h2>'+
-      '<p>Her kişiye <b>yalnız kendi linkini</b> gönderin. Link, o kişinin kimliği yerine geçer.</p>'+
-      '<pre style="white-space:pre-wrap;background:#f4f4f5;padding:14px;border-radius:8px">'+
-      satirlar.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))+'</pre></body>');
-    w.document.close();
-  } else {
-    prompt('Talep linkleri (kopyalayın):',satirlar);
-  }
+  renderReqLinks(true);
   flash(adlar.length+' kişi için link hazır');
+}
+function reqLinkOf(ad){ return location.origin+'/?talep='+(ACT.reqTokens||{})[ad]; }
+function renderReqLinks(ac){
+  const kutu=document.getElementById('reqLinks'); if(!kutu) return;
+  const harita=(ACT&&ACT.reqTokens)||{};
+  const adlar=Object.keys(harita);
+  if(ac) kutu.style.display='';
+  if(!adlar.length){ kutu.innerHTML='<div class="note">Henüz link üretilmedi. <b>Talep linkleri</b> düğmesine basın.</div>'; return; }
+  kutu.innerHTML='<div class="note" style="margin-bottom:8px">Her kişiye <b>yalnız kendi linkini</b> gönderin — link, o kişinin kimliği yerine geçer. '+
+    'Linkler kalıcıdır; yeniden üretmek mevcutları bozmaz. Bir link yanlış kişiye giderse <b>Yenile</b> ile eskisini geçersiz kılın.</div>'+
+    adlar.map(a=>`<div class="reqrow">
+      <div class="reqmain"><div><b>${escapeHtml(a)}</b></div>
+        <div class="reqlink">${escapeHtml(reqLinkOf(a))}</div></div>
+      <button class="sm sec" onclick="reqCopyLink('${a.replace(/'/g,"\\'")}')">Kopyala</button>
+      <button class="sm danger" onclick="reqRotateLink('${a.replace(/'/g,"\\'")}')">Yenile</button>
+    </div>`).join('');
+}
+async function reqCopyLink(ad){
+  const url=reqLinkOf(ad);
+  try{ await navigator.clipboard.writeText(url); flash(ad+' için link kopyalandı ✓'); }
+  catch(e){ prompt('Linki kopyalayın:',url); }
+}
+async function reqRotateLink(ad){
+  if(!confirm('“'+ad+'” için YENİ link üretilsin mi?\n\nEski link anında geçersiz olur; kişiye yenisini göndermeniz gerekir.\nDiğer kişilerin linkleri etkilenmez.')) return;
+  const j=await reqPost({action:'reqRotate',name:ad});
+  if(!j) return;
+  ACT.reqTokens[ad]=j.token; renderReqLinks(true);
+  flash(ad+' için yeni link üretildi — eskisi geçersiz');
 }
 
 /* ===================================================================
