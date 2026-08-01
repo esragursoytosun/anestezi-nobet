@@ -119,6 +119,15 @@
   .reqtag{font-size:11px;color:var(--muted);border:1px solid var(--line2);border-radius:4px;padding:1px 6px;margin-left:6px}
   .reqdet{font-size:12.5px;color:var(--txt);margin-top:3px}
   .reqnot{font-size:12px;color:var(--muted);margin-top:3px}
+  .reqlinkhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:13px}
+  .reqhelp{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .reqhelp-t{font-size:12.5px;font-weight:600;color:var(--txt);margin-bottom:6px}
+  .reqhelp ul{margin:0;padding-left:18px;display:grid;gap:5px}
+  .reqhelp li{font-size:12px;color:var(--muted);line-height:1.5}
+  .reqhelp li b{color:var(--txt)}
+  .reqhelp-n{margin-top:9px;font-size:12px;color:var(--muted);background:var(--inset);
+    border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+  .reqhelp-n b{color:var(--txt)}
   .reqlink{font-size:11.5px;color:var(--muted);word-break:break-all;margin-top:3px;font-family:ui-monospace,Consolas,monospace}
   /* Talep sayfası: planlama arayüzünün tamamı gizli */
   body.talep-modu #rulePanel,body.talep-modu #monthPanel,body.talep-modu #personelPanel,
@@ -434,13 +443,29 @@
     <h2><span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H7l-3 3z"/></svg></span>Personel Talepleri
       <span id="reqCount" class="savedinfo"></span>
       <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="sm sec" onclick="reqMakeLinks()">Talep linkleri</button>
+        <button class="sm sec" id="reqLinksBtn" onclick="reqMakeLinks()">Talep linkleri</button>
         <button class="sm sec" id="reqOpenBtn" onclick="reqToggleOpen()">Talep dönemi</button>
       </span>
     </h2>
     <p class="help">Personelin gönderdiği istekler burada birikir. <b>Plana otomatik işlenmez</b> — okuyup uygun gördüğünüzü personel tablosuna kendiniz girersiniz.</p>
     <div id="reqLinks" style="display:none;margin-bottom:14px"></div>
     <div id="reqList"></div>
+    <div class="reqhelp">
+      <div class="reqhelp-t">Bu bölümdeki düğmeler ne yapar?</div>
+      <ul>
+        <li><b>Talep linkleri</b> — Personel listesindeki herkes için kişiye özel bir bağlantı üretir.
+            Her kişiye <u>yalnız kendi</u> bağlantısını gönderin; o bağlantı kimliği yerine geçer.
+            Tekrar basmak mevcut bağlantıları bozmaz, yalnız yeni eklenen kişilere üretir.</li>
+        <li><b>Kopyala</b> — O kişinin bağlantısını panoya alır; WhatsApp/e-posta ile yapıştırıp gönderirsiniz.</li>
+        <li><b>Yenile</b> — Bağlantı yanlış kişiye gittiyse ya da telefon kaybolduysa kullanın.
+            O kişiye yeni bağlantı üretilir, <u>eskisi anında geçersiz olur</u>; diğerleri etkilenmez.</li>
+        <li><b>Talep dönemi: AÇIK / KAPALI</b> — Kapalıyken personel yeni talep gönderemez
+            (gönderdiklerini görmeye devam eder). Listeyi hazırlarken kapatmak işe yarar.</li>
+        <li><b>Sil</b> — Talebi gelen kutusundan kaldırır. Nöbet listesine dokunmaz.</li>
+      </ul>
+      <div class="reqhelp-n">Talepler plana <b>otomatik işlenmez</b>. Uygun gördüğünüz izin/boş günleri
+        <b>Personel ve Talepler</b> tablosuna kendiniz girip <b>Kaydet</b> demeniz gerekir.</div>
+    </div>
   </div>
 
   <div class="toolbar noprint">
@@ -1310,6 +1335,8 @@ async function reqToggleOpen(){
    üretildiğinde mevcut kişilerinki korunur, yalnız yeni kişiler için
    üretilir. Sızma/kaybolma durumunda tek kişininki yenilenebilir. */
 async function reqMakeLinks(){
+  const kutu=document.getElementById('reqLinks');
+  if(kutu && kutu.style.display!=='none'){ reqCloseLinks(); return; }   // açıkken aynı düğme kapatır
   const adlar=[...document.querySelectorAll('#pbody .p-name')].map(i=>i.value.trim()).filter(Boolean);
   if(!adlar.length){ alert('Önce personel listesini doldurun.'); return; }
   const j=await reqPost({action:'reqTokens',names:adlar});
@@ -1318,14 +1345,21 @@ async function reqMakeLinks(){
   renderReqLinks(true);
   flash(adlar.length+' kişi için link hazır');
 }
+function reqCloseLinks(){
+  const kutu=document.getElementById('reqLinks'); if(kutu) kutu.style.display='none';
+  const btn=document.getElementById('reqLinksBtn'); if(btn) btn.textContent='Talep linkleri';
+}
 function reqLinkOf(ad){ return location.origin+'/?talep='+(ACT.reqTokens||{})[ad]; }
 function renderReqLinks(ac){
   const kutu=document.getElementById('reqLinks'); if(!kutu) return;
   const harita=(ACT&&ACT.reqTokens)||{};
   const adlar=Object.keys(harita);
-  if(ac) kutu.style.display='';
+  if(ac){ kutu.style.display='';
+    const btn=document.getElementById('reqLinksBtn'); if(btn) btn.textContent='Linkleri gizle'; }
   if(!adlar.length){ kutu.innerHTML='<div class="note">Henüz link üretilmedi. <b>Talep linkleri</b> düğmesine basın.</div>'; return; }
-  kutu.innerHTML='<div class="note" style="margin-bottom:8px">Her kişiye <b>yalnız kendi linkini</b> gönderin — link, o kişinin kimliği yerine geçer. '+
+  kutu.innerHTML='<div class="reqlinkhead"><b>Kişiye özel talep linkleri</b>'+
+    '<button class="sm sec" onclick="reqCloseLinks()">Kapat</button></div>'+
+    '<div class="note" style="margin-bottom:8px">Her kişiye <b>yalnız kendi linkini</b> gönderin — link, o kişinin kimliği yerine geçer. '+
     'Linkler kalıcıdır; yeniden üretmek mevcutları bozmaz. Bir link yanlış kişiye giderse <b>Yenile</b> ile eskisini geçersiz kılın.</div>'+
     adlar.map(a=>`<div class="reqrow">
       <div class="reqmain"><div><b>${escapeHtml(a)}</b></div>
