@@ -112,6 +112,17 @@
   .help{font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.55}
   /* Kural özeti: panelin ilk gördüğün şeyi olsun */
   .savedinfo{font-size:11.5px;color:var(--muted);font-weight:400;margin-left:6px}
+  /* Talep satırları (gelen kutusu + personel tarafı) */
+  .reqrow{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border:1px solid var(--line);
+    border-radius:8px;background:var(--inset);margin-bottom:8px}
+  .reqmain{flex:1;min-width:0} .reqmeta{font-size:11.5px;color:var(--muted);white-space:nowrap}
+  .reqtag{font-size:11px;color:var(--muted);border:1px solid var(--line2);border-radius:4px;padding:1px 6px;margin-left:6px}
+  .reqdet{font-size:12.5px;color:var(--txt);margin-top:3px}
+  .reqnot{font-size:12px;color:var(--muted);margin-top:3px}
+  /* Talep sayfası: planlama arayüzünün tamamı gizli */
+  body.talep-modu #rulePanel,body.talep-modu #monthPanel,body.talep-modu #personelPanel,
+  body.talep-modu #reqPanel,body.talep-modu .toolbar,body.talep-modu #output,
+  body.talep-modu .ovl,body.talep-modu .foot{display:none!important}
   .rsum{background:var(--inset);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
   .rsum-head{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
   .rsum-t{font-size:13px;font-weight:600;color:var(--txt)}
@@ -413,6 +424,19 @@
       <button class="sec sm" onclick="resetNames()">Varsayılan 12 isim</button>
     </div>
     <div class="note" style="margin-top:8px"><b>Yıllık izin</b>: tarih aralığı (başlangıç–bitiş) seçin; isterseniz "+ izin ekle" ile birden çok dönem. İzin başka aylara taşsa bile yalnız bu ayın günleri sayılır.</div>
+  </div>
+
+  <!-- ===== TALEPLER (gelen kutusu — yalnız yetkili) ===== -->
+  <div class="panel noprint" id="reqPanel" style="display:none">
+    <h2><span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H7l-3 3z"/></svg></span>Personel Talepleri
+      <span id="reqCount" class="savedinfo"></span>
+      <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="sm sec" onclick="reqMakeLinks()">Talep linkleri</button>
+        <button class="sm sec" id="reqOpenBtn" onclick="reqToggleOpen()">Talep dönemi</button>
+      </span>
+    </h2>
+    <p class="help">Personelin gönderdiği istekler burada birikir. <b>Plana otomatik işlenmez</b> — okuyup uygun gördüğünüzü personel tablosuna kendiniz girersiniz.</p>
+    <div id="reqList"></div>
   </div>
 
   <div class="toolbar noprint">
@@ -1179,7 +1203,8 @@ async function loadUnit(id){ try{ const r=await fetch('/api/asistan/unit?id='+en
     ACT={id:un.id,name:un.name,profile:un.profile||AsistanScheduler.defaultProfile(),cfg:un.cfg||null,
          rev:un.rev||0,savedAt:un.savedAt||null,savedBy:un.savedBy||null};
     fillRuleForm(); applyCfgServer(ACT.cfg); refreshProfSel(); generate();
-    renderSavedInfo(); clearDirty();     // taze yüklendi → kirli değil
+    ACT.requests=un.requests||[]; ACT.reqOpen=un.reqOpen!==false; ACT.reqTokens=un.reqTokens||{};
+    renderSavedInfo(); renderRequests(); clearDirty();     // taze yüklendi → kirli değil
   }catch(e){ flash('Birim yüklenemedi'); } }
 // Admin işlemleri
 async function srvAddUnit(){ const name=(prompt('Yeni birim adı (örn. Anestezi, Yenidoğan):','')||'').trim(); if(!name)return;
@@ -1200,6 +1225,161 @@ async function srvDelUnit(){ if(!ACT)return; if(!confirm('“'+ACT.name+'” bir
 async function srvRenameUnit(){ if(!ACT)return; const n=(prompt('Birim adı:',ACT.name)||'').trim(); if(!n)return;
   await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'renameUnit',id:ACT.id,name:n})}); ACT.name=n; await reloadUnits(); }
 
+/* ===================================================================
+   PERSONEL TALEPLERİ — YÖNETİCİ TARAFI
+   Talepler plana ASLA otomatik işlenmez; burada okunur ve uygun görülen
+   personel tablosuna elle girilir.
+   =================================================================== */
+const TALEP_ADI={'yillik-izin':'Yıllık izin','bos-gun':'Boş gün','nobet-tercihi':'Nöbet tercihi','diger':'Diğer'};
+function trTarih(s){ if(!s) return ''; const p=String(s).split('-'); return p.length===3?(+p[2]+' '+MONTHS[+p[1]-1]):s; }
+function renderRequests(){
+  const panel=document.getElementById('reqPanel'); if(!panel) return;
+  if(!SRV.on||!ACT){ panel.style.display='none'; return; }
+  panel.style.display='';
+  const list=ACT.requests||[];
+  document.getElementById('reqCount').textContent=list.length?(list.length+' talep'):'talep yok';
+  const btn=document.getElementById('reqOpenBtn');
+  const acik=ACT.reqOpen!==false;
+  btn.textContent='Talep dönemi: '+(acik?'AÇIK':'KAPALI');
+  btn.classList.toggle('danger',!acik);
+  const kutu=document.getElementById('reqList');
+  if(!list.length){ kutu.innerHTML='<div class="note">Henüz talep gelmedi.</div>'; return; }
+  kutu.innerHTML=list.slice().reverse().map(t=>{
+    const ayrinti=t.tur==='yillik-izin'
+      ? (trTarih(t.bas)+(t.bit?(' – '+trTarih(t.bit)):''))
+      : (t.gunler?('Günler: '+escapeHtml(t.gunler)):'');
+    return `<div class="reqrow">
+      <div class="reqmain">
+        <div><b>${escapeHtml(t.name)}</b> <span class="reqtag">${TALEP_ADI[t.tur]||t.tur}</span></div>
+        ${ayrinti?`<div class="reqdet">${escapeHtml(ayrinti)}</div>`:''}
+        ${t.not?`<div class="reqnot">${escapeHtml(t.not)}</div>`:''}
+      </div>
+      <div class="reqmeta">${fmtSaved(t.at)}</div>
+      <button class="sm danger" onclick="reqDelete('${t.id}')">Sil</button>
+    </div>`;
+  }).join('');
+}
+async function reqPost(govde){
+  const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),
+    body:JSON.stringify(Object.assign({id:ACT.id},govde))});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){ alert(j.error||'İşlem yapılamadı (yalnız yönetici).'); return null; }
+  return j;
+}
+async function reqDelete(id){
+  if(!confirm('Bu talep silinsin mi?')) return;
+  if(await reqPost({action:'reqDelete',reqId:id})){
+    ACT.requests=(ACT.requests||[]).filter(t=>t.id!==id); renderRequests(); flash('Talep silindi');
+  }
+}
+async function reqToggleOpen(){
+  const yeni=!(ACT.reqOpen!==false);
+  const j=await reqPost({action:'reqOpen',acik:yeni});
+  if(j){ ACT.reqOpen=j.reqOpen; renderRequests(); flash('Talep dönemi '+(j.reqOpen?'açıldı':'kapatıldı')); }
+}
+async function reqMakeLinks(){
+  const adlar=[...document.querySelectorAll('#pbody .p-name')].map(i=>i.value.trim()).filter(Boolean);
+  if(!adlar.length){ alert('Önce personel listesini doldurun.'); return; }
+  const j=await reqPost({action:'reqTokens',names:adlar});
+  if(!j) return;
+  ACT.reqTokens=j.reqTokens;
+  const satirlar=adlar.map(a=>a+'\n'+location.origin+'/?talep='+j.reqTokens[a]).join('\n\n');
+  const w=window.open('','_blank');
+  if(w){
+    w.document.write('<meta charset="utf-8"><title>Talep linkleri</title>'+
+      '<body style="font:14px system-ui;padding:24px;max-width:760px"><h2>Kişiye özel talep linkleri</h2>'+
+      '<p>Her kişiye <b>yalnız kendi linkini</b> gönderin. Link, o kişinin kimliği yerine geçer.</p>'+
+      '<pre style="white-space:pre-wrap;background:#f4f4f5;padding:14px;border-radius:8px">'+
+      satirlar.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))+'</pre></body>');
+    w.document.close();
+  } else {
+    prompt('Talep linkleri (kopyalayın):',satirlar);
+  }
+  flash(adlar.length+' kişi için link hazır');
+}
+
+/* ===================================================================
+   TALEP SAYFASI — PERSONEL TARAFI  (?talep=<anahtar>)
+   Girişsiz, kişiye özel bağlantıyla açılır. Yalnız kendi talebini
+   görür/gönderir; nöbet listesine veya başka kişilere erişemez.
+   =================================================================== */
+async function talepSayfasi(token){
+  document.body.classList.add('talep-modu');
+  document.getElementById('loginOvl').style.display='none';
+  const kok=document.createElement('div'); kok.className='wrap'; kok.id='talepKok';
+  document.body.appendChild(kok);
+  const ciz=async()=>{
+    let j;
+    try{ const r=await fetch('/api/asistan/request?token='+encodeURIComponent(token),{cache:'no-store'});
+      j=await r.json(); if(!r.ok) throw new Error(j.error||'Geçersiz bağlantı'); }
+    catch(e){ kok.innerHTML='<div class="panel"><div class="warns">'+escapeHtml(e.message||'Bağlantı geçersiz.')+'</div></div>'; return; }
+    document.querySelector('header .sub').textContent=j.birim+' · talep formu';
+    const acik=j.acik!==false;
+    kok.innerHTML=`
+      <div class="panel">
+        <h2>Merhaba ${escapeHtml(j.ad)}</h2>
+        ${acik?`<p class="help">Yıllık izin, boş gün gibi taleplerinizi buradan iletebilirsiniz.
+          Talepler <b>otomatik uygulanmaz</b>; birim yöneticiniz görüp değerlendirir.</p>
+        <div class="row" style="align-items:flex-start">
+          <div class="fld"><label>Talep türü</label>
+            <select id="tTur" onchange="talepAlanlar()">
+              <option value="yillik-izin">Yıllık izin talebi</option>
+              <option value="bos-gun">Boş gün isteği</option>
+              <option value="nobet-tercihi">Nöbet tercihi</option>
+              <option value="diger">Diğer</option>
+            </select></div>
+          <div class="fld" id="tTarihler"><label>Başlangıç – Bitiş</label>
+            <div class="daterange"><input type="date" id="tBas"><span>–</span><input type="date" id="tBit"></div></div>
+          <div class="fld" id="tGunler" style="display:none"><label>Günler</label>
+            <input type="text" id="tGun" placeholder="örn. 5,12,19" style="width:150px">
+            <span class="hint">Ayın gün numaraları, virgülle</span></div>
+        </div>
+        <div class="fld" style="margin-top:8px"><label>Açıklama</label>
+          <input type="text" id="tNot" placeholder="Kısa açıklama (isteğe bağlı)"></div>
+        <button class="btn" onclick="talepGonder()" style="margin-top:12px">Talebi gönder</button>`
+        :`<div class="warns">Talep dönemi şu anda <b>kapalı</b>. Birim yöneticinizle görüşün.</div>`}
+      </div>
+      <div class="panel">
+        <h2>Gönderdiğim talepler</h2>
+        ${(j.taleplerim||[]).length?(j.taleplerim.slice().reverse().map(t=>`
+          <div class="reqrow"><div class="reqmain">
+            <div><b>${TALEP_ADI[t.tur]||t.tur}</b></div>
+            ${t.bas?`<div class="reqdet">${escapeHtml(trTarih(t.bas)+(t.bit?(' – '+trTarih(t.bit)):''))}</div>`:''}
+            ${t.gunler?`<div class="reqdet">Günler: ${escapeHtml(t.gunler)}</div>`:''}
+            ${t.not?`<div class="reqnot">${escapeHtml(t.not)}</div>`:''}
+          </div><div class="reqmeta">${fmtSaved(t.at)}</div>
+          ${acik?`<button class="sm danger" onclick="talepSil('${t.id}')">Geri al</button>`:''}</div>`).join('')
+        ):'<div class="note">Henüz talep göndermediniz.</div>'}
+      </div>`;
+    window.__talepCiz=ciz;
+  };
+  window.__talepToken=token;
+  await ciz();
+}
+function talepAlanlar(){
+  const t=document.getElementById('tTur').value;
+  document.getElementById('tTarihler').style.display=(t==='yillik-izin')?'':'none';
+  document.getElementById('tGunler').style.display=(t==='bos-gun')?'':'none';
+}
+async function talepGonder(){
+  const g={ tur:document.getElementById('tTur').value,
+    bas:(document.getElementById('tBas')||{}).value||null,
+    bit:(document.getElementById('tBit')||{}).value||null,
+    gunler:(document.getElementById('tGun')||{}).value||'',
+    not:(document.getElementById('tNot')||{}).value||'' };
+  const r=await fetch('/api/asistan/request?token='+encodeURIComponent(window.__talepToken),
+    {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(g)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){ alert(j.error||'Gönderilemedi.'); return; }
+  flash('Talebiniz iletildi ✓'); window.__talepCiz();
+}
+async function talepSil(id){
+  if(!confirm('Bu talep geri alınsın mı?')) return;
+  const r=await fetch('/api/asistan/request?token='+encodeURIComponent(window.__talepToken),
+    {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sil:id})});
+  if(r.ok){ flash('Talep geri alındı'); window.__talepCiz(); } else flash('Geri alınamadı');
+}
+
 /* ===== ESKİ ADRES YÖNLENDİRMESİ =====
    GitHub Pages kopyası (github.io) hâlâ açılıyor ama arka ucu yok; eski yer
    imiyle gelen kişi giriş yapamayıp sebebini anlamıyordu. Canlı adrese
@@ -1209,7 +1389,10 @@ if(location.hostname.endsWith('github.io')){
 }
 
 // ===== BAŞLAT =====
-asInit();
+(function(){
+  const t=new URLSearchParams(location.search).get('talep');
+  if(t) talepSayfasi(t); else asInit();
+})();
 </script>
 </body>
 </html>

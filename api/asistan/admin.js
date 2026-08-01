@@ -44,6 +44,36 @@ module.exports = async (req, res) => {
         st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id));
         return persist({ ok: true });
     }
+    /* ---- TALEP YÖNETİMİ (yalnız admin) ----
+       Kişiye özel bağlantı anahtarları burada üretilir; talepler yalnız
+       buradan silinir. Talepler plana asla otomatik işlenmez. */
+    if (b.action === 'reqTokens') {
+        const un = st.units.find(x => x.id === b.id);
+        if (!un) return json(res, 404, { error: 'birim yok' });
+        const adlar = Array.isArray(b.names) ? b.names.filter(x => typeof x === 'string' && x.trim()) : [];
+        const eski = un.reqTokens || {}, yeni = {};
+        adlar.forEach(ad => {
+            const a = ad.trim();
+            // Var olan anahtar korunur (paylaşılmış linkler bozulmasın);
+            // yalnız yeni kişiler için üretilir. b.yenile ile hepsi tazelenir.
+            yeni[a] = (!b.yenile && eski[a]) ? eski[a] : require('crypto').randomBytes(18).toString('base64url');
+        });
+        un.reqTokens = yeni;
+        return persist({ ok: true, reqTokens: yeni });
+    }
+    if (b.action === 'reqOpen') {
+        const un = st.units.find(x => x.id === b.id);
+        if (!un) return json(res, 404, { error: 'birim yok' });
+        un.reqOpen = !!b.acik;
+        if (b.ay !== undefined) un.reqMonth = b.ay || null;
+        return persist({ ok: true, reqOpen: un.reqOpen, reqMonth: un.reqMonth || null });
+    }
+    if (b.action === 'reqDelete') {
+        const un = st.units.find(x => x.id === b.id);
+        if (!un) return json(res, 404, { error: 'birim yok' });
+        un.requests = (un.requests || []).filter(t => t.id !== b.reqId);
+        return persist({ ok: true });
+    }
     if (b.action === 'renameUnit') {
         const un = st.units.find(x => x.id === b.id);
         if (un) un.name = (b.name || un.name).trim();

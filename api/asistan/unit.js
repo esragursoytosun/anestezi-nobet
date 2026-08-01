@@ -18,6 +18,8 @@ module.exports = async (req, res) => {
         return json(res, 200, {
             id: un.id, name: un.name, profile: un.profile || null, cfg: un.cfg || null,
             rev: un.rev || 0, savedAt: un.savedAt || null, savedBy: un.savedBy || null,
+            requests: un.requests || [], reqOpen: un.reqOpen !== false, reqMonth: un.reqMonth || null,
+            reqTokens: un.reqTokens || {},
         });
     }
 

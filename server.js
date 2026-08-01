@@ -60,6 +60,7 @@ const ROUTES = {
     '/api/asistan/login': require('./api/asistan/login'),
     '/api/asistan/units': require('./api/asistan/units'),
     '/api/asistan/unit': require('./api/asistan/unit'),
+    '/api/asistan/request': require('./api/asistan/request'),
     '/api/asistan/admin': require('./api/asistan/admin'),
 };
 
