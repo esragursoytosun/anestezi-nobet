@@ -44,6 +44,15 @@ module.exports = async (req, res) => {
         st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id));
         return persist({ ok: true });
     }
+    // Paylaşım linki: anahtar üret / iptal et. Anahtar yalnızca burada
+    // oluşur; iptal edilince eski link anında geçersiz olur.
+    if (b.action === 'shareOn' || b.action === 'shareOff') {
+        const un = st.units.find(x => x.id === b.id);
+        if (!un) return json(res, 404, { error: 'birim yok' });
+        if (b.action === 'shareOff') { delete un.shareToken; return persist({ ok: true, shareToken: null }); }
+        un.shareToken = require('crypto').randomBytes(18).toString('base64url');
+        return persist({ ok: true, shareToken: un.shareToken });
+    }
     if (b.action === 'renameUnit') {
         const un = st.units.find(x => x.id === b.id);
         if (un) un.name = (b.name || un.name).trim();

@@ -89,12 +89,30 @@
     .settings{grid-template-columns:1fr}
     .setnav{flex-direction:row;overflow-x:auto;position:static;padding-bottom:4px;-webkit-overflow-scrolling:touch}
     .setnav-i{width:auto;white-space:nowrap;flex:0 0 auto}
+    /* DOKUNMA HEDEFLERİ: parmakla isabet için en az ~36-38px yükseklik.
+       Personel ızgarasının içi hariç tutuluyor (o alan zaten yatay kayıyor
+       ve 16px yazı sütunları taşırırdı); orada yalnız kutucuklar büyütülüyor. */
+    button{min-height:38px}
+    button.sm{min-height:34px;padding:7px 12px}
+    .wrap input:not(.pgrid input):not([type=checkbox]),
+    .wrap select:not(.pgrid select){min-height:36px;font-size:16px}   /* 16px: iOS odakta yakınlaştırmasın */
+    /* !important gerekli: masaüstü için yazılmış `.prow input[type=checkbox]`
+       kuralı özgüllük olarak daha güçlü ve sıra farkıyla yenilemiyor. */
+    input[type=checkbox]{width:22px!important;height:22px!important}
+    .rowact button{min-height:32px;padding:6px 10px}
+    .kc input{max-width:none}
+    header{padding:11px 14px} .wrap{padding:0 10px;gap:12px} .panel{padding:13px 12px}
+    .rsum{padding:12px 13px} .rsum-head button{margin-left:0}
   }
   .advgrp{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:0}
   .advgrp h4{margin:0 0 6px;font-size:13px;color:var(--txt);letter-spacing:0;font-weight:600;text-transform:none}
   .advgrp>h4[style]{margin-top:16px}
   .help{font-size:11.5px;color:var(--muted);margin:0 0 10px;line-height:1.55}
   /* Kural özeti: panelin ilk gördüğün şeyi olsun */
+  .savedinfo{font-size:11.5px;color:var(--muted);font-weight:400;margin-left:6px}
+  /* Salt-okunur paylaşım görünümü: düzenleme arayüzünün tamamı gizlenir */
+  body.readonly #rulePanel,body.readonly #monthPanel,body.readonly .toolbar,
+  body.readonly #personelPanel,body.readonly .ovl{display:none!important}
   .rsum{background:var(--inset);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
   .rsum-head{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
   .rsum-t{font-size:13px;font-weight:600;color:var(--txt)}
@@ -249,8 +267,10 @@
         <button class="sm" onclick="srvAddUnit()">Yeni birim</button>
         <button class="sm" onclick="srvAssignManager()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Yönetici ata</button>
         <button class="sm" onclick="srvRenameUnit()">Ad değiştir</button>
+        <button class="sm" onclick="srvShare()">Paylaşım linki</button>
         <span style="display:inline-block;width:1px;height:18px;background:var(--line2);margin:0 6px;vertical-align:middle"></span><button class="sm danger" onclick="srvDelUnit()">Birim sil</button>
       </span>
+      <span id="savedInfo" class="savedinfo"></span>
       <button class="sm sec" onclick="toggleRules()" style="margin-left:auto">Gizle / Göster</button>
     </h2>
     <div class="body" id="ruleBody">
@@ -364,7 +384,7 @@
   </div>
 
   <!-- ===== AY ===== -->
-  <div class="panel noprint">
+  <div class="panel noprint" id="monthPanel">
     <h2><span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span>Ay Ayarları</h2>
     <div class="row">
       <div><label>Ay</label><select id="month"></select></div>
@@ -374,7 +394,7 @@
   </div>
 
   <!-- ===== PERSONEL ===== -->
-  <div class="panel noprint">
+  <div class="panel noprint" id="personelPanel">
     <h2><span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Personel ve Talepler</h2>
     <div class="pwrap"><div class="pgrid">
       <div class="phead">
@@ -641,12 +661,56 @@ function onPeriodChange(){ captureMonth(); showMonth(ymNow()); generate(); }   /
 // ===== KAYDET =====
 function readCfg(){ return { year:parseInt(document.getElementById('year').value,10), month:parseInt(document.getElementById('month').value,10),
   holidays:parseDays(document.getElementById('holidays').value), profile:curProfile(), personnel:readPersonnel() }; }
+/* ---- KAYDEDİLMEMİŞ DEĞİŞİKLİK KORUMASI ----
+   Yarım saatlik izin girişi Kaydet'e basılmadan sekme kapanınca uçuyordu.
+   Artık düzenlenebilir alanlarda her değişiklik "kirli" işaretlenir; kayıt
+   başarılı olunca temizlenir. Programatik doldurma (fillRuleForm vb.)
+   olay tetiklemediği için yanlış uyarı çıkmaz. */
+let DIRTY=false;
+function markDirty(){ DIRTY=true; }
+function clearDirty(){ DIRTY=false; }
+['input','change'].forEach(ev=>document.addEventListener(ev,e=>{
+  const t=e.target; if(!t||t.id==='showAll') return;                 // görünüm anahtarı sayılmaz
+  if(t.closest('#rulePanel,#pbody,#monthPanel')) markDirty();
+},true));
+window.addEventListener('beforeunload',e=>{ if(!DIRTY) return; e.preventDefault(); e.returnValue=''; });
+
+/* Son kaydeden bilgisi — ortak kullanılan araçta "benim değişiklik gitti mi"
+   tereddüdünü kaldırır. */
+function fmtSaved(iso){
+  if(!iso) return '';
+  const d=new Date(iso), n=new Date();
+  const ss=d.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+  const ayniGun=d.toDateString()===n.toDateString();
+  return ayniGun ? ('bugün '+ss) : (d.toLocaleDateString('tr-TR',{day:'numeric',month:'long'})+' '+ss);
+}
+function renderSavedInfo(){
+  const el=document.getElementById('savedInfo'); if(!el) return;
+  if(!SRV.on||!ACT||!ACT.savedBy){ el.textContent=''; return; }
+  el.textContent='Son kaydeden: '+ACT.savedBy+' · '+fmtSaved(ACT.savedAt);
+}
+
 function saveAll(){ readRuleForm(); captureMonth();
   if(SRV.on){ if(!ACT){flash('Önce birim seçin/ekleyin');return;}
     const cfg={ year:parseInt(document.getElementById('year').value,10), month:parseInt(document.getElementById('month').value,10), months:MONTHS_DATA }; ACT.cfg=cfg;
-    fetch('/api/asistan/unit?id='+encodeURIComponent(ACT.id),{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({profile:ACT.profile,cfg})})
-      .then(r=>{ if(r.status===401){location.reload();return;} flash('Kaydedildi ✓ (sunucu)'); }).catch(()=>flash('Kaydedilemedi (ağ?)')); return; }
-  persistMonths(); flash('Kaydedildi ✓'); }
+    fetch('/api/asistan/unit?id='+encodeURIComponent(ACT.id),{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),
+      body:JSON.stringify({profile:ACT.profile,cfg,rev:ACT.rev})})
+      .then(async r=>{
+        if(r.status===401){location.reload();return;}
+        if(r.status===409){                                   // başkası araya girdi
+          const j=await r.json().catch(()=>({}));
+          const kim=j.savedBy?(j.savedBy+' · '+fmtSaved(j.savedAt)):'başka bir kullanıcı';
+          alert('Bu birim siz açtıktan sonra kaydedildi ('+kim+').\n\n'+
+                'Üzerine yazmamak için değişiklikleriniz GÖNDERİLMEDİ.\n'+
+                'Tamam deyince güncel hali yüklenecek; düzenlemenizi ondan sonra tekrar yapın.');
+          loadUnit(ACT.id); return;
+        }
+        if(!r.ok){ flash('Kaydedilemedi'); return; }
+        const j=await r.json().catch(()=>({}));
+        if(j.rev!==undefined){ ACT.rev=j.rev; ACT.savedAt=j.savedAt; ACT.savedBy=j.savedBy; renderSavedInfo(); }
+        clearDirty(); flash('Kaydedildi ✓ (sunucu)');
+      }).catch(()=>flash('Kaydedilemedi (ağ?)')); return; }
+  persistMonths(); clearDirty(); flash('Kaydedildi ✓'); }
 function loadCfg(){
   try{ const st=JSON.parse(localStorage.getItem('asistan_months')||'null');
     if(st&&st.data&&Object.keys(st.data).length){ MONTHS_DATA=st.data; CUR_YM=null;
@@ -904,8 +968,11 @@ function logout(){ localStorage.removeItem('asistan_user'); localStorage.removeI
 async function reloadUnits(){ try{ const r=await fetch('/api/asistan/units',{cache:'no-store',headers:asHeaders()}); const j=await r.json(); UNITS=j.units||[]; refreshProfSel(); }catch(e){} }
 async function loadUnit(id){ try{ const r=await fetch('/api/asistan/unit?id='+encodeURIComponent(id),{cache:'no-store',headers:asHeaders()});
     if(r.status===401){location.reload();return;} if(!r.ok){flash('Birim yüklenemedi');return;}
-    const un=await r.json(); ACT={id:un.id,name:un.name,profile:un.profile||AsistanScheduler.defaultProfile(),cfg:un.cfg||null};
+    const un=await r.json();
+    ACT={id:un.id,name:un.name,profile:un.profile||AsistanScheduler.defaultProfile(),cfg:un.cfg||null,
+         rev:un.rev||0,savedAt:un.savedAt||null,savedBy:un.savedBy||null,shareToken:un.shareToken||null};
     fillRuleForm(); applyCfgServer(ACT.cfg); refreshProfSel(); generate();
+    renderSavedInfo(); clearDirty();     // taze yüklendi → kirli değil
   }catch(e){ flash('Birim yüklenemedi'); } }
 // Admin işlemleri
 async function srvAddUnit(){ const name=(prompt('Yeni birim adı (örn. Anestezi, Yenidoğan):','')||'').trim(); if(!name)return;
@@ -923,11 +990,74 @@ async function saveManager(){ const u=(document.getElementById('mgrUser').value|
 async function srvDelUnit(){ if(!ACT)return; if(!confirm('“'+ACT.name+'” birimi ve yöneticisi kalıcı silinsin mi?'))return;
   await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'delUnit',id:ACT.id})});
   await reloadUnits(); if(UNITS.length)await loadUnit(UNITS[0].id); else { ACT=null; document.getElementById('output').innerHTML=''; refreshProfSel(); } flash('Birim silindi'); }
+/* Paylaşım linki: nöbetçiler hesap açmadan kendi listelerini görsün.
+   Link salt-okunur; iptal edilince anında geçersiz olur. */
+async function srvShare(){
+  if(!ACT){ alert('Önce bir birim seçin'); return; }
+  if(ACT.shareToken){
+    const url=location.origin+'/?goruntule='+ACT.shareToken;
+    const sec=confirm('“'+ACT.name+'” için paylaşım linki zaten var:\n\n'+url+
+      '\n\nTamam = linki panoya kopyala\nİptal = linki İPTAL ET (eski link çalışmaz olur)');
+    if(sec){ try{ await navigator.clipboard.writeText(url); flash('Link kopyalandı ✓'); }catch(e){ prompt('Linki kopyalayın:',url); } return; }
+    const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),
+      body:JSON.stringify({action:'shareOff',id:ACT.id})});
+    if(r.ok){ ACT.shareToken=null; flash('Paylaşım linki iptal edildi'); } else flash('İptal edilemedi');
+    return;
+  }
+  const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),
+    body:JSON.stringify({action:'shareOn',id:ACT.id})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok||!j.shareToken){ alert(j.error||'Link oluşturulamadı (yalnız admin yapabilir).'); return; }
+  ACT.shareToken=j.shareToken;
+  const url=location.origin+'/?goruntule='+j.shareToken;
+  try{ await navigator.clipboard.writeText(url); }catch(e){}
+  prompt('Paylaşım linki hazır — panoya kopyalandı.\n'+
+         'Bu linki açan kişi listeyi yalnızca GÖRÜNTÜLER, değiştiremez:',url);
+}
 async function srvRenameUnit(){ if(!ACT)return; const n=(prompt('Birim adı:',ACT.name)||'').trim(); if(!n)return;
   await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'renameUnit',id:ACT.id,name:n})}); ACT.name=n; await reloadUnits(); }
 
+/* ===== ESKİ ADRES YÖNLENDİRMESİ =====
+   GitHub Pages kopyası (github.io) hâlâ açılıyor ama arka ucu yok; eski yer
+   imiyle gelen kişi giriş yapamayıp sebebini anlamıyordu. Canlı adrese
+   yönlendiriyoruz. */
+if(location.hostname.endsWith('github.io')){
+  location.replace('https://nobetasistani.vercel.app/'+location.search+location.hash);
+}
+
+/* ===== SALT-OKUNUR PAYLAŞIM GÖRÜNÜMÜ =====
+   ?goruntule=<anahtar> ile açılırsa: giriş istemez, yalnız o birimin
+   listesini üretip gösterir. Düzenleme arayüzünün tamamı gizlenir; hiçbir
+   yazma isteği atılmaz (uçta da yazma yolu yok). */
+async function publicView(token){
+  document.body.classList.add('readonly');
+  document.getElementById('loginOvl').style.display='none';
+  try{
+    const r=await fetch('/api/asistan/public?token='+encodeURIComponent(token),{cache:'no-store'});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){ document.getElementById('output').innerHTML=
+      '<div class="warns">'+((j&&j.error)||'Bu bağlantı geçerli değil.')+'</div>'; return; }
+    document.querySelector('header .sub').textContent=j.name+' · nöbet listesi (görüntüleme)';
+    // SRV.on AÇIK kalmalı: curProfile() birimin profilini bu bayrağa göre
+    // seçiyor ve generate() yalnız kapalıyken yerel kayıt deniyor. Yazma
+    // riski yok — kaydeden tüm düğmeler gizli, kimlik başlığı da boş.
+    SRV.on=true; SRV.role='viewer';
+    ACT={id:null,name:j.name,profile:j.profile||AsistanScheduler.defaultProfile(),cfg:j.cfg||null};
+    fillRuleForm(); applyCfgServer(ACT.cfg);
+    if(document.querySelectorAll('#pbody .prow').length) generate();
+    else document.getElementById('output').innerHTML='<div class="warns">Bu birim için henüz liste hazırlanmamış.</div>';
+    const not=document.createElement('div'); not.className='note viewnote'; not.style.margin='0 0 12px';
+    not.textContent='Bu sayfa yalnızca görüntülemek içindir; değişiklik yapılamaz.'+
+      (j.savedAt?(' Son güncelleme: '+fmtSaved(j.savedAt)):'');
+    const out=document.getElementById('output'); out.parentNode.insertBefore(not,out);
+  }catch(e){ document.getElementById('output').innerHTML='<div class="warns">Liste yüklenemedi.</div>'; }
+}
+
 // ===== BAŞLAT =====
-asInit();
+(function(){
+  const t=new URLSearchParams(location.search).get('goruntule');
+  if(t) publicView(t); else asInit();
+})();
 </script>
 </body>
 </html>
