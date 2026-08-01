@@ -1,16 +1,28 @@
-/* POST /api/asistan/admin — birim ekle/sil/adlandır, birim yöneticisi ata/kaldır (yalnız admin) */
+/* POST /api/asistan/admin — birim ve yönetici işlemleri
+   ---------------------------------------------------------------------
+   YETKİ İKİ KADEMELİ:
+     • ADMIN: her şey (birim ekle/sil/adlandır, yönetici ata/kaldır)
+     • BİRİM YÖNETİCİSİ: yalnız KENDİ biriminde talep işlemleri
+       (talep linki üret, talep dönemini aç/kapa, talep sil)
+   Yönetici başka birime dokunamaz; birim yapısını değiştiremez. */
 'use strict';
 const core = require('../../lib/core');
 const { json, ensureStorage } = require('../../lib/http');
+
+// Birim yöneticisinin KENDİ biriminde yapabildiği işlemler
+const YONETICI_ISLEMLERI = ['reqTokens', 'reqOpen', 'reqDelete'];
 
 module.exports = async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method' });
     if (!(await ensureStorage(res))) return;
     const me = await core.aReqUser(req.headers);
     if (!me) return json(res, 401, { error: 'Giriş gerekli' });
-    if (me.role !== 'admin') return json(res, 403, { error: 'Yalnız admin' });
 
     const b = req.body || {};
+    const yetkili = me.role === 'admin' ||
+        (me.role === 'manager' && YONETICI_ISLEMLERI.indexOf(b.action) >= 0 && b.id && me.unitId === b.id);
+    if (!yetkili) return json(res, 403, { error: 'Bu işlem için yetkiniz yok' });
+
     const st = await core.loadAsistan();
     st.units = st.units || [];
     st.users = st.users || [];
@@ -30,18 +42,28 @@ module.exports = async (req, res) => {
         st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id));
         return persist({ ok: true });
     }
+    /* Bir birimde BİRDEN FAZLA yönetici olabilir. Aynı kullanıcı adı tekrar
+       verilirse yeni yönetici eklenmez, mevcut yöneticinin ŞİFRESİ yenilenir. */
     if (b.action === 'setManager') {
         const uu = (b.username || '').trim(), pp = (b.password || '').trim();
         if (!uu || !pp) return json(res, 400, { error: 'Kullanıcı adı ve şifre gerekli' });
+        // Aynı ad başka bir birimde ya da başka bir rolde kullanılıyorsa engelle
         if (st.users.some(x => x.u === uu && !(x.role === 'manager' && x.unitId === b.id))) {
-            return json(res, 400, { error: 'Bu kullanıcı adı başka yerde kullanılıyor' });
+            return json(res, 400, { error: 'Bu kullanıcı adı başka bir birimde kullanılıyor' });
         }
-        st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id));   // birimde tek yönetici
+        const mevcut = st.users.find(x => x.u === uu && x.role === 'manager' && x.unitId === b.id);
+        if (mevcut) { mevcut.pw = core.hashPw(pp); delete mevcut.p; return persist({ ok: true, guncellendi: true }); }
         st.users.push({ u: uu, pw: core.hashPw(pp), role: 'manager', unitId: b.id });
-        return persist({ ok: true });
+        return persist({ ok: true, eklendi: true });
     }
+    /* Tek bir yöneticiyi kaldırır (kullanıcı adı ile). Ad verilmezse hiçbir
+       şey silinmez — eskiden birimin TÜM yöneticilerini siliyordu. */
     if (b.action === 'removeManager') {
-        st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id));
+        const uu = (b.username || '').trim();
+        if (!uu) return json(res, 400, { error: 'Kaldırılacak yönetici belirtilmedi' });
+        const once = st.users.length;
+        st.users = st.users.filter(x => !(x.role === 'manager' && x.unitId === b.id && x.u === uu));
+        if (st.users.length === once) return json(res, 404, { error: 'Yönetici bulunamadı' });
         return persist({ ok: true });
     }
     /* ---- TALEP YÖNETİMİ (yalnız admin) ----

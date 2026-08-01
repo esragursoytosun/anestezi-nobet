@@ -237,6 +237,8 @@
   .ovl input{width:100%;margin-bottom:10px;padding:8px 10px}
   .err{color:var(--err);font-size:12.5px;min-height:18px}
   .who{font-size:12px;color:var(--muted)}
+  .mgrrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--line)}
+  .mgrrow:first-of-type{border-top:0}
   .mgrbox{background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:9px 11px;margin-top:10px;font-size:12px;color:var(--muted)}
 </style>
 </head>
@@ -251,12 +253,12 @@
 </div></div>
 <!-- YÖNETİCİ ATA (admin) -->
 <div class="ovl" id="mgrOvl"><div class="box">
-  <h3>Birim Yöneticisi Ata</h3>
+  <h3>Birim Yöneticileri</h3><p class="ovl-sub">Bir birime birden fazla yönetici atanabilir.</p>
   <div class="who" id="mgrUnitName" style="margin-bottom:8px"></div>
-  <input type="text" id="mgrUser" placeholder="Yönetici kullanıcı adı" autocomplete="off">
+  <input type="text" id="mgrUser" placeholder="Yönetici kullanıcı adı (varsa şifresi yenilenir)" autocomplete="off">
   <input type="password" id="mgrPw" placeholder="Şifre belirle" autocomplete="new-password">
   <div class="err" id="mgrErr"></div>
-  <div style="display:flex;gap:8px"><button style="flex:1" onclick="saveManager()">Kaydet</button><button class="sec" onclick="document.getElementById('mgrOvl').style.display='none'">Kapat</button></div>
+  <div style="display:flex;gap:8px"><button style="flex:1" onclick="saveManager()">Yönetici ekle</button><button class="sec" onclick="document.getElementById('mgrOvl').style.display='none'">Kapat</button></div>
   <div class="mgrbox" id="mgrCur"></div>
 </div></div>
 <header>
@@ -1211,15 +1213,40 @@ async function srvAddUnit(){ const name=(prompt('Yeni birim adı (örn. Anestezi
   const prof=AsistanScheduler.defaultProfile(); prof.name=name;
   const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'addUnit',name,profile:prof,cfg:null})});
   const j=await r.json(); if(j.ok){ await reloadUnits(); await loadUnit(j.id); flash('Birim eklendi ✓'); } else alert(j.error||'Hata'); }
+/* Bir birimde BİRDEN FAZLA yönetici olabilir. Pencere mevcut yöneticileri
+   listeler; her birinin yanında kaldırma düğmesi vardır. Var olan bir adı
+   tekrar girmek o kişinin ŞİFRESİNİ yeniler (yeni kişi eklemez). */
 function srvAssignManager(){ if(!ACT){alert('Önce bir birim seçin/ekleyin');return;}
-  document.getElementById('mgrUnitName').textContent='Birim: '+ACT.name; document.getElementById('mgrUser').value=''; document.getElementById('mgrPw').value=''; document.getElementById('mgrErr').textContent='';
-  const un=UNITS.find(u=>u.id===ACT.id); document.getElementById('mgrCur').textContent=(un&&un.managers&&un.managers.length)?('Mevcut yönetici: '+un.managers.join(', ')+' (yeni atama eskisini değiştirir)'):'Henüz yönetici atanmadı.';
+  document.getElementById('mgrUnitName').textContent='Birim: '+ACT.name;
+  document.getElementById('mgrUser').value=''; document.getElementById('mgrPw').value=''; document.getElementById('mgrErr').textContent='';
+  renderManagers();
   document.getElementById('mgrOvl').style.display='flex'; odaklaIlkAlan('mgrOvl'); }
+function renderManagers(){
+  const kutu=document.getElementById('mgrCur'); if(!kutu||!ACT) return;
+  const un=UNITS.find(u=>u.id===ACT.id);
+  const liste=(un&&un.managers)||[];
+  kutu.innerHTML=liste.length
+    ? '<div style="margin-bottom:6px">Bu birimin yöneticileri:</div>'+liste.map(u=>
+        `<div class="mgrrow"><span>${escapeHtml(u)}</span>
+         <button class="sm danger" onclick="removeManager('${u.replace(/'/g,"\\'")}')">Kaldır</button></div>`).join('')
+    : 'Henüz yönetici atanmadı.';
+}
 async function saveManager(){ const u=(document.getElementById('mgrUser').value||'').trim(), p=(document.getElementById('mgrPw').value||'').trim();
   const e=document.getElementById('mgrErr'); if(!u||!p){e.textContent='Kullanıcı adı ve şifre gerekli';return;}
   const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'setManager',id:ACT.id,username:u,password:p})});
-  const j=await r.json(); if(j.ok){ document.getElementById('mgrOvl').style.display='none'; await reloadUnits(); flash('Yönetici atandı ✓'); } else e.textContent=j.error||'Hata'; }
-async function srvDelUnit(){ if(!ACT)return; if(!confirm('“'+ACT.name+'” birimi ve yöneticisi kalıcı silinsin mi?'))return;
+  const j=await r.json();
+  if(!j.ok){ e.textContent=j.error||'Hata'; return; }
+  document.getElementById('mgrUser').value=''; document.getElementById('mgrPw').value='';
+  await reloadUnits(); renderManagers();
+  flash(j.guncellendi?('“'+u+'” şifresi yenilendi ✓'):('“'+u+'” yönetici olarak eklendi ✓')); }
+async function removeManager(kullanici){
+  if(!confirm('“'+kullanici+'” bu birimin yöneticiliğinden kaldırılsın mı?\n\nDiğer yöneticiler etkilenmez.')) return;
+  const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),
+    body:JSON.stringify({action:'removeManager',id:ACT.id,username:kullanici})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){ alert(j.error||'Kaldırılamadı'); return; }
+  await reloadUnits(); renderManagers(); flash('Yönetici kaldırıldı'); }
+async function srvDelUnit(){ if(!ACT)return; if(!confirm('“'+ACT.name+'” birimi ve TÜM yöneticileri kalıcı silinsin mi?'))return;
   await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'delUnit',id:ACT.id})});
   await reloadUnits(); if(UNITS.length)await loadUnit(UNITS[0].id); else { ACT=null; document.getElementById('output').innerHTML=''; refreshProfSel(); } flash('Birim silindi'); }
 async function srvRenameUnit(){ if(!ACT)return; const n=(prompt('Birim adı:',ACT.name)||'').trim(); if(!n)return;
