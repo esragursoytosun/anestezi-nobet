@@ -70,8 +70,13 @@ module.exports = async (req, res) => {
         if (b.sil) {
             const i = (un.requests || []).findIndex(t => t.id === b.sil && t.name === ad);
             if (i < 0) return json(res, 404, { error: 'Talep bulunamadı.' });
-            un.requests.splice(i, 1);
-            if (!(await core.saveAsistan(st))) return json(res, 503, { error: 'Kaydedilemedi' });
+            // Atomik $pull — belgenin geri kalanına dokunmaz (bkz. core.unitUpdate)
+            const sonuc = await core.unitUpdate({ 'units.id': un.id },
+                { $pull: { 'units.$.requests': { id: b.sil, name: ad } } });
+            if (sonuc !== true) {                       // dosya modu / düşme-emniyeti
+                un.requests.splice(i, 1);
+                if (!(await core.saveAsistan(st))) return json(res, 503, { error: 'Kaydedilemedi' });
+            }
             return json(res, 200, { ok: true });
         }
 
@@ -93,8 +98,17 @@ module.exports = async (req, res) => {
         if (tur === 'bos-gun' && !kayit.gunler && !kayit.bas) return json(res, 400, { error: 'Gün bilgisi gerekli.' });
         if (tur === 'diger' && !kayit.not) return json(res, 400, { error: 'Lütfen talebinizi yazın.' });
 
-        un.requests.push(kayit);
-        if (!(await core.saveAsistan(st))) return json(res, 503, { error: 'Kaydedilemedi' });
+        /* ATOMİK EKLEME — kritik nokta.
+           Eskiden belge okunup tamamı geri yazılıyordu; iki personel aynı
+           anda gönderdiğinde sonra yazan öncekinin talebini siliyordu (ve
+           araya giren bir yönetici kaydını da geri alabiliyordu). $push
+           yalnızca ilgili diziye ekler, belgenin geri kalanı korunur. */
+        const sonuc = await core.unitUpdate({ 'units.id': un.id },
+            { $push: { 'units.$.requests': kayit } });
+        if (sonuc !== true) {           // dosya modu ya da atomik yol tutmadı → düşme-emniyeti
+            un.requests.push(kayit);
+            if (!(await core.saveAsistan(st))) return json(res, 503, { error: 'Kaydedilemedi' });
+        }
         return json(res, 200, { ok: true, id: kayit.id });
     }
 
