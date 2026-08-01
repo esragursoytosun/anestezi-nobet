@@ -178,6 +178,10 @@
   td.M{background:var(--c-M)} td.NL{background:var(--c-NL)} td.NS{background:var(--c-NS)}
   td.NI{background:var(--c-NI)} td.HT{background:var(--c-HT);color:#94a3b8} td.RT{background:var(--c-RT)}
   td.YI{background:var(--c-YI)} td.UCI{background:var(--c-UCI)} td.OFF{background:var(--c-OFF)}
+  /* Kişi vurgulama: seçili satır öne çıkar, diğerleri geri çekilir */
+  table.grid tbody tr.hl-dim{opacity:.3;transition:opacity .12s}
+  table.grid.hl-on tbody tr.hl-row td{box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
+  table.grid.hl-on tbody tr.hl-row td.name{background:var(--panel2)!important;color:#fff}
   .tot{background:var(--inset);font-weight:600} .tot.bad{color:var(--err)} .tot.good{color:var(--ok)}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:12.5px;color:var(--txt)}
   .legend span{display:inline-flex;align-items:center;gap:6px}
@@ -396,7 +400,7 @@
 
   <!-- ===== PERSONEL ===== -->
   <div class="panel noprint" id="personelPanel">
-    <h2><span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Personel ve Talepler</h2>
+    <h2><span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Personel ve Talepler<input type="text" id="pSearch" oninput="filterPersonnel()" placeholder="İsim ara…" style="margin-left:auto;max-width:190px;font-weight:400"><span id="pSearchInfo" class="savedinfo"></span></h2>
     <div class="pwrap"><div class="pgrid">
       <div class="phead">
         <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Sorumlu</div><div>Kıdemli</div><div>Aya N.İ ile başla</div><div>Haftalık izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün isteği</div><div>Çalışma tercihi</div><div>Sırala / Sil</div>
@@ -404,6 +408,7 @@
       <div id="pbody"></div>
     </div></div>
     <div style="margin-top:10px;display:flex;gap:8px">
+      <div id="capWarn"></div>
       <button class="sec sm" onclick="addPerson()">+ Personel ekle</button>
       <button class="sec sm" onclick="resetNames()">Varsayılan 12 isim</button>
     </div>
@@ -421,6 +426,7 @@
     <button class="sec sm" onclick="toggleBoard()">Adalet panosu</button>
     <button class="sec sm" onclick="toggleWhatif()">What-if</button>
     <label class="chk" style="margin-left:8px"><input type="checkbox" id="showAll" onchange="render(LAST)"> Tüm alternatifleri göster</label>
+    <select id="hlPerson" onchange="applyHighlight()" title="Seçilen kişinin satırı öne çıkar" style="margin-left:8px;max-width:180px"><option value="">Kişi vurgula…</option></select>
     <span id="altInfo" class="muted" style="margin-left:auto;font-size:12px"></span>
   </div>
 
@@ -693,7 +699,7 @@ function showMonth(ym){
       if(iş.length) setTimeout(()=>flash(iş.join(', ')+' → önceki ayın son nöbetçisi, N.İ ile başlatıldı'),60);
     }
   }
-  CUR_YM=ym; updateDateBounds(); captureMonth(); }
+  CUR_YM=ym; updateDateBounds(); captureMonth(); scheduleCapWarn(); }
 function persistMonths(){ if(SRV.on)return; try{ localStorage.setItem('asistan_months',JSON.stringify({cur:CUR_YM,data:MONTHS_DATA})); }catch(e){} }
 function onPeriodChange(){ captureMonth(); showMonth(ymNow()); generate(); }   // generate -> (yerel) saveAll kaydeder
 
@@ -709,9 +715,28 @@ let DIRTY=false;
 function markDirty(){ DIRTY=true; }
 function clearDirty(){ DIRTY=false; }
 ['input','change'].forEach(ev=>document.addEventListener(ev,e=>{
-  const t=e.target; if(!t||t.id==='showAll') return;                 // görünüm anahtarı sayılmaz
-  if(t.closest('#rulePanel,#pbody,#monthPanel')) markDirty();
+  const t=e.target; if(!t||t.id==='showAll'||t.id==='hlPerson'||t.id==='pSearch') return;   // görünüm kontrolleri sayılmaz
+  if(t.closest('#rulePanel,#pbody,#monthPanel')){ markDirty(); scheduleCapWarn(); }
 },true));
+
+/* ===== KLAVYE =====
+   Pencerelerde Escape ile kapatma yoktu; klavyeyle çalışan fareye uzanmak
+   zorunda kalıyordu. Giriş penceresi bilerek kapatılamaz (kapatılırsa
+   arkada boş, kullanılamaz bir ekran kalırdı). */
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  const acik=[...document.querySelectorAll('.ovl')]
+    .filter(o=>o.id!=='loginOvl' && getComputedStyle(o).display!=='none');
+  if(acik.length){ acik[acik.length-1].style.display='none'; e.preventDefault(); return; }
+  // Pencere yoksa: açık düzenleme bölümünü kapat
+  const duz=document.getElementById('ruleEdit');
+  if(duz && getComputedStyle(duz).display!=='none'){ toggleRuleEdit(); e.preventDefault(); }
+});
+/** Pencere açılınca ilk alana odaklan (klavyeyle akış bozulmasın). */
+function odaklaIlkAlan(kutuId){
+  const k=document.getElementById(kutuId); if(!k) return;
+  setTimeout(()=>{ const i=k.querySelector('input,select,textarea'); if(i)i.focus(); },30);
+}
 window.addEventListener('beforeunload',e=>{ if(!DIRTY) return; e.preventDefault(); e.returnValue=''; });
 
 /* Son kaydeden bilgisi — ortak kullanılan araçta "benim değişiklik gitti mi"
@@ -807,8 +832,11 @@ function diagnose(r){
   return `<div class="warns" style="background:#0b2030;border-color:#1e3a5f;color:#dbeafe"><b>🔍 Durum ve öneriler</b><ul style="margin:6px 0 0;padding-left:18px">`
     +items.map(it=>`<li style="margin-bottom:5px">${it[0]}<br><span style="color:#93c5fd;font-size:12px">${it[1]}</span></li>`).join('')+`</ul></div>`;
 }
-// ===== AKILLI ÖN-KONTROL: üretmeden önce yapısal imkânsızlığı yakala =====
-function precheckHtml(cfg){
+/* ===== KAPASİTE TARAMASI — TEK KAYNAK =====
+   Hangi günlerde nöbet için yeterli kişi kalmadığını hesaplar. Hem üretim
+   sonrası ön-kontrol (precheckHtml) hem de izin girerken çıkan CANLI uyarı
+   aynı hesabı kullanır; iki yerde ayrı mantık olmasın. */
+function scanCoverage(cfg){
   const P=cfg.profile, y=cfg.year, m=cfg.month, nD=AsistanScheduler.daysInMonth(y,m);
   const hol=new Set(cfg.holidays||[]); const bad=[];
   for(let d=1;d<=nD;d++){
@@ -825,6 +853,47 @@ function precheckHtml(cfg){
     });
     if(avail<need) bad.push({d, need, avail, busy});
   }
+  return bad;
+}
+
+/* ===== İZİN ÇAKIŞMASI — CANLI UYARI =====
+   Eskiden sorun ancak "Liste Oluştur"dan SONRA görülüyordu. Artık izin
+   girerken anında uyarır: hangi günlerde kaç kişi eksik kalıyor. */
+let capWarnTimer=null;
+function scheduleCapWarn(){ clearTimeout(capWarnTimer); capWarnTimer=setTimeout(renderCapWarn,350); }
+function gunAraliklari(gunler){                     // [1,2,3,7] -> [[1,3],[7,7]]
+  const out=[]; let bas=null, onc=null;
+  gunler.slice().sort((a,b)=>a-b).forEach(g=>{
+    if(bas===null){ bas=onc=g; return; }
+    if(g===onc+1){ onc=g; return; }
+    out.push([bas,onc]); bas=onc=g;
+  });
+  if(bas!==null) out.push([bas,onc]);
+  return out;
+}
+function renderCapWarn(){
+  const kutu=document.getElementById('capWarn'); if(!kutu) return;
+  let bad=[];
+  try{ bad=scanCoverage(readCfg()); }catch(e){ kutu.innerHTML=''; return; }
+  if(!bad.length){ kutu.innerHTML=''; return; }
+  const ay=MONTHS[parseInt(document.getElementById('month').value,10)]||'';
+  const kisiler=new Set(); bad.forEach(x=>x.busy.forEach(b=>kisiler.add(b)));
+  const satirlar=gunAraliklari(bad.map(x=>x.d)).map(([a,b])=>{
+    const ilgili=bad.filter(x=>x.d>=a&&x.d<=b);
+    const enAz=Math.min(...ilgili.map(x=>x.avail)), ger=ilgili[0].need;
+    return `<li><b>${a===b?(a+' '+ay):(a+'–'+b+' '+ay)}</b>: ${ger} nöbetçi gerekiyor, en az <b>${enAz}</b> kişi müsait</li>`;
+  }).join('');
+  kutu.innerHTML=`<div class="warns" style="margin:12px 0 0">
+    <b>Kapasite uyarısı</b> — bu izin/talep dağılımıyla bazı günler açıkta kalıyor:
+    <ul style="margin:6px 0 0;padding-left:18px">${satirlar}</ul>
+    ${kisiler.size?`<div class="muted" style="margin-top:6px;font-size:11.5px">Uygun olmayanlar: ${[...kisiler].join(', ')}</div>`:''}
+  </div>`;
+}
+
+// ===== AKILLI ÖN-KONTROL: üretmeden önce yapısal imkânsızlığı yakala =====
+function precheckHtml(cfg){
+  const y=cfg.year, m=cfg.month;
+  const bad=scanCoverage(cfg);
   if(!bad.length) return '';
   const DOWs=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
   const rows=bad.slice(0,10).map(x=>{ const w=new Date(y,m,x.d).getDay();
@@ -940,6 +1009,47 @@ function render(r){
     h+=gridHtml(r);
   }
   h+=`</div>`; out.innerHTML=h;
+  refreshHighlightList(); applyHighlight();     // ızgara yeniden çizildi → vurgu geri uygulansın
+}
+
+/* ===== KİŞİ VURGULAMA =====
+   31 sütunluk ızgarada insan kendi satırını gözle arıyordu. Seçilen kişinin
+   satırı öne çıkar, diğerleri soluklaşır. Izgara her yeniden çizildiğinde
+   (alternatif değişimi, hücre düzenleme) vurgu kendiliğinden geri gelir. */
+function refreshHighlightList(){
+  const sel=document.getElementById('hlPerson'); if(!sel) return;
+  const secili=sel.value;
+  const adlar=(LAST&&LAST.totals?LAST.totals.map(t=>t.name):[]);
+  sel.innerHTML='<option value="">Kişi vurgula…</option>'+
+    adlar.map(a=>`<option value="${a.replace(/"/g,'&quot;')}">${escapeHtml(a)}</option>`).join('');
+  if(adlar.indexOf(secili)>=0) sel.value=secili;
+}
+function applyHighlight(){
+  const sel=document.getElementById('hlPerson'); const ad=sel?sel.value:'';
+  const tablo=document.querySelector('#output table.grid'); if(!tablo) return;
+  tablo.classList.toggle('hl-on', !!ad);
+  tablo.querySelectorAll('tbody tr').forEach(tr=>{
+    // Özet satırları (Gündüz / Nöbetçi) hep okunur kalsın: onlarda gün hücresi yok
+    const personel=!!tr.querySelector('td[data-d]');
+    const isim=(tr.querySelector('td.name')||{}).textContent||'';
+    const eslesme=!!ad && isim.trim().indexOf(ad)===0;
+    tr.classList.toggle('hl-row', eslesme);
+    tr.classList.toggle('hl-dim', !!ad && personel && !eslesme);
+  });
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ===== PERSONEL ARAMA =====
+   20+ kişilik listede izin girerken kişiyi bulmak yoruyordu. */
+function filterPersonnel(){
+  const q=(document.getElementById('pSearch').value||'').trim().toLocaleLowerCase('tr');
+  let gorunen=0;
+  document.querySelectorAll('#pbody .prow').forEach(r=>{
+    const ad=((r.querySelector('.p-name')||{}).value||'').toLocaleLowerCase('tr');
+    const uy=!q||ad.indexOf(q)>=0; r.style.display=uy?'':'none'; if(uy)gorunen++;
+  });
+  const bilgi=document.getElementById('pSearchInfo');
+  if(bilgi) bilgi.textContent=q?(gorunen+' kişi gösteriliyor'):'';
 }
 const EDIT_CODES=['M','NL','NS','NI','UCI','YI','HT','RT','OFF',''];
 function editCell(td){ if(!LAST||td.querySelector('select'))return;
@@ -1023,7 +1133,7 @@ async function srvAddUnit(){ const name=(prompt('Yeni birim adı (örn. Anestezi
 function srvAssignManager(){ if(!ACT){alert('Önce bir birim seçin/ekleyin');return;}
   document.getElementById('mgrUnitName').textContent='Birim: '+ACT.name; document.getElementById('mgrUser').value=''; document.getElementById('mgrPw').value=''; document.getElementById('mgrErr').textContent='';
   const un=UNITS.find(u=>u.id===ACT.id); document.getElementById('mgrCur').textContent=(un&&un.managers&&un.managers.length)?('Mevcut yönetici: '+un.managers.join(', ')+' (yeni atama eskisini değiştirir)'):'Henüz yönetici atanmadı.';
-  document.getElementById('mgrOvl').style.display='flex'; }
+  document.getElementById('mgrOvl').style.display='flex'; odaklaIlkAlan('mgrOvl'); }
 async function saveManager(){ const u=(document.getElementById('mgrUser').value||'').trim(), p=(document.getElementById('mgrPw').value||'').trim();
   const e=document.getElementById('mgrErr'); if(!u||!p){e.textContent='Kullanıcı adı ve şifre gerekli';return;}
   const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'setManager',id:ACT.id,username:u,password:p})});
