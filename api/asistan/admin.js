@@ -10,7 +10,7 @@ const core = require('../../lib/core');
 const { json, ensureStorage } = require('../../lib/http');
 
 // Birim yöneticisinin KENDİ biriminde yapabildiği işlemler
-const YONETICI_ISLEMLERI = ['reqTokens', 'reqOpen', 'reqDelete', 'reqRotate'];
+const YONETICI_ISLEMLERI = ['reqTokens', 'reqOpen', 'reqDelete', 'reqRotate', 'reqMark'];
 
 module.exports = async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method' });
@@ -99,6 +99,19 @@ module.exports = async (req, res) => {
         un.reqOpen = !!b.acik;
         if (b.ay !== undefined) un.reqMonth = b.ay || null;
         return persist({ ok: true, reqOpen: un.reqOpen, reqMonth: un.reqMonth || null });
+    }
+    /* Talebi "işlendi/işlenmedi" olarak işaretler. Talep plana YİNE
+       otomatik işlenmez; bu yalnızca yöneticinin neyi değerlendirdiğini
+       takip etmesi içindir (30 talep arasında kaybolmasın). */
+    if (b.action === 'reqMark') {
+        const un = st.units.find(x => x.id === b.id);
+        if (!un) return json(res, 404, { error: 'birim yok' });
+        const t = (un.requests || []).find(x => x.id === b.reqId);
+        if (!t) return json(res, 404, { error: 'Talep bulunamadı' });
+        t.islendi = !!b.islendi;
+        t.islendiBy = t.islendi ? me.u : null;
+        t.islendiAt = t.islendi ? new Date().toISOString() : null;
+        return persist({ ok: true, islendi: t.islendi, islendiBy: t.islendiBy, islendiAt: t.islendiAt });
     }
     if (b.action === 'reqDelete') {
         const un = st.units.find(x => x.id === b.id);

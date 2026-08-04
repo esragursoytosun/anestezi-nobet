@@ -116,6 +116,15 @@
   .reqrow{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border:1px solid var(--line);
     border-radius:8px;background:var(--inset);margin-bottom:8px}
   .reqmain{flex:1;min-width:0} .reqmeta{font-size:11.5px;color:var(--muted);white-space:nowrap}
+  .reqmonth{border:1px solid var(--line2);border-radius:8px;margin-bottom:12px;overflow:hidden}
+  .reqmonth-h{display:flex;align-items:center;gap:10px;background:var(--panel2);padding:9px 12px;font-size:13px;flex-wrap:wrap}
+  .reqperson{padding:10px 12px;border-top:1px solid var(--line)}
+  .reqperson-h{font-size:12.5px;font-weight:600;color:var(--txt);margin-bottom:7px;display:flex;align-items:center;gap:7px}
+  .reqcnt{font-size:11px;color:var(--muted);border:1px solid var(--line2);border-radius:10px;padding:1px 8px;font-weight:500}
+  .reqcnt.bekliyor{color:#e3b341;border-color:rgba(210,153,34,.45);background:rgba(210,153,34,.1)}
+  .reqrow.islendi{opacity:.62}
+  .reqok{font-size:11px;color:#7ee787;border:1px solid rgba(46,160,67,.4);background:rgba(35,134,54,.12);
+    border-radius:4px;padding:1px 6px;margin-left:6px}
   .reqtag{font-size:11px;color:var(--muted);border:1px solid var(--line2);border-radius:4px;padding:1px 6px;margin-left:6px}
   .reqdet{font-size:12.5px;color:var(--txt);margin-top:3px}
   .reqnot{font-size:12px;color:var(--muted);margin-top:3px}
@@ -453,6 +462,7 @@
       <span id="reqCount" class="savedinfo"></span>
       <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
         <button class="sm sec" id="reqLinksBtn" onclick="reqMakeLinks()">Talep linkleri</button>
+        <button class="sm sec" id="reqMonthBtn" onclick="reqSetMonth()">Talep ayı</button>
         <button class="sm sec" id="reqOpenBtn" onclick="reqToggleOpen()">Talep dönemi</button>
       </span>
     </h2>
@@ -1250,7 +1260,7 @@ async function loadUnit(id){ try{ const r=await fetch('/api/asistan/unit?id='+en
     ACT={id:un.id,name:un.name,profile:un.profile||AsistanScheduler.defaultProfile(),cfg:un.cfg||null,
          rev:un.rev||0,savedAt:un.savedAt||null,savedBy:un.savedBy||null};
     fillRuleForm(); applyCfgServer(ACT.cfg); refreshProfSel(); generate();
-    ACT.requests=un.requests||[]; ACT.reqOpen=un.reqOpen!==false; ACT.reqTokens=un.reqTokens||{};
+    ACT.requests=un.requests||[]; ACT.reqOpen=un.reqOpen!==false; ACT.reqTokens=un.reqTokens||{}; ACT.reqMonth=un.reqMonth||null;
     renderSavedInfo(); renderRequests(); clearDirty();     // taze yüklendi → kirli değil
   }catch(e){ flash('Birim yüklenemedi'); } }
 // Admin işlemleri
@@ -1314,22 +1324,62 @@ function renderRequests(){
   const acik=ACT.reqOpen!==false;
   btn.textContent='Talep dönemi: '+(acik?'AÇIK':'KAPALI');
   btn.classList.toggle('danger',!acik);
+  const ayBtn=document.getElementById('reqMonthBtn');
+  if(ayBtn) ayBtn.textContent='Talep ayı: '+(ACT.reqMonth?ayEtiketi(ACT.reqMonth):'seçilmedi');
   const kutu=document.getElementById('reqList');
   if(!list.length){ kutu.innerHTML='<div class="note">Henüz talep gelmedi.</div>'; return; }
-  kutu.innerHTML=list.slice().reverse().map(t=>{
-    const ayrinti=t.tur==='yillik-izin'
-      ? (trTarih(t.bas)+(t.bit?(' – '+trTarih(t.bit)):''))
-      : (t.gunler?('Günler: '+escapeHtml(t.gunler)):'');
-    return `<div class="reqrow">
-      <div class="reqmain">
-        <div><b>${escapeHtml(t.name)}</b> <span class="reqtag">${TALEP_ADI[t.tur]||t.tur}</span></div>
-        ${ayrinti?`<div class="reqdet">${escapeHtml(ayrinti)}</div>`:''}
-        ${t.not?`<div class="reqnot">${escapeHtml(t.not)}</div>`:''}
-      </div>
-      <div class="reqmeta">${fmtSaved(t.at)}</div>
-      <button class="sm danger" onclick="reqDelete('${t.id}')">Sil</button>
+
+  /* GRUPLAMA: önce AY, sonra KİŞİ.
+     Eskiden hepsi tek düz liste halindeydi; hangi talebin hangi ay için
+     olduğu ve bir kişinin kaç isteği bulunduğu görünmüyordu. */
+  const aylar={};
+  list.forEach(t=>{ const a=t.ay||'?'; (aylar[a]=aylar[a]||[]).push(t); });
+  const ayAdi=a=>{ if(a==='?') return 'Ay belirtilmemiş (eski talepler)';
+    const p=String(a).split('-'); return (MONTHS[+p[1]]||'?')+' '+p[0]; };
+  // En yeni ay üstte; belirtilmemişler en altta
+  const sira=Object.keys(aylar).sort((x,y)=> x==='?'?1 : y==='?'?-1 : (x<y?1:-1));
+
+  kutu.innerHTML=sira.map(a=>{
+    const grup=aylar[a];
+    const bekleyen=grup.filter(t=>!t.islendi).length;
+    // Ay içinde KİŞİ bazında topla
+    const kisiler={}; grup.forEach(t=>{ (kisiler[t.name]=kisiler[t.name]||[]).push(t); });
+    const govde=Object.keys(kisiler).sort((x,y)=>x.localeCompare(y,'tr')).map(ad=>{
+      const talepler=kisiler[ad].slice().sort((x,y)=>(x.at<y.at?1:-1));
+      return `<div class="reqperson">
+        <div class="reqperson-h">${escapeHtml(ad)}<span class="reqcnt">${talepler.length}</span></div>
+        ${talepler.map(t=>{
+          const ayrinti=t.tur==='yillik-izin'
+            ? (trTarih(t.bas)+(t.bit?(' – '+trTarih(t.bit)):''))
+            : (t.gunler?('Günler: '+escapeHtml(t.gunler)):'');
+          return `<div class="reqrow${t.islendi?' islendi':''}">
+            <div class="reqmain">
+              <div><span class="reqtag">${TALEP_ADI[t.tur]||t.tur}</span>
+                ${t.islendi?`<span class="reqok">işlendi${t.islendiBy?' · '+escapeHtml(t.islendiBy):''}</span>`:''}</div>
+              ${ayrinti?`<div class="reqdet">${escapeHtml(ayrinti)}</div>`:''}
+              ${t.not?`<div class="reqnot">${escapeHtml(t.not)}</div>`:''}
+            </div>
+            <div class="reqmeta">${fmtSaved(t.at)}</div>
+            <button class="sm sec" onclick="reqMark('${t.id}',${t.islendi?'false':'true'})">${t.islendi?'Geri al':'İşlendi'}</button>
+            <button class="sm danger" onclick="reqDelete('${t.id}')">Sil</button>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('');
+    return `<div class="reqmonth">
+      <div class="reqmonth-h"><b>${escapeHtml(ayAdi(a))}</b>
+        <span class="reqcnt${bekleyen?' bekliyor':''}">${bekleyen?bekleyen+' bekliyor':'hepsi işlendi'}</span>
+        <span class="reqmeta" style="margin-left:auto">${grup.length} talep</span></div>
+      ${govde}
     </div>`;
   }).join('');
+}
+async function reqMark(id,islendi){
+  const j=await reqPost({action:'reqMark',reqId:id,islendi:islendi});
+  if(!j) return;
+  const t=(ACT.requests||[]).find(x=>x.id===id);
+  if(t){ t.islendi=j.islendi; t.islendiBy=j.islendiBy; t.islendiAt=j.islendiAt; }
+  renderRequests(); flash(j.islendi?'İşlendi olarak işaretlendi':'İşareti kaldırıldı');
 }
 async function reqPost(govde){
   const r=await fetch('/api/asistan/admin',{method:'POST',headers:asHeaders({'Content-Type':'application/json'}),
@@ -1343,6 +1393,22 @@ async function reqDelete(id){
   if(await reqPost({action:'reqDelete',reqId:id})){
     ACT.requests=(ACT.requests||[]).filter(t=>t.id!==id); renderRequests(); flash('Talep silindi');
   }
+}
+/* Yönetici "hangi ay için talep topluyorum" diye ilan eder; personelin
+   formunda o ay hazır seçili gelir. Böylece "5,12" gibi gün numaraları
+   hangi aya ait, baştan belli olur. */
+async function reqSetMonth(){
+  const simdi=ACT.reqMonth||ymNow();
+  const secenekler=[]; const now=new Date(); let y=now.getFullYear(), m=now.getMonth();
+  for(let i=0;i<6;i++){ secenekler.push(y+'-'+m); m++; if(m>11){m=0;y++;} }
+  const metin=secenekler.map((a,i)=>(i+1)+') '+ayEtiketi(a)).join('\n');
+  const cevap=prompt('Talepler hangi ay için toplansın?\n\n'+metin+
+    '\n\nNumara yazın (boş bırakırsanız değişmez).\nŞu anki: '+(ACT.reqMonth?ayEtiketi(ACT.reqMonth):'belirtilmemiş'),'');
+  if(cevap===null||!cevap.trim()) return;
+  const i=parseInt(cevap,10)-1;
+  if(isNaN(i)||i<0||i>=secenekler.length){ alert('Geçersiz numara.'); return; }
+  const j=await reqPost({action:'reqOpen',acik:ACT.reqOpen!==false,ay:secenekler[i]});
+  if(j){ ACT.reqMonth=j.reqMonth; renderRequests(); flash('Talep ayı: '+ayEtiketi(j.reqMonth)); }
 }
 async function reqToggleOpen(){
   const yeni=!(ACT.reqOpen!==false);
@@ -1426,6 +1492,9 @@ async function talepSayfasi(token){
           kesinleşip kesinleşmediğini yayımlanan nöbet listesinden takip edin.
           Yanlış gönderdiyseniz aşağıdan <b>Geri al</b> diyebilirsiniz.</div>
         <div class="row" style="align-items:flex-start">
+          <div class="fld"><label>Hangi ay için?</label>
+            <select id="tAy">${ayListesi(j.ay)}</select>
+            <span class="hint">Gün numaraları bu aya göre yazılır</span></div>
           <div class="fld"><label>Talep türü</label>
             <select id="tTur" onchange="talepAlanlar()">
               <option value="yillik-izin">Yıllık izin talebi</option>
@@ -1448,7 +1517,7 @@ async function talepSayfasi(token){
         <h2>Gönderdiğim talepler</h2>
         ${(j.taleplerim||[]).length?(j.taleplerim.slice().reverse().map(t=>`
           <div class="reqrow"><div class="reqmain">
-            <div><b>${TALEP_ADI[t.tur]||t.tur}</b></div>
+            <div><b>${TALEP_ADI[t.tur]||t.tur}</b>${t.ay?` <span class="reqtag">${escapeHtml(ayEtiketi(t.ay))}</span>`:''}</div>
             ${t.bas?`<div class="reqdet">${escapeHtml(trTarih(t.bas)+(t.bit?(' – '+trTarih(t.bit)):''))}</div>`:''}
             ${t.gunler?`<div class="reqdet">Günler: ${escapeHtml(t.gunler)}</div>`:''}
             ${t.not?`<div class="reqnot">${escapeHtml(t.not)}</div>`:''}
@@ -1461,6 +1530,16 @@ async function talepSayfasi(token){
   window.__talepToken=token;
   await ciz();
 }
+/* Ay anahtari 'YYYY-M' (ay 0 tabanli) — MONTHS_DATA ile ayni bicim. */
+function ayEtiketi(a){ if(!a) return ''; const p=String(a).split('-'); return (MONTHS[+p[1]]||'?')+' '+p[0]; }
+function ayListesi(varsayilan){
+  const now=new Date(); let y=now.getFullYear(), m=now.getMonth();
+  const secenekler=[];
+  for(let i=0;i<6;i++){ const anahtar=y+'-'+m; secenekler.push({v:anahtar,t:ayEtiketi(anahtar)}); m++; if(m>11){m=0;y++;} }
+  if(varsayilan && !secenekler.some(x=>x.v===varsayilan)) secenekler.unshift({v:varsayilan,t:ayEtiketi(varsayilan)});
+  const sec=varsayilan||secenekler[0].v;
+  return secenekler.map(x=>`<option value="${x.v}"${x.v===sec?' selected':''}>${x.t}</option>`).join('');
+}
 function talepAlanlar(){
   const t=document.getElementById('tTur').value;
   document.getElementById('tTarihler').style.display=(t==='yillik-izin')?'':'none';
@@ -1468,6 +1547,7 @@ function talepAlanlar(){
 }
 async function talepGonder(){
   const g={ tur:document.getElementById('tTur').value,
+    ay:(document.getElementById('tAy')||{}).value||null,
     bas:(document.getElementById('tBas')||{}).value||null,
     bit:(document.getElementById('tBit')||{}).value||null,
     gunler:(document.getElementById('tGun')||{}).value||'',
