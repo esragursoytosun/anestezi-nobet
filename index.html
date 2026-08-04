@@ -116,6 +116,8 @@
   .reqrow{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border:1px solid var(--line);
     border-radius:8px;background:var(--inset);margin-bottom:8px}
   .reqmain{flex:1;min-width:0} .reqmeta{font-size:11.5px;color:var(--muted);white-space:nowrap}
+  .reqmonthpick{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);font-weight:500}
+  .reqmonthpick select{font-size:12.5px;padding:5px 8px}
   .reqmonth{border:1px solid var(--line2);border-radius:8px;margin-bottom:12px;overflow:hidden}
   .reqmonth-h{display:flex;align-items:center;gap:10px;background:var(--panel2);padding:9px 12px;font-size:13px;flex-wrap:wrap}
   .reqperson{padding:10px 12px;border-top:1px solid var(--line)}
@@ -462,7 +464,8 @@
       <span id="reqCount" class="savedinfo"></span>
       <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
         <button class="sm sec" id="reqLinksBtn" onclick="reqMakeLinks()">Talep linkleri</button>
-        <button class="sm sec" id="reqMonthBtn" onclick="reqSetMonth()">Talep ayı</button>
+        <label class="reqmonthpick">Talep ayı
+          <select id="reqMonthSel" onchange="reqSetMonth(this.value)"></select></label>
         <button class="sm sec" id="reqOpenBtn" onclick="reqToggleOpen()">Talep dönemi</button>
       </span>
     </h2>
@@ -1324,8 +1327,8 @@ function renderRequests(){
   const acik=ACT.reqOpen!==false;
   btn.textContent='Talep dönemi: '+(acik?'AÇIK':'KAPALI');
   btn.classList.toggle('danger',!acik);
-  const ayBtn=document.getElementById('reqMonthBtn');
-  if(ayBtn) ayBtn.textContent='Talep ayı: '+(ACT.reqMonth?ayEtiketi(ACT.reqMonth):'seçilmedi');
+  const aySel=document.getElementById('reqMonthSel');
+  if(aySel) aySel.innerHTML=ayListesi(ACT.reqMonth);
   const kutu=document.getElementById('reqList');
   if(!list.length){ kutu.innerHTML='<div class="note">Henüz talep gelmedi.</div>'; return; }
 
@@ -1396,19 +1399,14 @@ async function reqDelete(id){
 }
 /* Yönetici "hangi ay için talep topluyorum" diye ilan eder; personelin
    formunda o ay hazır seçili gelir. Böylece "5,12" gibi gün numaraları
-   hangi aya ait, baştan belli olur. */
-async function reqSetMonth(){
-  const simdi=ACT.reqMonth||ymNow();
-  const secenekler=[]; const now=new Date(); let y=now.getFullYear(), m=now.getMonth();
-  for(let i=0;i<6;i++){ secenekler.push(y+'-'+m); m++; if(m>11){m=0;y++;} }
-  const metin=secenekler.map((a,i)=>(i+1)+') '+ayEtiketi(a)).join('\n');
-  const cevap=prompt('Talepler hangi ay için toplansın?\n\n'+metin+
-    '\n\nNumara yazın (boş bırakırsanız değişmez).\nŞu anki: '+(ACT.reqMonth?ayEtiketi(ACT.reqMonth):'belirtilmemiş'),'');
-  if(cevap===null||!cevap.trim()) return;
-  const i=parseInt(cevap,10)-1;
-  if(isNaN(i)||i<0||i>=secenekler.length){ alert('Geçersiz numara.'); return; }
-  const j=await reqPost({action:'reqOpen',acik:ACT.reqOpen!==false,ay:secenekler[i]});
-  if(j){ ACT.reqMonth=j.reqMonth; renderRequests(); flash('Talep ayı: '+ayEtiketi(j.reqMonth)); }
+   hangi aya ait, baştan belli olur. Seçim anında kaydedilir. */
+async function reqSetMonth(ay){
+  if(!ay) return;
+  const onceki=ACT.reqMonth;
+  const j=await reqPost({action:'reqOpen',acik:ACT.reqOpen!==false,ay:ay});
+  if(!j){ const s=document.getElementById('reqMonthSel'); if(s&&onceki) s.value=onceki; return; }
+  ACT.reqMonth=j.reqMonth; renderRequests();
+  flash('Talepler artık '+ayEtiketi(j.reqMonth)+' için toplanıyor');
 }
 async function reqToggleOpen(){
   const yeni=!(ACT.reqOpen!==false);
