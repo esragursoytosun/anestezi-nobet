@@ -464,12 +464,14 @@
       <span id="reqCount" class="savedinfo"></span>
       <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
         <button class="sm sec" id="reqLinksBtn" onclick="reqMakeLinks()">Talep linkleri</button>
-        <label class="reqmonthpick">Talep ayı
-          <select id="reqMonthSel" onchange="reqSetMonth(this.value)"></select></label>
+        <label class="reqmonthpick">Talep dönemi
+          <select id="reqMonthSel" onchange="reqSetMonth()"></select>
+          <select id="reqYearSel" onchange="reqSetMonth()"></select></label>
         <button class="sm sec" id="reqOpenBtn" onclick="reqToggleOpen()">Talep dönemi</button>
       </span>
     </h2>
-    <p class="help">Personelin gönderdiği istekler burada birikir. <b>Plana otomatik işlenmez</b> — okuyup uygun gördüğünüzü personel tablosuna kendiniz girersiniz.</p>
+    <p class="help">Personelin gönderdiği istekler burada birikir. <b>Plana otomatik işlenmez</b> — okuyup uygun gördüğünüzü personel tablosuna kendiniz girersiniz.
+      Talepler <b>ay ay saklanır</b>: yukarıdaki dönemi değiştirmek eski ayların taleplerini silmez, hepsi aşağıda kendi kutusunda durmaya devam eder. Bir talep yalnızca siz <b>Sil</b> derseniz kaybolur.</p>
     <div id="reqLinks" style="display:none;margin-bottom:14px"></div>
     <div id="reqList"></div>
     <div class="reqhelp">
@@ -1325,10 +1327,9 @@ function renderRequests(){
   document.getElementById('reqCount').textContent=list.length?(list.length+' talep'):'talep yok';
   const btn=document.getElementById('reqOpenBtn');
   const acik=ACT.reqOpen!==false;
-  btn.textContent='Talep dönemi: '+(acik?'AÇIK':'KAPALI');
+  btn.textContent='Talep alımı: '+(acik?'AÇIK':'KAPALI');
   btn.classList.toggle('danger',!acik);
-  const aySel=document.getElementById('reqMonthSel');
-  if(aySel) aySel.innerHTML=ayListesi(ACT.reqMonth);
+  reqMonthPickerDoldur();
   const kutu=document.getElementById('reqList');
   if(!list.length){ kutu.innerHTML='<div class="note">Henüz talep gelmedi.</div>'; return; }
 
@@ -1400,13 +1401,29 @@ async function reqDelete(id){
 /* Yönetici "hangi ay için talep topluyorum" diye ilan eder; personelin
    formunda o ay hazır seçili gelir. Böylece "5,12" gibi gün numaraları
    hangi aya ait, baştan belli olur. Seçim anında kaydedilir. */
-async function reqSetMonth(ay){
-  if(!ay) return;
+async function reqSetMonth(){
+  const ms=document.getElementById('reqMonthSel'), ys=document.getElementById('reqYearSel');
+  if(!ms||!ys) return;
+  const ay=ys.value+'-'+ms.value;
+  if(ay===ACT.reqMonth) return;
   const onceki=ACT.reqMonth;
   const j=await reqPost({action:'reqOpen',acik:ACT.reqOpen!==false,ay:ay});
-  if(!j){ const s=document.getElementById('reqMonthSel'); if(s&&onceki) s.value=onceki; return; }
+  if(!j){ if(onceki){ const p=onceki.split('-'); ys.value=p[0]; ms.value=p[1]; } return; }
   ACT.reqMonth=j.reqMonth; renderRequests();
   flash('Talepler artık '+ayEtiketi(j.reqMonth)+' için toplanıyor');
+}
+/** Ay + yıl kutularını doldurur. Yıl aralığı: geçen yıldan 2 yıl sonrasına. */
+function reqMonthPickerDoldur(){
+  const ms=document.getElementById('reqMonthSel'), ys=document.getElementById('reqYearSel');
+  if(!ms||!ys) return;
+  const simdi=new Date();
+  const secili=ACT&&ACT.reqMonth?ACT.reqMonth.split('-'):[String(simdi.getFullYear()),String(simdi.getMonth())];
+  ms.innerHTML=MONTHS.map((ad,i)=>`<option value="${i}"${String(i)===secili[1]?' selected':''}>${ad}</option>`).join('');
+  const y0=simdi.getFullYear()-1, yillar=[];
+  for(let y=y0;y<=y0+3;y++) yillar.push(y);
+  if(yillar.indexOf(+secili[0])<0) yillar.push(+secili[0]);
+  yillar.sort((a,b)=>a-b);
+  ys.innerHTML=yillar.map(y=>`<option value="${y}"${String(y)===secili[0]?' selected':''}>${y}</option>`).join('');
 }
 async function reqToggleOpen(){
   const yeni=!(ACT.reqOpen!==false);
@@ -1533,7 +1550,7 @@ function ayEtiketi(a){ if(!a) return ''; const p=String(a).split('-'); return (M
 function ayListesi(varsayilan){
   const now=new Date(); let y=now.getFullYear(), m=now.getMonth();
   const secenekler=[];
-  for(let i=0;i<6;i++){ const anahtar=y+'-'+m; secenekler.push({v:anahtar,t:ayEtiketi(anahtar)}); m++; if(m>11){m=0;y++;} }
+  for(let i=0;i<12;i++){ const anahtar=y+'-'+m; secenekler.push({v:anahtar,t:ayEtiketi(anahtar)}); m++; if(m>11){m=0;y++;} }
   if(varsayilan && !secenekler.some(x=>x.v===varsayilan)) secenekler.unshift({v:varsayilan,t:ayEtiketi(varsayilan)});
   const sec=varsayilan||secenekler[0].v;
   return secenekler.map(x=>`<option value="${x.v}"${x.v===sec?' selected':''}>${x.t}</option>`).join('');
