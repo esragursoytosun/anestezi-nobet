@@ -131,6 +131,9 @@
     gunduzDenge:         4, ekstraGun:      8
   };
 
+  // Set ya da dizi -> dizi (analiz hem motor içinden Set'le hem recompute'tan diziyle çağrılır)
+  function toArr(x) { if (!x) return []; if (Array.isArray(x)) return x; var r = []; x.forEach(function (v) { r.push(v); }); return r; }
+
   // ===== ANALİZ (tek doğruluk kaynağı) =====
   function analyze(grid, plist, daysArr, nDays, P) {
     var HOURS = hoursMap(P), warnings = [];
@@ -166,9 +169,22 @@
         else if (daysArr[d2 - 1].workday && (c2 === 'NI' || c2 === 'UCI') && !locked[d2]) { run++; if (run > best) best = run; }
       }
       if (best > P.maxConsecutiveOff) warnings.push((p.onlyNobet ? '💡 ' : '') + p.name + ': ' + best + ' iş günü üst üste izinli/boşta' + (p.onlyNobet ? ' (sadece nöbet — mesai yazılmadığı için doğal).' : ' (en fazla ' + P.maxConsecutiveOff + ' olmalı).'));
+      /* ÇELİŞKİLİ GİRİŞ: aynı kişiye aynı gün için hem nöbet isteği hem boş
+         gün girilmiş. Eskiden öncelik sırasındaki üstteki SESSİZCE kazanıyor,
+         kaybeden istek iz bırakmadan yok oluyordu (üstelik noteReq bu duruma
+         yanlışlıkla "kadro dolu" diyordu). Artık hangisinin uygulandığı açıkça
+         söylenir; noteReq bu günleri atlar (çifte uyarı olmasın). */
+      var offSet = {}; toArr(p.offReq).forEach(function (x) { offSet[x] = 1; });
+      function celiski(list, lbl) { toArr(list).forEach(function (dn) {
+        if (!offSet[dn]) return;
+        var uygulanan = isOncall(a[dn] || '') ? lbl + ' isteği uygulandı, boş gün yok sayıldı'
+                                              : 'boş gün uygulandı, ' + lbl + ' isteği yok sayıldı';
+        warnings.push('💡 ' + p.name + ': ' + dn + '. güne hem ' + lbl + ' isteği hem boş gün girilmiş (çelişkili). Öncelik sırasına göre ' + uygulanan + '. Hangisi geçerliyse diğerini o günden silin.'); }); }
+      celiski(p.onlyN16, 'kısa nöbet'); celiski(p.onlyN24, 'uzun nöbet');
       // ÇALIŞMA TERCİHİ: karşılanamayan nöbet-türü isteği için BİLGİ notu (neden uygulanmadı)
       var odSet = {}; (p.onlyDay || []).forEach(function (x) { odSet[x] = 1; });
       function noteReq(list, wanted, lbl) { (list || []).forEach(function (dn) {
+        if (offSet[dn]) return;   // çelişkili giriş — yukarıda kendi notuyla raporlandı
         // ÖNCE çelişki: bu kişi o gün zaten nöbet tutmuyor mu?
         if (p.noNobet) { warnings.push('💡 ' + p.name + ': ' + dn + '. gün ' + lbl + ' isteği uygulanamadı (bu kişi “Sorumlu” — nöbet tutmuyor).'); return; }
         if (p.dayOnly) { warnings.push('💡 ' + p.name + ': ' + dn + '. gün ' + lbl + ' isteği uygulanamadı (bu kişi “sadece gündüz” — nöbet tutmuyor).'); return; }
@@ -183,7 +199,8 @@
       noteReq(p.onlyN16, 'NS', 'kısa nöbet'); noteReq(p.onlyN24, 'NL', 'uzun nöbet');
       return { name: p.name, target: p.target, hours: hours, fark: fark, mesai: mesai, nl: nl, ns: ns,
         ni: ni, uci: uci, weekendNobet: wkn, noNobet: !!p.noNobet, dayOnly: !!p.dayOnly, onlyNobet: !!p.onlyNobet, senior: !!p.senior,
-        onlyN16: p.onlyN16 || [], onlyN24: p.onlyN24 || [], onlyDay: p.onlyDay || [], lockedOff: p.lockedOff || [] };
+        onlyN16: p.onlyN16 || [], onlyN24: p.onlyN24 || [], onlyDay: p.onlyDay || [], lockedOff: p.lockedOff || [],
+        offReq: toArr(p.offReq) };   // recompute'a taşınır: elle düzenlemeden sonra da çelişki notu korunur
     });
 
     daysArr.forEach(function (dd) {
@@ -1028,7 +1045,7 @@
     });
 
     var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });
-    var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, noNobet: Pp.noNobet, dayOnly: Pp.dayOnly, onlyNobet: Pp.onlyNobet, senior: Pp.senior, onlyN16: Array.from(Pp.onlyN16), onlyN24: Array.from(Pp.onlyN24), onlyDay: Array.from(Pp.onlyDay), lockedOff: Array.from(Pp.lockedOff) }; });
+    var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, noNobet: Pp.noNobet, dayOnly: Pp.dayOnly, onlyNobet: Pp.onlyNobet, senior: Pp.senior, onlyN16: Array.from(Pp.onlyN16), onlyN24: Array.from(Pp.onlyN24), onlyDay: Array.from(Pp.onlyDay), lockedOff: Array.from(Pp.lockedOff), offReq: Array.from(Pp.offReq) }; });
     var av = analyze(gridA, plist, days, nDays, P);
     /* Etiketleme ANALİZDEN SONRA yapılır: algoritma ve analiz bu günleri
        'YI' olarak görmeli (aynı kurallar geçerli), yalnız DIŞARI verilen
@@ -1131,7 +1148,7 @@
   }
   function recompute(result) {
     var P = clampProfile(result.profile);
-    var plist = (result.totals || []).map(function (t) { return { name: t.name, target: t.target, noNobet: t.noNobet, dayOnly: t.dayOnly, onlyNobet: t.onlyNobet, senior: t.senior, onlyN16: t.onlyN16 || [], onlyN24: t.onlyN24 || [], onlyDay: t.onlyDay || [], lockedOff: t.lockedOff || [] }; });
+    var plist = (result.totals || []).map(function (t) { return { name: t.name, target: t.target, noNobet: t.noNobet, dayOnly: t.dayOnly, onlyNobet: t.onlyNobet, senior: t.senior, onlyN16: t.onlyN16 || [], onlyN24: t.onlyN24 || [], onlyDay: t.onlyDay || [], lockedOff: t.lockedOff || [], offReq: t.offReq || [] }; });
     return analyze(result.grid, plist, result.days, result.nDays, P);
   }
 
