@@ -195,7 +195,13 @@
     function oncallCap(dd) { var mn = oncallNeed(dd), mx = (dd.weekend || dd.holiday) ? P.weekendOncallMax : P.oncallMax; return Math.max(mn, mx || mn); }
 
     var people = config.personnel.map(function (p, idx) {
-      var YI = new Set(p.leaveYI || []);
+      /* GEÇİCİ GÖREVLENDİRME: kişi başka kuruma görevli gittiğinde burada
+         hiç bulunmaz. Algoritma açısından yıllık izinle AYNI davranış
+         gerekir (atama yapılmaz, aylık hedef düşer), bu yüzden aynı kümeye
+         katılır. Çıktıda ayırt edilebilmesi için GG ayrıca saklanır ve
+         hücreler sonunda 'GG' olarak etiketlenir. */
+      var GG = new Set(p.ggDays || []);
+      var YI = new Set((p.leaveYI || []).concat(p.ggDays || []));
       var offDow = (p.offDay != null) ? p.offDay : null;
       var assign = {}, lockedOff = new Set(), mustMesai = new Set();
       days.forEach(function (dd) {   // kurulumda YALNIZ takvim yazılır; YI/OFF/istekler ÖNCELİK KATMANLARINDA
@@ -211,7 +217,7 @@
       var target = baseTarget - (leaveWork + offDays) * P.targetPerWorkday;
       var cy = (carry && carry[p.name]) || null;   // AYLAR ARASI: önceki ayların birikimi (rotasyon hafızası)
       return { name: p.name, idx: idx, noNobet: !!p.noNobet, dayOnly: !!p.dayOnly, startNI: !!p.startNI,
-        onlyNobet: !!p.onlyNobet, senior: !!p.senior, YI: YI, offDow: offDow,
+        onlyNobet: !!p.onlyNobet, senior: !!p.senior, YI: YI, GG: GG, offDow: offDow,
         onlyDay: new Set(p.onlyDay || []), onlyN16: new Set(p.onlyN16 || []), onlyN24: new Set(p.onlyN24 || []), offReq: new Set(p.offReq || []),
         assign: assign, target: target, hours: 0, nobetDays: [], lastNobet: -99, weekendNobet: 0,
         carryNc: cy ? (cy.nc || 0) : 0, carryWk: cy ? (cy.wk || 0) : 0,
@@ -825,6 +831,13 @@
     var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });
     var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, noNobet: Pp.noNobet, dayOnly: Pp.dayOnly, onlyNobet: Pp.onlyNobet, senior: Pp.senior, onlyN16: Array.from(Pp.onlyN16), onlyN24: Array.from(Pp.onlyN24), onlyDay: Array.from(Pp.onlyDay), lockedOff: Array.from(Pp.lockedOff) }; });
     var av = analyze(gridA, plist, days, nDays, P);
+    /* Etiketleme ANALİZDEN SONRA yapılır: algoritma ve analiz bu günleri
+       'YI' olarak görmeli (aynı kurallar geçerli), yalnız DIŞARI verilen
+       ızgarada 'GG' yazsın. Böylece hesaplar bozulmadan liste doğru okunur. */
+    people.forEach(function (Pp) {
+      if (!Pp.GG || !Pp.GG.size) return;
+      Pp.GG.forEach(function (dn) { if (Pp.assign[dn] === 'YI') Pp.assign[dn] = 'GG'; });
+    });
     return { year: year, month: month, nDays: nDays, days: days, grid: gridA, totals: av.totals, warnings: av.warnings,
       profile: P, meta: { base: baseTarget } };
   }

@@ -17,7 +17,7 @@
     --txt:#e6edf3; --muted:#a9b1bb; --inset:#0b0f14;
     --accent:#1f6feb; --accent2:#58a6ff; --ok:#238636; --err:#f85149; --warn:#d29922;
     --c-M:#1d4ed8; --c-NL:#dc2626; --c-NS:#ea580c; --c-NI:#64748b; --c-HT:#475569;
-    --c-RT:#7c3aed; --c-YI:#16a34a; --c-UCI:#0d9488; --c-OFF:#db2777; }
+    --c-RT:#7c3aed; --c-YI:#16a34a; --c-UCI:#0d9488; --c-OFF:#db2777; --c-GG:#a16207; }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);padding:0 0 60px;
     font:13.5px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",sans-serif;
@@ -161,8 +161,8 @@
   .shiftrow .sw{width:18px;height:18px}
   /* ---- personel (CSS grid — sütunlar kesin hizalı) ---- */
   .pwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
-  .pgrid{min-width:1280px}
-  .phead,.prow{display:grid;grid-template-columns:30px 150px 78px 70px 78px 112px 300px 112px 230px 100px;align-items:center;gap:8px;padding:7px 8px}
+  .pgrid{min-width:1430px}
+  .phead,.prow{display:grid;grid-template-columns:30px 150px 78px 70px 78px 112px 300px 150px 112px 230px 100px;align-items:center;gap:8px;padding:7px 8px}
   .phead{background:var(--inset);color:var(--txt);font-size:11.5px;font-weight:600;line-height:1.2;position:sticky;top:0;z-index:1}
   .phead>div,.prow>.ctr{display:flex;justify-content:center;align-items:center;text-align:center}
   .prow{border-top:1px solid var(--line)}
@@ -219,6 +219,7 @@
   td.M{background:var(--c-M)} td.NL{background:var(--c-NL)} td.NS{background:var(--c-NS)}
   td.NI{background:var(--c-NI)} td.HT{background:var(--c-HT);color:#94a3b8} td.RT{background:var(--c-RT)}
   td.YI{background:var(--c-YI)} td.UCI{background:var(--c-UCI)} td.OFF{background:var(--c-OFF)}
+  td.GG{background:var(--c-GG)}
   /* Kişi vurgulama: seçili satır öne çıkar, diğerleri geri çekilir */
   table.grid tbody tr.hl-dim{opacity:.3;transition:opacity .12s}
   table.grid.hl-on tbody tr.hl-row td{box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
@@ -446,7 +447,7 @@
     <h2><span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Personel ve Talepler<input type="text" id="pSearch" oninput="filterPersonnel()" placeholder="İsim ara…" style="margin-left:auto;max-width:190px;font-weight:400"><span id="pSearchInfo" class="savedinfo"></span></h2>
     <div class="pwrap"><div class="pgrid">
       <div class="phead">
-        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Sorumlu</div><div>Kıdemli</div><div>Aya N.İ ile başla</div><div>Haftalık izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Boş gün isteği</div><div>Çalışma tercihi</div><div>Sırala / Sil</div>
+        <div>#</div><div style="justify-content:flex-start">Ad Soyad</div><div>Sorumlu</div><div>Kıdemli</div><div>Aya N.İ ile başla</div><div>Haftalık izin günü</div><div>Yıllık izin (tarih aralığı)</div><div>Geçici görev</div><div>Boş gün isteği</div><div>Çalışma tercihi</div><div>Sırala / Sil</div>
       </div>
       <div id="pbody"></div>
     </div></div>
@@ -516,7 +517,7 @@
   <div class="foot">Nöbet Planlama Asistanı · <b>v44</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 </div>
 
-<script src="asistan-scheduler.js?v=31"></script>
+<script src="asistan-scheduler.js?v=32"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -650,7 +651,10 @@ function rangeToDays(sISO,eISO){ if(!sISO)return []; const {y,m}=curYM();
   const s=new Date(sISO+'T00:00:00'); const e=eISO?new Date(eISO+'T00:00:00'):new Date(sISO+'T00:00:00'); const out=[];
   for(let cur=new Date(s);cur<=e;cur.setDate(cur.getDate()+1)){ if(cur.getFullYear()===y&&cur.getMonth()===m)out.push(cur.getDate()); } return out; }
 function updateDateBounds(){ const {y,m}=curYM(); const last=AsistanScheduler.daysInMonth(y,m);
-  const min=dayToISO(y,m,1),max=dayToISO(y,m,last); document.querySelectorAll('#pbody input[type=date]').forEach(inp=>{inp.min=min;inp.max=max;}); }
+  const min=dayToISO(y,m,1),max=dayToISO(y,m,last);
+  // Geçici görev tarihleri BİLEREK sınırlanmaz: aralık aylara yayılabilmeli
+  // (ör. 5 Eylül – 4 Ekim). Yıllık izin ise ay ay girilir, sınırlı kalır.
+  document.querySelectorAll('#pbody input[type=date]:not(.p-gg-s):not(.p-gg-e)').forEach(inp=>{inp.min=min;inp.max=max;}); }
 function yiRangeHtml(s,e){ return `<div class="daterange"><input type="date" class="p-yi-s" value="${s||''}"><span>–</span>`
   +`<input type="date" class="p-yi-e" value="${e||''}"><button type="button" class="sm danger yix" onclick="rmYi(this)" title="Sil" style="padding:2px 7px;display:none">×</button></div>`; }
 function yiCellHtml(){ return `<div class="yi-list">${yiRangeHtml('','')}</div><button type="button" class="sm sec" onclick="addYi(this)" style="margin-top:4px">+ izin ekle</button>`; }
@@ -659,6 +663,17 @@ function addYi(btn){ markDirty(); const cell=btn.closest('.leave'); cell.querySe
 function rmYi(btn){ markDirty(); scheduleCapWarn(); const cell=btn.closest('.leave'),row=btn.closest('.daterange'),list=cell.querySelector('.yi-list');
   if(list.children.length>1)row.remove(); else {row.querySelector('.p-yi-s').value='';row.querySelector('.p-yi-e').value='';} updateYiX(cell); }
 function rangesOf(tr){ return [...tr.querySelectorAll('.yi-list .daterange')].map(d=>({s:d.querySelector('.p-yi-s').value,e:d.querySelector('.p-yi-e').value})).filter(r=>r.s); }
+/* GEÇİCİ GÖREVLENDİRME
+   Kişi başka bir kuruma görevlendirildiğinde burada hiç bulunmaz: ne nöbet
+   ne mesai alır ve aylık hedef saati o günler için düşer. Yıllık izinle
+   aynı mekanizmayı kullanır ama listede AYRI kodla (G.G) görünür.
+   Tarih aralığı olduğu için AYLARA YAYILIR: 5 Eylül–4 Ekim girildiğinde
+   Eylül'de 5-30, Ekim'de 1-4 günleri otomatik kapsanır. */
+function ggRangeOf(tr){
+  const s=(tr.querySelector('.p-gg-s')||{}).value||'', e=(tr.querySelector('.p-gg-e')||{}).value||'';
+  return (s||e)?{s:s,e:e}:null;
+}
+function ggDaysOf(tr){ const r=ggRangeOf(tr); return r?rangeToDays(r.s,r.e):[]; }
 function leaveDaysOf(tr){ const set=new Set(); rangesOf(tr).forEach(r=>rangeToDays(r.s,r.e).forEach(d=>set.add(d))); return [...set].sort((a,b)=>a-b); }
 
 // ===== PERSONEL =====
@@ -671,6 +686,9 @@ function addPerson(name){
     <div class="ctr"><input type="checkbox" class="p-startni" title="Önceki ayın son nöbetçisi: ayın 1. günü N.İ (dinlenme) başlar"></div>
     <div><select class="p-offday"><option value="">—</option>${[1,2,3,4,5].map(d=>`<option value="${d}">${DOW[d]}</option>`).join('')}</select></div>
     <div class="leave">${yiCellHtml()}</div>
+    <div class="ggcell"><div class="daterange">
+      <input type="date" class="p-gg-s" title="Geçici görev başlangıcı"><span>–</span>
+      <input type="date" class="p-gg-e" title="Geçici görev bitişi"></div></div>
     <div><input type="text" class="p-off" placeholder="örn. 5,12" title="Bu günlere ne nöbet ne mesai yazılır (kesin boş)"></div>
     <div class="pref">
       <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -702,6 +720,7 @@ function readPersonnel(){
     noNobet:r.querySelector('.p-sorumlu').checked, dayOnly:r.querySelector('.p-dayonly').checked, senior:r.querySelector('.p-senior').checked, startNI:r.querySelector('.p-startni').checked,
     offDay:r.querySelector('.p-offday').value===''?null:parseInt(r.querySelector('.p-offday').value,10),
     leaveYI:leaveDaysOf(r), yiRanges:rangesOf(r),
+    ggRange:ggRangeOf(r), ggDays:ggDaysOf(r),
     offReq:parseDays(r.querySelector('.p-off').value), onlyNobet:r.querySelector('.p-onlynobet').checked,
     onlyDay:parseDays(r.querySelector('.p-onlyday').value), onlyN16:parseDays(r.querySelector('.p-onlyn16').value), onlyN24:parseDays(r.querySelector('.p-onlyn24').value)
   })).filter(p=>p.name!=='?');
@@ -711,6 +730,7 @@ function applyPersonnel(list){
   (list||[]).forEach(p=>{ addPerson(p.name); const r=document.querySelector('#pbody .prow:last-child');
     r.querySelector('.p-sorumlu').checked=!!p.noNobet; r.querySelector('.p-dayonly').checked=!!p.dayOnly; r.querySelector('.p-senior').checked=!!p.senior; r.querySelector('.p-startni').checked=!!p.startNI;
     r.querySelector('.p-offday').value=p.offDay!=null?String(p.offDay):'';
+    if(p.ggRange){ r.querySelector('.p-gg-s').value=p.ggRange.s||''; r.querySelector('.p-gg-e').value=p.ggRange.e||''; }
     let ranges=(p.yiRanges&&p.yiRanges.length)?p.yiRanges:[]; if(!ranges.length)ranges=[{s:'',e:''}];
     r.querySelector('.yi-list').innerHTML=ranges.map(x=>yiRangeHtml(x.s,x.e)).join(''); updateYiX(r.querySelector('.leave'));
     r.querySelector('.p-onlynobet').checked=!!p.onlyNobet;
@@ -727,7 +747,8 @@ let CUR_YM=null;
 function ymNow(){ return document.getElementById('year').value+'-'+document.getElementById('month').value; }
 // kimlik (isim, Sorumlu, Haftalık izin günü) korunur; aylık İSTEKLER sıfırlanır
 function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, dayOnly:p.dayOnly, onlyNobet:p.onlyNobet, senior:p.senior, offDay:p.offDay,
-  startNI:false, yiRanges:[], leaveYI:[], offReq:[], onlyDay:[], onlyN16:[] })); }
+  startNI:false, yiRanges:[], leaveYI:[], offReq:[], onlyDay:[], onlyN16:[],
+  ggRange:p.ggRange||null })); }   // geçici görev tarih aralığı aylara yayılır, taşınır
 function captureMonth(){ if(CUR_YM==null)return; const prev=MONTHS_DATA[CUR_YM]||{};
   MONTHS_DATA[CUR_YM]={ holidays:parseDays(document.getElementById('holidays').value), personnel:readPersonnel(),
     summary:prev.summary, lastNight:prev.lastNight }; }
@@ -878,7 +899,7 @@ function flash(m){ const d=document.createElement('div'); d.textContent=m; d.sty
 
 // ===== ÜRETİM + RENDER =====
 let LAST=null, ALTS=[], ALT_I=0, PRECHECK_HTML='';
-function codeLabel(c){ const p=curProfile(); const base={M:p.mesaiLabel,NL:p.oncallLongLabel,NS:p.oncallShortLabel,NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UCI:'Ü.İ',OFF:'İ','':''};
+function codeLabel(c){ const p=curProfile(); const base={M:p.mesaiLabel,NL:p.oncallLongLabel,NS:p.oncallShortLabel,NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UCI:'Ü.İ',OFF:'İ',GG:'G.G','':''};
   if(base[c]!==undefined)return base[c]; const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.label:''; }
 function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.color:null; }
 function generate(){ readRuleForm(); const cfg=readCfg(); if(!cfg.personnel.length){alert('En az 1 personel ekleyin.');return;}
@@ -935,6 +956,7 @@ function scanCoverage(cfg){
     let avail=0, busy=[];
     (cfg.personnel||[]).forEach(p=>{
       if(p.noNobet||p.dayOnly) return;                                  // nöbet tutmayanlar
+      if((p.ggDays||[]).indexOf(d)>=0){ busy.push((p.name||'?')+' (geçici görev)'); return; }
       if((p.leaveYI||[]).indexOf(d)>=0){ busy.push((p.name||'?')+' (izin)'); return; }
       if((p.offReq||[]).indexOf(d)>=0){ busy.push((p.name||'?')+' (boş gün)'); return; }
       if(p.offDay!=null && +p.offDay===w) return;                       // haftalık izin günü
@@ -1063,7 +1085,7 @@ function gridHtml(r){
     <span><i class="sw" style="background:var(--c-M)"></i> ${p.mesaiLabel}</span>
     <span><i class="sw" style="background:var(--c-NL)"></i> ${p.oncallLongLabel}</span>
     <span><i class="sw" style="background:var(--c-NS)"></i> ${p.oncallShortLabel}</span>
-    <span><i class="sw" style="background:var(--c-NI)"></i> N.İ</span><span><i class="sw" style="background:var(--c-YI)"></i> Yıllık izin</span>
+    <span><i class="sw" style="background:var(--c-NI)"></i> N.İ</span><span><i class="sw" style="background:var(--c-YI)"></i> Yıllık izin</span><span><i class="sw" style="background:var(--c-GG)"></i> Geçici görev</span>
     <span><i class="sw" style="background:var(--c-UCI)"></i> Ücretli izin</span><span><i class="sw" style="background:var(--c-HT)"></i> Hafta sonu</span>
     <span><i class="sw" style="background:var(--c-RT)"></i> Resmi tatil</span><span><i class="sw" style="background:var(--c-OFF)"></i> Haftalık izin</span>`
     +customShiftsOf().map(s=>`<span><i class="sw" style="background:${s.color}"></i> ${s.label}${s.daytime?' · gündüz':''}</span>`).join('')+`</div>`;
@@ -1140,7 +1162,7 @@ function filterPersonnel(){
   const bilgi=document.getElementById('pSearchInfo');
   if(bilgi) bilgi.textContent=q?(gorunen+' kişi gösteriliyor'):'';
 }
-const EDIT_CODES=['M','NL','NS','NI','UCI','YI','HT','RT','OFF',''];
+const EDIT_CODES=['M','NL','NS','NI','UCI','YI','GG','HT','RT','OFF',''];
 function editCell(td){ if(!LAST||td.querySelector('select'))return; markDirty();
   const ti=+td.dataset.ti,d=+td.dataset.d,name=LAST.totals[ti].name,cur=LAST.grid[name][d]||'';
   const sel=document.createElement('select'); sel.style.cssText='width:100%;font-size:11px';
