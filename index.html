@@ -816,7 +816,10 @@ function showMonth(ym){
       if(iş.length) setTimeout(()=>flash(iş.join(', ')+' → önceki ayın son nöbetçisi, N.İ ile başlatıldı'),60);
     }
   }
-  CUR_YM=ym; updateDateBounds(); captureMonth(); scheduleCapWarn(); }
+  CUR_YM=ym; updateDateBounds(); captureMonth(); scheduleCapWarn();
+  // Ay Ayarları'nda hangi ay seçiliyse gelen kutusu da o ayı gösterir:
+  // plan hangi ay için yapılıyorsa talepler de o aya ait olsun.
+  REQ_GORUNEN=ym; renderRequests(); }
 function persistMonths(){ if(SRV.on)return; try{ localStorage.setItem('asistan_months',JSON.stringify({cur:CUR_YM,data:MONTHS_DATA})); }catch(e){} }
 function onPeriodChange(){ captureMonth(); showMonth(ymNow()); generate(); }   // generate -> (yerel) saveAll kaydeder
 
@@ -1395,23 +1398,30 @@ function renderRequests(){
   const ayNo=a=>{ const p=String(a).split('-'); return (+p[0])*12+(+p[1]); };
   const sira=Object.keys(aylar).sort((x,y)=> x==='?'?1 : y==='?'?-1 : (ayNo(y)-ayNo(x)));
 
-  // Seçili ay: kullanıcının seçtiği → yoksa talep dönemi → yoksa en yeni
-  let secili=REQ_GORUNEN;
-  if(!secili || !aylar[secili]) secili=(ACT.reqMonth && aylar[ACT.reqMonth])?ACT.reqMonth:sira[0];
+  /* Seçili ay: Ay Ayarları'nda planlanan ay (CUR_YM) esas alınır. Talebi
+     olmayan bir ay seçiliyse boş gösterilir — "bu ay için talep yok"
+     bilgisi de bir bilgidir; başka aya kaçmak yanıltıcı olurdu. */
+  let secili=REQ_GORUNEN || CUR_YM || ACT.reqMonth || sira[0];
+  if(!secili) secili=sira[0];
   REQ_GORUNEN=secili;
+  // Seçili ayın talebi yoksa bile listede yer alsın (boş gösterebilmek için)
+  if(secili && !aylar[secili] && !sira.includes(secili)){ sira.unshift(secili); sira.sort((x,y)=> x==='?'?1 : y==='?'?-1 : (ayNo(y)-ayNo(x))); }
 
   const secenekler=sira.map(a=>{
-    const bek=aylar[a].filter(t=>!t.islendi).length;
-    return `<option value="${a}"${a===secili?' selected':''}>${ayAdi(a)} — ${aylar[a].length} talep${bek?' ('+bek+' bekliyor)':''}</option>`;
+    const grup=aylar[a]||[];
+    const bek=grup.filter(t=>!t.islendi).length;
+    return `<option value="${a}"${a===secili?' selected':''}>${ayAdi(a)} — ${grup.length} talep${bek?' ('+bek+' bekliyor)':''}</option>`;
   }).join('');
-  const digerAy=sira.length-1, digerTalep=list.length-(aylar[secili]||[]).length;
+  const digerAy=sira.filter(a=>a!==secili && (aylar[a]||[]).length).length;
+  const digerTalep=list.length-(aylar[secili]||[]).length;
 
   kutu.innerHTML=`<div class="reqfilter">
       <label class="reqmonthpick">Gösterilen ay
         <select onchange="reqSetGorunen(this.value)">${secenekler}</select></label>
       ${digerAy>0?`<span class="reqmeta">Diğer ${digerAy} ayda ${digerTalep} talep daha var</span>`:''}
     </div>`+[secili].map(a=>{
-    const grup=aylar[a];
+    const grup=aylar[a]||[];
+    if(!grup.length) return `<div class="note">${escapeHtml(ayAdi(a))} için henüz talep gelmedi.</div>`;
     const bekleyen=grup.filter(t=>!t.islendi).length;
     // Ay içinde KİŞİ bazında topla
     const kisiler={}; grup.forEach(t=>{ (kisiler[t.name]=kisiler[t.name]||[]).push(t); });
