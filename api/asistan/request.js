@@ -70,18 +70,14 @@ module.exports = async (req, res) => {
         const b = req.body || {};
         const tur = TURLER.indexOf(b.tur) >= 0 ? b.tur : 'diger';
 
-        // Silme: kişi YALNIZ kendi talebini silebilir
+        /* SİLME YETKİSİ YOK.
+           Personel gönderdiği talebi kendisi kaldıramaz; yanlış gönderim
+           olursa birim yöneticisi siler. Böylece yönetici planı yaparken
+           gördüğü bir talep, o değerlendirirken arkasından çekilemez. */
         if (b.sil) {
-            const i = (un.requests || []).findIndex(t => t.id === b.sil && t.name === ad);
-            if (i < 0) return json(res, 404, { error: 'Talep bulunamadı.' });
-            // Atomik $pull — belgenin geri kalanına dokunmaz (bkz. core.unitUpdate)
-            const sonuc = await core.unitUpdate({ 'units.id': un.id },
-                { $pull: { 'units.$.requests': { id: b.sil, name: ad } } });
-            if (sonuc !== true) {                       // dosya modu / düşme-emniyeti
-                un.requests.splice(i, 1);
-                if (!(await core.saveAsistan(st))) return json(res, 503, { error: 'Kaydedilemedi' });
-            }
-            return json(res, 200, { ok: true });
+            return json(res, 403, {
+                error: 'Gönderilen talep geri alınamaz. Yanlışlık varsa birim yöneticinize iletin.',
+            });
         }
 
         un.requests = un.requests || [];

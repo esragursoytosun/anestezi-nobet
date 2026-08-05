@@ -1505,7 +1505,7 @@ async function talepSayfasi(token){
           Birim yöneticiniz talebinizi görür, uygun olup olmadığını değerlendirir ve
           uygunsa listeyi kendisi düzenler. Yani <b>talep göndermek onay anlamına gelmez</b> —
           kesinleşip kesinleşmediğini yayımlanan nöbet listesinden takip edin.
-          Yanlış gönderdiyseniz aşağıdan <b>Geri al</b> diyebilirsiniz.</div>
+          Gönderdiğiniz talep <b>geri alınamaz</b>; yanlışlıkla gönderdiyseniz birim yöneticinize iletin, o kaldırabilir.</div>
         <div class="row" style="align-items:flex-start">
           <div class="fld"><label>Hangi ay için?</label>
             <select id="tAy">${ayListesi(j.ay)}</select>
@@ -1537,7 +1537,7 @@ async function talepSayfasi(token){
             ${t.gunler?`<div class="reqdet">Günler: ${escapeHtml(t.gunler)}</div>`:''}
             ${t.not?`<div class="reqnot">${escapeHtml(t.not)}</div>`:''}
           </div><div class="reqmeta">${fmtSaved(t.at)}</div>
-          ${acik?`<button class="sm danger" onclick="talepSil('${t.id}')">Geri al</button>`:''}</div>`).join('')
+          </div>`).join('')
         ):'<div class="note">Henüz talep göndermediniz.</div>'}
       </div>`;
     window.__talepCiz=ciz;
@@ -1572,12 +1572,6 @@ async function talepGonder(){
   const j=await r.json().catch(()=>({}));
   if(!r.ok){ alert(j.error||'Gönderilemedi.'); return; }
   flash('Talebiniz iletildi ✓'); window.__talepCiz();
-}
-async function talepSil(id){
-  if(!confirm('Bu talep geri alınsın mı?')) return;
-  const r=await fetch('/api/asistan/request?token='+encodeURIComponent(window.__talepToken),
-    {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sil:id})});
-  if(r.ok){ flash('Talep geri alındı'); window.__talepCiz(); } else flash('Geri alınamadı');
 }
 
 /* ===== ESKİ ADRES YÖNLENDİRMESİ =====
