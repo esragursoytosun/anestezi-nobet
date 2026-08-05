@@ -54,7 +54,11 @@ module.exports = async (req, res) => {
 
     if (req.method === 'GET') {
         const benim = (un.requests || []).filter(t => t.name === ad)
-            .map(t => ({ id: t.id, tur: t.tur, ay: t.ay || null, bas: t.bas, bit: t.bit, gunler: t.gunler, not: t.not, at: t.at }));
+            .map(t => ({ id: t.id, tur: t.tur, ay: t.ay || null, bas: t.bas, bit: t.bit, gunler: t.gunler, not: t.not, at: t.at,
+                // Yönetici notu YALNIZCA 'personel görsün' işaretliyse gönderilir;
+                // aksi halde uçtan hiç çıkmaz (iç değerlendirme notu gizli kalır).
+                yanit: t.yNotGorunur ? (t.yNot || null) : null,
+                yanitAt: t.yNotGorunur ? (t.yNotAt || null) : null }));
         return json(res, 200, {
             birim: un.name, ad: ad,
             acik: un.reqOpen !== false,          // varsayılan açık

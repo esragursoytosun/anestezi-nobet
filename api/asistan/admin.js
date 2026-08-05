@@ -10,7 +10,7 @@ const core = require('../../lib/core');
 const { json, ensureStorage } = require('../../lib/http');
 
 // Birim yöneticisinin KENDİ biriminde yapabildiği işlemler
-const YONETICI_ISLEMLERI = ['reqTokens', 'reqOpen', 'reqDelete', 'reqRotate', 'reqMark'];
+const YONETICI_ISLEMLERI = ['reqTokens', 'reqOpen', 'reqDelete', 'reqRotate', 'reqMark', 'reqNote'];
 
 module.exports = async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method' });
@@ -112,6 +112,26 @@ module.exports = async (req, res) => {
         t.islendiBy = t.islendi ? me.u : null;
         t.islendiAt = t.islendi ? new Date().toISOString() : null;
         return persist({ ok: true, islendi: t.islendi, islendiBy: t.islendiBy, islendiAt: t.islendiAt });
+    }
+    /* Talebe YÖNETİCİ NOTU. 'gorunur' işaretliyse notu talebi gönderen
+       kişi de kendi sayfasında görür; işaretli değilse yalnızca yönetici
+       tarafında kalır (iç değerlendirme notu). */
+    if (b.action === 'reqNote') {
+        const un = st.units.find(x => x.id === b.id);
+        if (!un) return json(res, 404, { error: 'birim yok' });
+        const t = (un.requests || []).find(x => x.id === b.reqId);
+        if (!t) return json(res, 404, { error: 'Talep bulunamadı' });
+        const metin = String(b.not == null ? '' : b.not).slice(0, 500).trim();
+        if (metin) {
+            t.yNot = metin;
+            t.yNotGorunur = !!b.gorunur;
+            t.yNotBy = me.u;
+            t.yNotAt = new Date().toISOString();
+        } else {                       // boş kaydetmek notu siler
+            delete t.yNot; delete t.yNotGorunur; delete t.yNotBy; delete t.yNotAt;
+        }
+        return persist({ ok: true, yNot: t.yNot || null, yNotGorunur: !!t.yNotGorunur,
+            yNotBy: t.yNotBy || null, yNotAt: t.yNotAt || null });
     }
     if (b.action === 'reqDelete') {
         const un = st.units.find(x => x.id === b.id);

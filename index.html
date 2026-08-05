@@ -133,6 +133,13 @@
   .talepnot{background:var(--inset);border:1px solid var(--line);border-left:3px solid var(--accent2);
     border-radius:6px;padding:11px 13px;font-size:12.5px;color:var(--muted);line-height:1.6;margin-bottom:14px}
   .talepnot b{color:var(--txt)}
+  .ynot{margin-top:7px;font-size:12px;color:var(--muted);background:var(--panel2);border-radius:6px;
+    padding:7px 10px;border-left:3px solid var(--line2);line-height:1.5}
+  .ynot.acik{border-left-color:var(--accent2)}
+  .ynot b{color:var(--txt)}
+  .ynot-d{display:block;margin-top:3px;font-size:11px;color:var(--muted)}
+  .ynot-edit{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .ynot-edit .ynot-in{flex:1;min-width:220px}
   .reqlinkhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:13px}
   .reqhelp{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
   .reqhelp-t{font-size:12.5px;font-weight:600;color:var(--txt);margin-bottom:6px}
@@ -1384,8 +1391,19 @@ function renderRequests(){
                 ${t.islendi?`<span class="reqok">işlendi${t.islendiBy?' · '+escapeHtml(t.islendiBy):''}</span>`:''}</div>
               ${ayrinti?`<div class="reqdet">${escapeHtml(ayrinti)}</div>`:''}
               ${t.not?`<div class="reqnot">${escapeHtml(t.not)}</div>`:''}
+              ${t.yNot?`<div class="ynot${t.yNotGorunur?' acik':''}">
+                <b>Notunuz:</b> ${escapeHtml(t.yNot)}
+                <span class="ynot-d">${t.yNotGorunur?'personel görüyor':'yalnız sizde'}${t.yNotBy?' · '+escapeHtml(t.yNotBy):''}</span></div>`:''}
+              <div class="ynot-edit" id="ne_${t.id}" style="display:none">
+                <input type="text" class="ynot-in" maxlength="500" placeholder="Talebe not yazın (boş bırakıp kaydederseniz not silinir)"
+                       value="${(t.yNot||'').replace(/"/g,'&quot;')}">
+                <label class="chk"><input type="checkbox" class="ynot-gor" ${t.yNotGorunur?'checked':''}> Personel görsün</label>
+                <button class="sm sec" onclick="reqSaveNote('${t.id}')">Kaydet</button>
+                <button class="sm sec" onclick="reqToggleNote('${t.id}')">Vazgeç</button>
+              </div>
             </div>
             <div class="reqmeta">${fmtSaved(t.at)}</div>
+            <button class="sm sec" onclick="reqToggleNote('${t.id}')">${t.yNot?'Notu düzenle':'Not ekle'}</button>
             <button class="sm sec" onclick="reqMark('${t.id}',${t.islendi?'false':'true'})">${t.islendi?'Geri al':'İşlendi'}</button>
             <button class="sm danger" onclick="reqDelete('${t.id}')">Sil</button>
           </div>`;
@@ -1399,6 +1417,26 @@ function renderRequests(){
       ${govde}
     </div>`;
   }).join('');
+}
+/* Yönetici notu: talebe cevap yazılır. 'Personel görsün' işaretliyse not
+   kişinin kendi sayfasında da görünür; işaretsizse yalnız yöneticide kalır
+   (uçtan hiç gönderilmez). Boş kaydetmek notu siler. */
+function reqToggleNote(id){
+  const k=document.getElementById('ne_'+id); if(!k) return;
+  const acik=k.style.display!=='none';
+  k.style.display=acik?'none':'';
+  if(!acik){ const i=k.querySelector('.ynot-in'); if(i){ i.focus(); i.select(); } }
+}
+async function reqSaveNote(id){
+  const k=document.getElementById('ne_'+id); if(!k) return;
+  const metin=k.querySelector('.ynot-in').value;
+  const gorunur=k.querySelector('.ynot-gor').checked;
+  const j=await reqPost({action:'reqNote',reqId:id,not:metin,gorunur:gorunur});
+  if(!j) return;
+  const t=(ACT.requests||[]).find(x=>x.id===id);
+  if(t){ t.yNot=j.yNot; t.yNotGorunur=j.yNotGorunur; t.yNotBy=j.yNotBy; t.yNotAt=j.yNotAt; }
+  renderRequests();
+  flash(j.yNot?(j.yNotGorunur?'Not kaydedildi — personel görecek':'Not kaydedildi (yalnız sizde)'):'Not silindi');
 }
 async function reqMark(id,islendi){
   const j=await reqPost({action:'reqMark',reqId:id,islendi:islendi});
@@ -1558,6 +1596,8 @@ async function talepSayfasi(token){
             ${t.bas?`<div class="reqdet">${escapeHtml(trTarih(t.bas)+(t.bit?(' – '+trTarih(t.bit)):''))}</div>`:''}
             ${t.gunler?`<div class="reqdet">Günler: ${escapeHtml(t.gunler)}</div>`:''}
             ${t.not?`<div class="reqnot">${escapeHtml(t.not)}</div>`:''}
+            ${t.yanit?`<div class="ynot acik"><b>Yöneticinizden:</b> ${escapeHtml(t.yanit)}
+              ${t.yanitAt?`<span class="ynot-d">${fmtSaved(t.yanitAt)}</span>`:''}</div>`:''}
           </div><div class="reqmeta">${fmtSaved(t.at)}</div>
           </div>`).join('')
         ):'<div class="note">Henüz talep göndermediniz.</div>'}
