@@ -47,6 +47,11 @@
       overtimeForCounts: false,                            // açıksa: gündüz sayıları tutmazsa o günlerde FAZLA MESAİ verilir
       minSeniorOncall: 0,                                  // her gün nöbette EN AZ kaç KIDEMLİ olsun (0=kapalı)
       minSeniorDaytime: 0,                                 // her hafta içi gündüzde EN AZ kaç KIDEMLİ olsun (0=kapalı)
+      /* AYLAR ARASI ADALET: açıkken önceki ayların nöbet/hafta sonu birikimi
+         (carry) dengeye katılır — geçen ay çok tutan bu ay az tutar; tek ayda
+         bölünemeyen küsurat böylece dönüşümlü dağılır. Kapalıyken her ay
+         yalnız kendi içinde dengelenir (birikim gelse bile yok sayılır). */
+      carryFairness: true,
       // ÖNCELİK SIRASI: aynı güne birden çok kural denk gelirse ÜSTTEKİ (öndeki) kazanır.
       // pref=çalışma tercihi (gün nöbet isteği) · offReq=boş gün isteği · leave=yıllık izin ·
       // offDay=haftalık izin günü (doluysa aynı haftada kaydırılır) · startNI=aya N.İ başla · preLeave=izin öncesi nöbet+boşluk
@@ -209,7 +214,8 @@
     var holidays = new Set(config.holidays || []);
     var HOURS = hoursMap(P);
     var variant = config.__variant || 0;
-    var carry = (config.carry && config.carry.byName) || null;   // {name:{nc,wk}} — önceki ayların kümülatif nöbet/hafta sonu
+    // {name:{nc,wk}} — önceki ayların kümülatif nöbet/hafta sonu (profil kapatmışsa yok sayılır)
+    var carry = (P.carryFairness !== false && config.carry && config.carry.byName) || null;
     var _s = (variant * 2654435761 + 1013904223) >>> 0;
     function rnd() { _s = (_s * 1664525 + 1013904223) >>> 0; return _s / 4294967296; }
 
@@ -1089,7 +1095,8 @@
     function mk(v, ls) { var c = {}; for (var k in config) c[k] = config[k]; c.__variant = v; c.__lsIter = ls; return c; }
     if (attempts <= 1) return buildOne(mk(0, 0));                  // senkron yolları: hızlı, LS yok
     var P = clampProfile(config.profile);
-    var carryMap = (config.carry && config.carry.byName) || null;   // aylar arası adalet (rotasyon hafızası)
+    // aylar arası adalet (rotasyon hafızası) — profil kapatmışsa aday sıralaması da kullanmaz
+    var carryMap = (P.carryFairness !== false && config.carry && config.carry.byName) || null;
     // FAZ 1 — ÇEŞİTLİLİK: LS kapalı (hızlı), farklı rastgele tie-break'lerle aday üret.
     var cands = [];
     for (var v = 0; v < attempts; v++) { var r = buildOne(mk(v, 0)); r.__variant = v; r.__score = scoreResult(r, P, carryMap); r.__sig = sigOf(r); cands.push(r); }

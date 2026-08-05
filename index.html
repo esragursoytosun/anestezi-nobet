@@ -499,6 +499,14 @@
             <div class="fld"><label>Az personel uyarısı (kişi sayısı)</label><input type="number" id="minStaffWarn"><span class="hint">Nöbetçi sayısı bunun altındaysa ve sorun çıkarsa “+1 kişi” notu verilir.</span></div>
           </div>
         </div>
+        <div class="advgrp">
+          <h4>Adalet</h4>
+          <p class="help">Nöbet yükünün kişiler arasında nasıl dengeleneceği.</p>
+          <div class="row">
+            <label class="chk" title="Açıkken: geçen aylarda çok nöbet/hafta sonu tutan bu ay daha az tutar — tek ayda eşit bölünemeyen küsurat (örn. 60 nöbet / 11 kişi) hep aynı kişiye gitmez, dönüşümlü dağılır. Kapalıyken her ay yalnız kendi içinde dengelenir; küsuratın kime düştüğü aydan aya takip edilmez."><input type="checkbox" id="carryFairness"> Aylar arası adalet (önceki ayların birikimi dengeye katılsın)</label>
+          </div>
+          <span class="hint">Birikim tablosunu görmek için üst çubuktan <b>Adalet Panosu</b>'nu açın. Tek ay içindeki denge bu ayardan bağımsız olarak her zaman korunur.</span>
+        </div>
         </div><!-- /setBody -->
       </div><!-- /settings -->
       </div><!-- /ruleEdit -->
@@ -608,7 +616,7 @@
 </div>
 <div class="foot">Nöbet Planlama Asistanı · <b>v44</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=33"></script>
+<script src="asistan-scheduler.js?v=34"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -650,6 +658,8 @@ function movePrio(i,dir){ markDirty(); const p=curProfile(); const po=prioOf(p);
   const t=po[i]; po[i]=po[j]; po[j]=t; p.priorityOrder=po; saveProfiles(); renderPrio(); }
 function fillRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; if(el.type==='checkbox')el.checked=!!p[f]; else el.value=p[f];});
+  // carryFairness RULE_FIELDS dışında: varsayılanı AÇIK — eski profillerde alan hiç yok, !!p[f] onları yanlışlıkla kapatırdı
+  document.getElementById('carryFairness').checked=(p.carryFairness!==false);
   exWrap.querySelectorAll('input[data-dow]').forEach(cb=>{cb.checked=(p.daytimeExtraDays||[]).indexOf(parseInt(cb.dataset.dow,10))>=0;});
   document.getElementById('oncallPerDay').value=fmtRange(p.oncallPerDay,p.oncallMax);
   document.getElementById('weekendOncallPerDay').value=fmtRange(p.weekendOncallPerDay,p.weekendOncallMax);
@@ -660,6 +670,7 @@ function readRuleForm(){ const p=curProfile();
   p.daytimeExtraDays=[...exWrap.querySelectorAll('input[data-dow]:checked')].map(cb=>parseInt(cb.dataset.dow,10));
   const r1=parseRange(document.getElementById('oncallPerDay').value); p.oncallPerDay=r1[0]; p.oncallMax=r1[1];
   const r2=parseRange(document.getElementById('weekendOncallPerDay').value); p.weekendOncallPerDay=r2[0]; p.weekendOncallMax=r2[1];
+  p.carryFairness=document.getElementById('carryFairness').checked;
   readCustomShifts(); saveProfiles(); renderRuleSummary(); }
 // ---- ÖZEL VARDİYALAR ----
 const CUSTOM_COLORS=['#0891b2','#9333ea','#ca8a04','#be185d','#15803d','#b45309','#0369a1','#4d7c0f'];
@@ -732,6 +743,9 @@ function renderRuleSummary(){
   if(p.minSeniorOncall>0) L.push(`Her nöbette en az <b>${p.minSeniorOncall} kıdemli</b> bulunur.`);
   if(p.minSeniorDaytime>0) L.push(`Her hafta içi gündüzde en az <b>${p.minSeniorDaytime} kıdemli</b> bulunur.`);
   if(p.overtimeForCounts) L.push(`Gündüz sayıları tutmazsa <b>fazla mesai verilir</b>.`);
+  L.push(p.carryFairness!==false
+    ? `Nöbet yükü <b>aylar arası</b> dengelenir: geçen ay çok tutan bu ay az tutar.`
+    : `Her ay <b>yalnız kendi içinde</b> dengelenir; önceki ayların birikimi dikkate alınmaz.`);
   ul.innerHTML=L.map(x=>`<li>${x}</li>`).join('');
 }
 
@@ -1147,7 +1161,9 @@ function toggleBoard(){ const box=document.getElementById('panelExtra');
   const rows=names.map((n,i)=>{ const dWk=agg[n].wk-fairWk, dNc=agg[n].nc-fairNc;
     return `<tr><td style="text-align:left">${i+1}. ${n}</td><td>${agg[n].nc}</td><td style="color:${col(dNc)}">${dNc>0?'+':''}${dNc.toFixed(1)}</td><td><b>${agg[n].wk}</b></td><td style="color:${col(dWk)}">${dWk>0?'+':''}${dWk.toFixed(1)}</td></tr>`; }).join('');
   box.setAttribute('data-show','board');
+  const carryKapali=curProfile().carryFairness===false;
   box.innerHTML=`<div class="panel"><h2>Adalet Panosu <span class="muted" style="font-size:12px;font-weight:400">· ${months} ay birikimi (Eylül 2026'dan itibaren)</span></h2>`
+    +(carryKapali?`<div class="note" style="margin-bottom:8px;border-color:#ca8a04">Bu birimde <b>aylar arası adalet kapalı</b> — tablo yalnız bilgi amaçlıdır, algoritma bu birikimi kullanmaz. Ayarlar → Adalet bölümünden açabilirsiniz.</div>`:'')
     +`<div class="note" style="margin-bottom:8px">Kümülatif dağılım. <span style="color:#fca5a5">Kırmızı</span> = ortalamanın üstünde (fazla yüklenmiş → bu ay rahatlatın), <span style="color:#86efac">yeşil</span> = altında (daha çok yüklenebilir).</div>`
     +`<div class="gridwrap"><table class="grid" style="min-width:auto"><thead><tr><th class="name">Personel</th><th>Nöbet</th><th>Nöbet farkı</th><th>Hafta sonu</th><th>H.sonu farkı</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
