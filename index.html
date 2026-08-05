@@ -268,7 +268,6 @@
   .bosdurum{background:var(--inset);border:1px dashed var(--line2);border-radius:8px;padding:16px 18px;
     font-size:12.5px;color:var(--muted);line-height:1.6}
   .bosdurum b{color:var(--txt)}
-  .yatay-uyari{display:none;font-size:8px;border:1px solid #999;padding:3px 5px;margin-bottom:4px;color:#000}
   .tb-ayirac{width:1px;height:22px;background:var(--line2);flex-shrink:0;margin:0 2px}
   .statusbar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;align-items:center;gap:12px;
     padding:9px 16px;background:rgba(22,27,34,.97);backdrop-filter:blur(8px);border-top:1px solid var(--line2);
@@ -311,24 +310,25 @@
     .tot{background:#f3f4f6!important;color:#000!important;font-size:8.4px;font-weight:700}
     .tot.bad{color:#b91c1c!important} .tot.good{color:#15803d!important}
     .legend{font-size:9px;margin-top:6px;gap:8px;color:#000} .legend .sw{border:1px solid #999}
-    /* ---- DİKEY KÂĞIT (telefonda yazdırma kutusu çoğu zaman yatayı yok sayar) ----
-       40 sütun dikey kâğıda sığmayınca çıktı okunmaz oluyordu. Bu blok yalnız
-       dikey basıldığında devreye girer: tablo sayfayı GERMEZ, yazılar küçülür,
-       isim sütunu daralır. Yatay basıldığında hiçbiri uygulanmaz. */
+    /* ---- DİKEY KÂĞIDA YATAY BASKI (telefon) ----------------------------
+       Telefon yazdırma kutuları @page'in "landscape" isteğini çoğu zaman
+       yok sayıp kâğıdı dikey veriyor; 40 sütunluk tablo o kâğıda sığmıyor.
+       Çözüm: kâğıdı çevirmek yerine İÇERİĞİ 90° çeviriyoruz — çıktı elde
+       yan tutulduğunda yatay baskının BİREBİR AYNISI olur.
+
+       Ölçüler: A4 dikey 210×297mm, 6mm kenar boşluğu → basılabilir alan
+       198×285mm. Kutuyu 285×198mm (yani yatay A4'ün basılabilir alanı)
+       kurup 90° döndürüyoruz. Dönüş merkezi 99mm 99mm seçilince kutu tam
+       olarak 0,0–198,285 aralığına oturur (taşma/boş sayfa olmaz).
+       Yatay basıldığında bu blok hiç çalışmaz. */
     @media (orientation: portrait){
-      table.grid{height:auto;font-size:6px}
-      /* Hücre 17px, "N08-08" tek satırda 20px yer istiyor → son karakter
-         kırpılıyordu. Yazıyı okunmaz hale getirmek yerine kodun alt satıra
-         taşmasına izin veriyoruz ("N08-" / "08"); satır yüksekliği artar,
-         bilgi kaybı olmaz. */
-      table.grid th,table.grid td{padding:1px 0;letter-spacing:-0.3px;
-        white-space:normal;word-break:break-all;line-height:1.05}
-      table.grid thead th{font-size:6px}
-      table.grid th.name,table.grid td.name{width:56px;min-width:56px;font-size:7px;padding:1px 2px}
-      .tot{font-size:6px}
-      .panel h2{font-size:11px}
-      .legend{font-size:7px;gap:5px} .warns{font-size:7.5px}
-      .yatay-uyari{display:block!important}
+      html,body{width:198mm;height:285mm;margin:0;padding:0;overflow:hidden}
+      .wrap{width:285mm;height:198mm;transform:rotate(90deg);transform-origin:99mm 99mm}
+      /* 82vh dikey sayfada 243mm eder, kutuya sığmaz. Yatay sayfadaki
+         karşılığı 172mm; ancak çevrilen içerik 2. sayfaya AKAMAZ (dönüşüm
+         sayfalamayı bozar), taşan kısım kâğıdın dışında kalır. Bu yüzden
+         başlık + uyarı kutusu için ~11mm pay bırakıp 160mm'e çekildi. */
+      table.grid{height:160mm}
     }
     .warns{font-size:9.5px;margin-top:7px;color:#000!important;background:#fff!important;border:1px solid #999!important}
   }
@@ -1209,9 +1209,7 @@ function render(r){
   const out=document.getElementById('output'), p=curProfile();
   const showAll=document.getElementById('showAll') && document.getElementById('showAll').checked;
   const ai=document.getElementById('altInfo'); if(ai) ai.textContent=(ALTS.length>1?ALTS.length+' alternatif'+(LAST&&LAST.meta&&LAST.meta.tried?' ('+LAST.meta.tried+' deneme)':''):'');
-  let h=`<div class="panel">`+(PRECHECK_HTML||'')+
-    `<div class="yatay-uyari">Bu sayfa <b>yatay (landscape)</b> basıldığında okunur olur — yazdırma penceresinden yönü Yatay seçin.</div>`+
-    `<h2>${MONTHS[r.month]} ${r.year} — ${p.name} Nöbet Listesi</h2>`;
+  let h=`<div class="panel">`+(PRECHECK_HTML||'')+`<h2>${MONTHS[r.month]} ${r.year} — ${p.name} Nöbet Listesi</h2>`;
   if(showAll && ALTS.length>1){
     // TÜM ALTERNATİFLER: her biri başlıklı kart, seçili olan vurgulu (yazdırınca yalnız seçili çıkar)
     ALTS.forEach((a,i)=>{ const w=warnCount(a); const act=i===ALT_I;
