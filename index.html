@@ -877,8 +877,15 @@ function applyStartNI(isimler){
   return bulunan;
 }
 // AYLAR ARASI ADALET: her ayın kişi-başı nöbet/hafta sonu özeti; diğer ayların birikimi carry olur.
+/* BAŞLANGIÇ SINIRI: Eylül 2026'dan önceki aylar birikime KATILMAZ.
+   O aylar deneme/eski düzen listeleriydi; adalet hafızasına girmeleri yeni
+   dönemin dağılımını çarpıtıyordu. Adalet Panosu da aynı sınırı kullanır
+   (algoritmanın gördüğü ile yöneticinin gördüğü aynı olsun). */
+const ADALET_BASLANGIC='2026-8';   // ay anahtarı 'YYYY-M', ay 0 tabanlı (8=Eylül)
+const adaletAyNo=k=>{ const p=String(k).split('-'); return (+p[0])*12+(+p[1]); };
+const adaletteSayilir=k=>adaletAyNo(k)>=adaletAyNo(ADALET_BASLANGIC);
 function summarizeResult(r){ const m={}; (r.totals||[]).forEach(t=>{ m[t.name]={ nc:(t.nl||0)+(t.ns||0), wk:t.weekendNobet||0 }; }); return m; }
-function buildCarry(ym){ const by={}; let months=0; Object.keys(MONTHS_DATA).forEach(k=>{ if(k===ym)return; const s=MONTHS_DATA[k]&&MONTHS_DATA[k].summary; if(!s)return; months++;
+function buildCarry(ym){ const by={}; let months=0; Object.keys(MONTHS_DATA).forEach(k=>{ if(k===ym||!adaletteSayilir(k))return; const s=MONTHS_DATA[k]&&MONTHS_DATA[k].summary; if(!s)return; months++;
   Object.keys(s).forEach(n=>{ if(!by[n])by[n]={nc:0,wk:0}; by[n].nc+=s[n].nc||0; by[n].wk+=s[n].wk||0; }); }); return { byName:by, months:months }; }
 function showMonth(ym){
   const md=MONTHS_DATA[ym];
@@ -1128,7 +1135,8 @@ function precheckHtml(cfg){
 function toggleBoard(){ const box=document.getElementById('panelExtra');
   if(box.getAttribute('data-show')==='board'){ box.innerHTML=''; box.removeAttribute('data-show'); return; }
   const agg={}; let months=0;
-  Object.keys(MONTHS_DATA).forEach(k=>{ const s=MONTHS_DATA[k]&&MONTHS_DATA[k].summary; if(!s)return; months++;
+  // buildCarry ile AYNI başlangıç sınırı: pano, algoritmanın gördüğünü gösterir
+  Object.keys(MONTHS_DATA).forEach(k=>{ if(!adaletteSayilir(k))return; const s=MONTHS_DATA[k]&&MONTHS_DATA[k].summary; if(!s)return; months++;
     Object.keys(s).forEach(n=>{ if(!agg[n])agg[n]={nc:0,wk:0}; agg[n].nc+=s[n].nc||0; agg[n].wk+=s[n].wk||0; }); });
   const names=Object.keys(agg);
   if(!names.length){ box.setAttribute('data-show','board'); box.innerHTML=`<div class="panel"><h2>Adalet Panosu</h2><div class="note">Henüz kayıtlı ay özeti yok. Birkaç ay için liste oluşturun; kümülatif nöbet/hafta sonu dağılımı burada görünecek.</div></div>`; return; }
@@ -1139,7 +1147,7 @@ function toggleBoard(){ const box=document.getElementById('panelExtra');
   const rows=names.map((n,i)=>{ const dWk=agg[n].wk-fairWk, dNc=agg[n].nc-fairNc;
     return `<tr><td style="text-align:left">${i+1}. ${n}</td><td>${agg[n].nc}</td><td style="color:${col(dNc)}">${dNc>0?'+':''}${dNc.toFixed(1)}</td><td><b>${agg[n].wk}</b></td><td style="color:${col(dWk)}">${dWk>0?'+':''}${dWk.toFixed(1)}</td></tr>`; }).join('');
   box.setAttribute('data-show','board');
-  box.innerHTML=`<div class="panel"><h2>Adalet Panosu <span class="muted" style="font-size:12px;font-weight:400">· ${months} ay birikimi</span></h2>`
+  box.innerHTML=`<div class="panel"><h2>Adalet Panosu <span class="muted" style="font-size:12px;font-weight:400">· ${months} ay birikimi (Eylül 2026'dan itibaren)</span></h2>`
     +`<div class="note" style="margin-bottom:8px">Kümülatif dağılım. <span style="color:#fca5a5">Kırmızı</span> = ortalamanın üstünde (fazla yüklenmiş → bu ay rahatlatın), <span style="color:#86efac">yeşil</span> = altında (daha çok yüklenebilir).</div>`
     +`<div class="gridwrap"><table class="grid" style="min-width:auto"><thead><tr><th class="name">Personel</th><th>Nöbet</th><th>Nöbet farkı</th><th>Hafta sonu</th><th>H.sonu farkı</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
