@@ -999,6 +999,12 @@
                günün gündüz sayısı 1 oynar, penalty bunu görür ve kötüyse
                tümü geri alınır). */
             for (var dt = 1; dt <= nDays; dt++) {
+              /* "Sadece nöbet" kişiye telafi mesaisi YAZILAMAZ (rolü gereği
+                 mesai almaz; hedefe de zorlanmadığı için saat kaybı sorun
+                 değil). Bu kontrol eksikken onarım, nöbet devreden sadece-
+                 nöbet kişiye 4 güne kadar M yazabiliyordu — eski davranış
+                 testinin yakaladığı gerileme buydu. */
+              if (A2.onlyNobet) break;
               if (A2.hours >= A2.target || B2.hours <= B2.target) break;
               if (!days[dt - 1].workday) continue;
               if (B2.assign[dt] !== 'M' || B2.mustMesai.has(dt)) continue;
