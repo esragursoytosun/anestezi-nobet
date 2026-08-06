@@ -488,7 +488,8 @@
             <div class="fld"><label>Sığmazsa kaç iş günü önce</label><input type="number" id="preLeaveDaysBeforeFallback"><span class="hint">Tercih edilen güne sığmazsa yedek mesafe.</span></div>
             <div class="fld"><label>İzinden önce kaç gün dinlensin</label><input type="number" id="preLeaveGap"><span class="hint">İzine girmeden önce bu kadar gün ücretli izin (dinlenme).</span></div>
             <div class="fld"><label>Nöbet sonrası dinlenme (gün)</label><input type="number" id="postOncallRest"><span class="hint">Nöbetten sonra kaç gün N.İ (gelmez).</span></div>
-            <div class="fld"><label>Üst üste en fazla kaç gün boşta kalabilir</label><input type="number" id="maxConsecutiveOff"><span class="hint">Kişi bu kadar günden fazla üst üste boşta kalmasın.</span></div>
+            <div class="fld"><label>Üst üste en fazla kaç İŞ GÜNÜ boşta kalabilir</label><input type="number" id="maxConsecutiveOff"><span class="hint">Yalnız hafta içi günleri sayar (N.İ + Ü.İ). Araya giren hafta sonu bu sayımı sıfırlar.</span></div>
+            <div class="fld"><label>Üst üste en fazla kaç GÜN işe gelmeyebilir</label><input type="number" id="maxAbsentDays"><span class="hint">Takvim günü: hafta sonu, resmi tatil ve haftalık izin <b>dahil</b> — listeye bakınca görünen boşluk. Yıllık izin ve geçici görev bu kurala girmez. 0 = kapalı.</span></div>
           </div>
         </div>
         <div class="advgrp">
@@ -500,10 +501,25 @@
           </div>
         </div>
         <div class="advgrp">
-          <h4>Adalet</h4>
+          <h4>Denge öncelikleri</h4>
           <p class="help">Nöbet yükünün kişiler arasında nasıl dengeleneceği.</p>
           <div class="row">
             <label class="chk" title="Açıkken: geçen aylarda çok nöbet/hafta sonu tutan bu ay daha az tutar — tek ayda eşit bölünemeyen küsurat (örn. 60 nöbet / 11 kişi) hep aynı kişiye gitmez, dönüşümlü dağılır. Kapalıyken her ay yalnız kendi içinde dengelenir; küsuratın kime düştüğü aydan aya takip edilmez."><input type="checkbox" id="carryFairness"> Aylar arası adalet (önceki ayların birikimi dengeye katılsın)</label>
+          </div>
+          <p class="help" style="margin-top:10px">Kural ihlalleri (her gün yeterli nöbetçi, fazla mesai olmaması, gündüz minimumu) <b>her zaman önce gelir</b> — aşağıdakiler yalnız bunlar sağlandıktan sonra hangi dengenin öne çıkacağını belirler. Birbiriyle yarışırlar: birini yükseltmek diğerinden biraz ödün verdirir.</p>
+          <div class="row">
+            <div class="fld"><label>Hafta sonu / tatil nöbeti dengesi</label>
+              <select id="weightWeekend"></select>
+              <span class="hint">"Bazıları hep hafta sonu tutuyor" şikâyeti varsa yükseltin.</span></div>
+            <div class="fld"><label>Toplam nöbet sayısı dengesi</label>
+              <select id="weightDuty"></select>
+              <span class="hint">Kişi başına düşen toplam nöbet sayısının eşitliği.</span></div>
+            <div class="fld"><label>Nöbetleri aya eşit yayma</label>
+              <select id="weightSpread"></select>
+              <span class="hint">Nöbetlerin aynı haftaya yığılmaması, gün aşırı nöbet olmaması.</span></div>
+            <div class="fld"><label>Üst üste boş gün kalmaması</label>
+              <select id="weightIdle"></select>
+              <span class="hint">Uzun boşluklardan kaçınma (yukarıdaki iki sınırla birlikte çalışır).</span></div>
           </div>
           <span class="hint">Birikim tablosunu görmek için üst çubuktan <b>Adalet Panosu</b>'nu açın. Tek ay içindeki denge bu ayardan bağımsız olarak her zaman korunur.</span>
         </div>
@@ -616,7 +632,7 @@
 </div>
 <div class="foot">Nöbet Planlama Asistanı · <b>v44</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=36"></script>
+<script src="asistan-scheduler.js?v=37"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -630,7 +646,16 @@ const exWrap=document.getElementById('extraDays');
 const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel','oncallLongDaytime','useShortOncall',
   'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','daytimeMin','daytimeExtra',
   'weekendOncall','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
-  'postOncallRest','maxConsecutiveOff','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
+  'postOncallRest','maxConsecutiveOff','maxAbsentDays','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
+/* DENGE ÖNCELİKLERİ: motorda ÇARPAN olarak yaşıyor (0.4/1/2.5/6). Seçenekler
+   sayı değeri taşır; RULE_FIELDS'in genel yolu string bırakırdı, o yüzden
+   ayrı okunup parseFloat ile yazılır. */
+const AGIRLIK_ALANLARI=['weightWeekend','weightDuty','weightSpread','weightIdle'];
+const AGIRLIK_SECENEK='<option value="0.4">Düşük</option><option value="1">Normal</option><option value="2.5">Yüksek</option><option value="6">Çok yüksek</option>';
+function agirlikSecenekleriDoldur(){ AGIRLIK_ALANLARI.forEach(f=>{ const el=document.getElementById(f); if(el&&!el.options.length)el.innerHTML=AGIRLIK_SECENEK; }); }
+function agirlikDegeri(v){ const x=parseFloat(v); if(!(x>0))return '1';
+  // profildeki serbest sayıyı en yakın seçeneğe oturt (eski/elle girilmiş değerler için)
+  let en='1',fark=Infinity; ['0.4','1','2.5','6'].forEach(o=>{const f=Math.abs(x-parseFloat(o)); if(f<fark){fark=f;en=o;}}); return en; }
 let PROFILES=[], PROF_I=0;
 function loadProfiles(){ try{ PROFILES=JSON.parse(localStorage.getItem('asistan_profiles')||'null'); }catch(e){ PROFILES=null; }
   if(!PROFILES||!PROFILES.length) PROFILES=[AsistanScheduler.defaultProfile()];
@@ -660,6 +685,8 @@ function fillRuleForm(){ const p=curProfile();
   RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; if(el.type==='checkbox')el.checked=!!p[f]; else el.value=p[f];});
   // carryFairness RULE_FIELDS dışında: varsayılanı AÇIK — eski profillerde alan hiç yok, !!p[f] onları yanlışlıkla kapatırdı
   document.getElementById('carryFairness').checked=(p.carryFairness!==false);
+  agirlikSecenekleriDoldur();
+  AGIRLIK_ALANLARI.forEach(f=>{ const el=document.getElementById(f); if(el)el.value=agirlikDegeri(p[f]); });
   exWrap.querySelectorAll('input[data-dow]').forEach(cb=>{cb.checked=(p.daytimeExtraDays||[]).indexOf(parseInt(cb.dataset.dow,10))>=0;});
   document.getElementById('oncallPerDay').value=fmtRange(p.oncallPerDay,p.oncallMax);
   document.getElementById('weekendOncallPerDay').value=fmtRange(p.weekendOncallPerDay,p.weekendOncallMax);
@@ -671,6 +698,7 @@ function readRuleForm(){ const p=curProfile();
   const r1=parseRange(document.getElementById('oncallPerDay').value); p.oncallPerDay=r1[0]; p.oncallMax=r1[1];
   const r2=parseRange(document.getElementById('weekendOncallPerDay').value); p.weekendOncallPerDay=r2[0]; p.weekendOncallMax=r2[1];
   p.carryFairness=document.getElementById('carryFairness').checked;
+  AGIRLIK_ALANLARI.forEach(f=>{ const el=document.getElementById(f); if(el)p[f]=parseFloat(el.value)||1; });
   readCustomShifts(); saveProfiles(); renderRuleSummary(); }
 // ---- ÖZEL VARDİYALAR ----
 const CUSTOM_COLORS=['#0891b2','#9333ea','#ca8a04','#be185d','#15803d','#b45309','#0369a1','#4d7c0f'];
@@ -740,6 +768,14 @@ function renderRuleSummary(){
   L.push(`Kişi başı aylık hedef: her iş günü <b>${p.targetPerWorkday} saat</b>. Yıllık ve haftalık izinler hedeften düşülür.`);
   if(p.preLeaveOncall) L.push(`Yıllık izne çıkmadan <b>${p.preLeaveDaysBefore} iş günü</b> önce nöbet konur, izinden önce <b>${p.preLeaveGap} gün</b> dinlenme verilir.`);
   L.push(`Kimse üst üste <b>${p.maxConsecutiveOff} iş gününden</b> fazla boşta kalmaz.`);
+  if(p.maxAbsentDays>0) L.push(`Kimse üst üste <b>${p.maxAbsentDays} günden</b> fazla işe gelmeden kalmaz (hafta sonu dahil; yıllık izin hariç).`);
+  {
+    const ad={0.4:'düşük',1:'normal',2.5:'yüksek',6:'çok yüksek'};
+    const oncelik=[['Hafta sonu dengesi',p.weightWeekend],['Nöbet sayısı dengesi',p.weightDuty],
+      ['Nöbetleri yayma',p.weightSpread],['Boş gün kümelenmesi',p.weightIdle]]
+      .map(([n,v])=>[n,ad[agirlikDegeri(v)]||'normal']).filter(([,v])=>v!=='normal');
+    if(oncelik.length) L.push('Denge öncelikleri: '+oncelik.map(([n,v])=>`<b>${n}: ${v}</b>`).join(' · ')+'.');
+  }
   if(p.minSeniorOncall>0) L.push(`Her nöbette en az <b>${p.minSeniorOncall} kıdemli</b> bulunur.`);
   if(p.minSeniorDaytime>0) L.push(`Her hafta içi gündüzde en az <b>${p.minSeniorDaytime} kıdemli</b> bulunur.`);
   if(p.overtimeForCounts) L.push(`Gündüz sayıları tutmazsa <b>fazla mesai verilir</b>.`);
