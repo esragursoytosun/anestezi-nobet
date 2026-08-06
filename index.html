@@ -520,6 +520,9 @@
             <div class="fld"><label>Üst üste boş gün kalmaması</label>
               <select id="weightIdle"></select>
               <span class="hint">Uzun boşluklardan kaçınma (yukarıdaki iki sınırla birlikte çalışır).</span></div>
+            <div class="fld"><label>Çalışma sıklığı dengesi</label>
+              <select id="weightRhythm"></select>
+              <span class="hint">Herkes yaklaşık aynı sayıda <b>gün</b> işe gelsin. Saat hedefi eşit olsa bile 24s nöbet ağırlıklı kişi daha az gün gelir; "bazıları sık, bazıları seyrek çalışıyor" şikâyeti varsa yükseltin.</span></div>
           </div>
           <span class="hint">Birikim tablosunu görmek için üst çubuktan <b>Adalet Panosu</b>'nu açın. Tek ay içindeki denge bu ayardan bağımsız olarak her zaman korunur.</span>
         </div>
@@ -632,7 +635,7 @@
 </div>
 <div class="foot">Nöbet Planlama Asistanı · <b>v44</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=37"></script>
+<script src="asistan-scheduler.js?v=38"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -650,7 +653,7 @@ const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel'
 /* DENGE ÖNCELİKLERİ: motorda ÇARPAN olarak yaşıyor (0.4/1/2.5/6). Seçenekler
    sayı değeri taşır; RULE_FIELDS'in genel yolu string bırakırdı, o yüzden
    ayrı okunup parseFloat ile yazılır. */
-const AGIRLIK_ALANLARI=['weightWeekend','weightDuty','weightSpread','weightIdle'];
+const AGIRLIK_ALANLARI=['weightWeekend','weightDuty','weightSpread','weightIdle','weightRhythm'];
 const AGIRLIK_SECENEK='<option value="0.4">Düşük</option><option value="1">Normal</option><option value="2.5">Yüksek</option><option value="6">Çok yüksek</option>';
 function agirlikSecenekleriDoldur(){ AGIRLIK_ALANLARI.forEach(f=>{ const el=document.getElementById(f); if(el&&!el.options.length)el.innerHTML=AGIRLIK_SECENEK; }); }
 function agirlikDegeri(v){ const x=parseFloat(v); if(!(x>0))return '1';
@@ -772,7 +775,8 @@ function renderRuleSummary(){
   {
     const ad={0.4:'düşük',1:'normal',2.5:'yüksek',6:'çok yüksek'};
     const oncelik=[['Hafta sonu dengesi',p.weightWeekend],['Nöbet sayısı dengesi',p.weightDuty],
-      ['Nöbetleri yayma',p.weightSpread],['Boş gün kümelenmesi',p.weightIdle]]
+      ['Nöbetleri yayma',p.weightSpread],['Boş gün kümelenmesi',p.weightIdle],
+      ['Çalışma sıklığı',p.weightRhythm]]
       .map(([n,v])=>[n,ad[agirlikDegeri(v)]||'normal']).filter(([,v])=>v!=='normal');
     if(oncelik.length) L.push('Denge öncelikleri: '+oncelik.map(([n,v])=>`<b>${n}: ${v}</b>`).join(' · ')+'.');
   }
