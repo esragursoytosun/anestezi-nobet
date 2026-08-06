@@ -74,6 +74,14 @@
          doldurur; ölçüldü — aynı ayda kimi 13 gün, kimi 10 gün geliyor ve
          az gelenin uzun boşluk yükü iki katına çıkıyordu (18'e karşı 43). */
       weightRhythm: 1,
+      /* BOŞ GÜN DÜZENİ — çalışanın gerçekten dinlenmesiyle ilgili tercih:
+           'dagitik' : boş günler aya tek tek serpilir (eski davranış;
+                       ölçüldü — boşlukların %70'i tek günlüktü)
+           'toplu'   : boş günler ARKA ARKAYA verilir; tek tek dağılmış izin
+                       yerine gerçek bir mola olur. Üst sınırlar (üst üste en
+                       fazla kaç iş günü / kaç takvim günü) yine geçerlidir —
+                       toplu düzende blok o sınıra kadar uzar. */
+      idleStyle: 'dagitik',
       // ÖNCELİK SIRASI: aynı güne birden çok kural denk gelirse ÜSTTEKİ (öndeki) kazanır.
       // pref=çalışma tercihi (gün nöbet isteği) · offReq=boş gün isteği · leave=yıllık izin ·
       // offDay=haftalık izin günü (doluysa aynı haftada kaydırılır) · startNI=aya N.İ başla · preLeave=izin öncesi nöbet+boşluk
@@ -107,6 +115,7 @@
     r.weightWeekend = agK(r.weightWeekend); r.weightDuty = agK(r.weightDuty);
     r.weightSpread = agK(r.weightSpread); r.weightIdle = agK(r.weightIdle);
     r.weightRhythm = agK(r.weightRhythm);
+    r.idleStyle = (r.idleStyle === 'toplu') ? 'toplu' : 'dagitik';
     var ma = parseInt(r.maxAbsentDays, 10); r.maxAbsentDays = (ma >= 0 && ma <= 31) ? ma : 5;
     return r; }
 
@@ -157,6 +166,7 @@
     bosGunKisi:       1000, bosGunEk:      400,   // takvim boşluğu: eşik + aşan her gün
     digerUyari:        100,
     kume:              2.5, gunAsiri:       6, yayilim: 2.5,
+    bosBlok:            60,                      // TOPLU düzende: her ayrı boşluk bloğu (az blok = uzun mola)
     adaletNobet:        16, adaletHaftaSonu: 14,
     adaletGun:          12,                      // çalışılan GÜN sayısı adaleti
     gunduzDenge:         4, ekstraGun:      8
@@ -166,8 +176,23 @@
   function toArr(x) { if (!x) return []; if (Array.isArray(x)) return x; var r = []; x.forEach(function (v) { r.push(v); }); return r; }
 
   // ===== ANALİZ (tek doğruluk kaynağı) =====
+  function obeb(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = a % b; a = b; b = t; } return a; }
+
   function analyze(grid, plist, daysArr, nDays, P) {
     var HOURS = hoursMap(P), warnings = [];
+    /* ---- HEDEF TUTTURULABİLİR Mİ? ----
+       Aylık hedef ancak vardiya saatlerinin toplamıyla oluşabilir. Bütün
+       vardiyalar örn. 8'in katıysa (8/16/24), 154 saatlik bir hedef ASLA
+       tam dolmaz — herkes 2 saat eksik kalır. Motor eskiden bunu kişi kişi
+       "EKSİK 2 saat" diye bildiriyordu: 13 kişilik birimde 13 aynı uyarı,
+       hiçbiri sebebi söylemiyordu (ölçüldü: çok birimli takımda 117 uyarının
+       tamamı bu yüzdendi). Artık sebep bir kez, açıkça söyleniyor ve
+       kaçınılmaz kalan "kural ihlali" sayılmıyor. */
+    var vardiyaSaatleri = [];
+    ['M', 'NL', 'NS'].forEach(function (k) { if (HOURS[k] > 0) vardiyaSaatleri.push(HOURS[k]); });
+    (P.customShifts || []).forEach(function (cs) { if (+cs.hours > 0) vardiyaSaatleri.push(+cs.hours); });
+    var adim = vardiyaSaatleri.length ? vardiyaSaatleri.reduce(obeb) : 1;
+    var kacinilmazVar = false;
     function present(c) { return c === 'M' || isOncall(c) || isCustom(c, P); }   // özel vardiya da "çalıştı" sayılır
     function dayNeed(dd) { return (dd.workday && P.daytimeExtraDays.indexOf(dd.dow) >= 0) ? P.daytimeExtra : P.daytimeMin; }
     function oncallNeed(dd) { return (dd.weekend || dd.holiday) ? P.weekendOncallPerDay : P.oncallPerDay; }
@@ -189,6 +214,9 @@
           warnings.push(p.name + ' (sorumlu · sadece gündüz): bu ay ' + avail + ' iş günü var → en fazla ' + (avail * P.mesaiHours) + ' saat.');
         } else if (p.onlyNobet) {
           warnings.push('💡 ' + p.name + ' (sadece nöbet): bu ay ' + (nl + ns) + ' nöbet, ' + hours + ' saat (mesai yazılmaz).');
+        } else if (adim > 1 && (p.target % adim) > 0 && (-fark) <= (p.target % adim)) {
+          kacinilmazVar = true;   // hedef vardiya adımlarıyla bölünmüyor -> kaçınılmaz artık
+          warnings.push('💡 ' + p.name + ': ' + (-fark) + ' saat eksik — bu hedef vardiya saatleriyle tam dolmuyor (aşağıdaki ayar notuna bakın).');
         } else warnings.push(p.name + ': EKSİK ' + (-fark) + ' saat (hedef ' + p.target + ', toplam ' + hours + ').');
       }
       // üst üste boş iş günü (lockedOff hariç)
@@ -264,6 +292,27 @@
       if (P.minSeniorDaytime > 0 && dd.workday && srGun < P.minSeniorDaytime) warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüzde ' + srGun + ' kıdemli (en az ' + P.minSeniorDaytime + ' olmalı).');
     });
 
+    if (kacinilmazVar) {
+      warnings.push('💡 AYAR NOTU: Bu birimin vardiyaları ' + vardiyaSaatleri.join('/') + ' saatlik; her çalışma ' + adim +
+        ' saatin katı ekliyor. Aylık hedef bu adımlarla tam dolmadığı için birkaç saat artıyor — bu bir planlama hatası değil, ' +
+        'hedef ile vardiya saatlerinin uyumsuzluğu. Kalıcı çözüm: "Kişi başı aylık çalışma hedefi"ni ya da vardiya saatlerini birbirine uydurun.');
+    }
+    /* KIDEM FİZİBİLİTESİ: "her gün nöbette en az K kıdemli" kuralı, kıdemli
+       sayısı yetmiyorsa her gün ayrı uyarı üretiyordu (30 güne 30 uyarı) ama
+       sebebi söylemiyordu. Bir kıdemlinin aya sığdırabileceği nöbet sayısı
+       hedef saatiyle sınırlıdır; gereken kıdemli sayısı buradan çıkar. */
+    if (P.minSeniorOncall > 0) {
+      var kidemliler = plist.filter(function (p) { return p.senior && !p.noNobet; });
+      var nobetSaat = Math.max(HOURS.NL || 0, HOURS.NS || 0) || 24;
+      var kisiBasi = kidemliler.length ? Math.floor((kidemliler[0].target || 0) / nobetSaat) : 0;
+      var gereken = P.minSeniorOncall * nDays;
+      var kapasite = kidemliler.length * kisiBasi;
+      if (kapasite < gereken && kisiBasi > 0) {
+        warnings.push('💡 AYAR NOTU: "Her nöbette en az ' + P.minSeniorOncall + ' kıdemli" kuralı için bu ay ' + gereken +
+          ' kıdemli-nöbet gerekiyor; ' + kidemliler.length + ' kıdemli en fazla ' + kapasite + ' tutabilir (saat sınırı). ' +
+          'En az ' + Math.ceil(gereken / kisiBasi) + ' kıdemli gerekir ya da kuralı gevşetin.');
+      }
+    }
     var nNobet = plist.filter(function (p) { return !p.noNobet; }).length;
     var hasGap = warnings.some(function (w) { return /sadece \d+ nöbetçi|gündüzde \d+ kişi|üst üste izinli|üst üste işe gelmiyor/.test(w); });
     if (hasGap && nNobet < P.minStaffWarn) {
@@ -715,6 +764,7 @@
     /* Denge öncelikleri: profilden gelen çarpanlar. Kural ihlali kalemleri
        (kapsama/fazla mesai/gündüz) ÇARPILMAZ — onlar her zaman önde. */
     var AG = { hs: P.weightWeekend, nb: P.weightDuty, ya: P.weightSpread, bo: P.weightIdle, ri: P.weightRhythm };
+    var TOPLU = P.idleStyle === 'toplu';
     function penalty() {
         var s = 0;
         // ADALET için toplama: kişi başına nöbet sayısı, hafta sonu nöbeti, nöbet günleri (yayılım), hedef ağırlığı
@@ -730,12 +780,18 @@
              kullanıcı tarafında bu 1 uyarı yerine 3 uyarı demek. */
           if (h > Pp.target) s += W.fazlaMesaiKisi + (h - Pp.target) * W.fazlaMesaiSaat;
           else if (h < Pp.target && !Pp.noNobet && !Pp.onlyNobet) s += W.eksikKisi + (Pp.target - h) * W.eksikSaat;  // (sadece-nöbet HARİÇ: hedefe zorlanmaz -> gün aşırı yığılmaz)
-          var run = 0, runMax = 0, nc = 0, wk = 0, onDays = [];
+          var run = 0, runMax = 0, nc = 0, wk = 0, onDays = [], bosBlokSayisi = 0;
           for (var d = 1; d <= nDays; d++) { var c = Pp.assign[d];
             if (isOncall(c)) { nc++; onDays.push(d); if (days[d - 1].weekend || days[d - 1].holiday) wk++; }
             if (c === 'M' || isOncall(c)) run = 0;
             else if (days[d - 1].workday && (c === 'NI' || c === 'UCI') && !Pp.lockedOff.has(d)) { run++; if (run > runMax) runMax = run;
-              if (run > P.maxConsecutiveOff) s += W.ustUsteGun * AG.bo; else if (run >= 2) s += run * run * W.kume * AG.bo; } }   // boş seriler tekli boşluklara yayılsın (koca boş hafta görünümü olmasın)
+              if (run === 1) bosBlokSayisi++;                                  // yeni boşluk bloğu başladı
+              if (run > P.maxConsecutiveOff) s += W.ustUsteGun * AG.bo;         // ÜST SINIR her iki düzende de geçerli
+              else if (!TOPLU && run >= 2) s += run * run * W.kume * AG.bo; } }  // DAĞITIK düzen: uzun seri cezalı -> boşluklar tek tek yayılır
+          /* TOPLU düzen: uzunluk değil BLOK SAYISI cezalı. Aynı sayıdaki boş
+             gün daha az blokta toplanır, yani kişi dağınık tek günler yerine
+             arka arkaya gerçek bir mola alır. Üst sınır yukarıda korunuyor. */
+          if (TOPLU) s += bosBlokSayisi * W.bosBlok * AG.bo;
           if (runMax > P.maxConsecutiveOff) s += W.ustUsteKisi * AG.bo;   // uyarı KİŞİ başına doğuyor -> eşik cezası da kişi başına
           /* TAKVİM BOŞLUĞU (hafta sonu dahil) — analizdeki uyarının aramadaki
              karşılığı. Motor içinde geçici görev günleri de 'YI' kodludur
@@ -1244,6 +1300,24 @@
       }
     });
 
+    /* ---- MESAİ TAMAMLAMA GARANTİSİ (son adım, kullanıcı isteği) ----
+       Faz 2 hedefi zaten dolduruyor; ama arama ve onarım turları mesai günü
+       kaldırabiliyor (mDrain fazla mesaiyi giderirken, devirler saat
+       taşırken). Boş gün düzeni 'toplu' seçildiğinde bu risk artıyor: uzun
+       blok kurmak için mesai düşürmek cazip hale geliyor. Burada hedefin
+       ALTINDA kalan herkese, uygun boş iş günlerinde mesai yazılır —
+       kilitli günlere, boş gün isteğine ve izinlere dokunulmaz.
+       Rolü gereği hedefe zorlanmayanlar (Sorumlu, sadece nöbet) hariç. */
+    people.forEach(function (Pp) {
+      if (Pp.noNobet || Pp.onlyNobet) return;
+      for (var d = 1; d <= nDays; d++) {
+        if (Pp.hours + P.mesaiHours > Pp.target) break;      // hedefi aşma
+        if (!days[d - 1].workday || Pp.assign[d] !== 'UCI') continue;
+        if (Pp.lockedOff.has(d) || Pp.offReq.has(d)) continue;
+        Pp.assign[d] = 'M'; Pp.hours += P.mesaiHours;
+      }
+    });
+
     var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });
     var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, noNobet: Pp.noNobet, dayOnly: Pp.dayOnly, onlyNobet: Pp.onlyNobet, senior: Pp.senior, onlyN16: Array.from(Pp.onlyN16), onlyN24: Array.from(Pp.onlyN24), onlyDay: Array.from(Pp.onlyDay), lockedOff: Array.from(Pp.lockedOff), offReq: Array.from(Pp.offReq) }; });
     var av = analyze(gridA, plist, days, nDays, P);
@@ -1280,8 +1354,13 @@
     (r.totals || []).forEach(function (t) {
       if (t.noNobet) return; var locked = {}; (t.lockedOff || []).forEach(function (d) { locked[d] = 1; });
       var g = r.grid[t.name] || {}, run = 0;
-      for (var i = 0; i < wd.length; i++) { var c = g[wd[i]], idle = (c === 'NI' || c === 'UCI') && !locked[wd[i]]; if (idle) run++; else { if (run >= 2) s += run * run * W.kume * SAG.bo; run = 0; } }
-      if (run >= 2) s += run * run * W.kume * SAG.bo;
+      // Sıralama ölçüsü cila ile aynı olmalı: düzen 'toplu' ise blok SAYISI, değilse uzunluk cezalı
+      var sTOPLU = SP.idleStyle === 'toplu', sBlok = 0;
+      for (var i = 0; i < wd.length; i++) { var c = g[wd[i]], idle = (c === 'NI' || c === 'UCI') && !locked[wd[i]];
+        if (idle) { run++; if (run === 1) sBlok++; }
+        else { if (!sTOPLU && run >= 2) s += run * run * W.kume * SAG.bo; run = 0; } }
+      if (!sTOPLU && run >= 2) s += run * run * W.kume * SAG.bo;
+      if (sTOPLU) s += sBlok * W.bosBlok * SAG.bo;
       // GÜN AŞIRI NÖBET (N _ N): ilk çiftten itibaren cezalı, artan -> nöbetler yayılır
       var onD = []; for (var od = 1; od <= (r.nDays || 31); od++) if (isOncall(g[od])) onD.push(od);
       var gr = 1; for (var j = 1; j < onD.length; j++) { if (onD[j] - onD[j - 1] === 2) { gr++; s += gr * gr * W.gunAsiri * SAG.ya; } else gr = 1; }

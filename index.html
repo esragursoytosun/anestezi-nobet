@@ -490,6 +490,9 @@
             <div class="fld"><label>Nöbet sonrası dinlenme (gün)</label><input type="number" id="postOncallRest"><span class="hint">Nöbetten sonra kaç gün N.İ (gelmez).</span></div>
             <div class="fld"><label>Üst üste en fazla kaç İŞ GÜNÜ boşta kalabilir</label><input type="number" id="maxConsecutiveOff"><span class="hint">Yalnız hafta içi günleri sayar (N.İ + Ü.İ). Araya giren hafta sonu bu sayımı sıfırlar.</span></div>
             <div class="fld"><label>Üst üste en fazla kaç GÜN işe gelmeyebilir</label><input type="number" id="maxAbsentDays"><span class="hint">Takvim günü: hafta sonu, resmi tatil ve haftalık izin <b>dahil</b> — listeye bakınca görünen boşluk. Yıllık izin ve geçici görev bu kurala girmez. 0 = kapalı.</span></div>
+            <div class="fld"><label>Boş günler nasıl verilsin</label>
+              <select id="idleStyle"><option value="dagitik">Dağıtık — aya tek tek serpilsin</option><option value="toplu">Toplu — arka arkaya verilsin</option></select>
+              <span class="hint"><b>Toplu</b> seçilince aynı sayıdaki boş gün daha az blokta toplanır: personel dağınık tek günler yerine gerçek bir mola alır. Yukarıdaki iki sınır yine geçerlidir — blok o sınıra kadar uzar, daha uzun mola isterseniz sınırları da yükseltin.</span></div>
           </div>
         </div>
         <div class="advgrp">
@@ -635,7 +638,7 @@
 </div>
 <div class="foot">Nöbet Planlama Asistanı · <b>v44</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=38"></script>
+<script src="asistan-scheduler.js?v=39"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -649,7 +652,7 @@ const exWrap=document.getElementById('extraDays');
 const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel','oncallLongDaytime','useShortOncall',
   'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','daytimeMin','daytimeExtra',
   'weekendOncall','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
-  'postOncallRest','maxConsecutiveOff','maxAbsentDays','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
+  'postOncallRest','maxConsecutiveOff','maxAbsentDays','idleStyle','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
 /* DENGE ÖNCELİKLERİ: motorda ÇARPAN olarak yaşıyor (0.4/1/2.5/6). Seçenekler
    sayı değeri taşır; RULE_FIELDS'in genel yolu string bırakırdı, o yüzden
    ayrı okunup parseFloat ile yazılır. */
@@ -772,6 +775,9 @@ function renderRuleSummary(){
   if(p.preLeaveOncall) L.push(`Yıllık izne çıkmadan <b>${p.preLeaveDaysBefore} iş günü</b> önce nöbet konur, izinden önce <b>${p.preLeaveGap} gün</b> dinlenme verilir.`);
   L.push(`Kimse üst üste <b>${p.maxConsecutiveOff} iş gününden</b> fazla boşta kalmaz.`);
   if(p.maxAbsentDays>0) L.push(`Kimse üst üste <b>${p.maxAbsentDays} günden</b> fazla işe gelmeden kalmaz (hafta sonu dahil; yıllık izin hariç).`);
+  L.push(p.idleStyle==='toplu'
+    ? `Boş günler <b>arka arkaya</b> verilir (dağınık tek günler yerine toplu mola).`
+    : `Boş günler aya <b>tek tek dağıtılır</b>.`);
   {
     const ad={0.4:'düşük',1:'normal',2.5:'yüksek',6:'çok yüksek'};
     const oncelik=[['Hafta sonu dengesi',p.weightWeekend],['Nöbet sayısı dengesi',p.weightDuty],
