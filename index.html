@@ -674,7 +674,7 @@
 </div>
 <div class="foot">Nöbet Planlama Asistanı · <b>v44</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=44"></script>
+<script src="asistan-scheduler.js?v=45"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -711,7 +711,7 @@ function refreshProfSel(){ const s=document.getElementById('profSel');
 function parseRange(s){ const n=(String(s||'').match(/\d+/g)||[]).map(x=>parseInt(x,10)); let a=n.length?n[0]:1, b=n.length>1?n[1]:a; if(isNaN(a))a=1; if(isNaN(b))b=a; if(b<a){const t=a;a=b;b=t;} return [a,b]; }
 function fmtRange(min,max){ min=min||0; return (max&&max>min)?(min+'-'+max):String(min); }
 // ÖNCELİK SIRASI (çakışan talepler): üstteki kazanır; motor bu sırayla katman uygular
-const PRIO_LABELS={ pref:'Çalışma tercihi (bazı gün kısa/uzun nöbet)', offReq:'Boş gün isteği', leave:'Yıllık izin',
+const PRIO_LABELS={ pref:'Nöbet türü isteği (bazı gün kısa/uzun nöbet)', dayReq:'Gündüz isteği (bazı günlerde gündüz çalışsın)', offReq:'Boş gün isteği', leave:'Yıllık izin',
   offDay:'Haftalık izin günü (doluysa aynı haftada kaydırılır)', startNI:'Aya N.İ ile başla', preLeave:'Yıllık izin öncesi nöbet + boşluk kuralı' };
 function prioOf(p){ const ALL=Object.keys(PRIO_LABELS); let po=Array.isArray(p.priorityOrder)?p.priorityOrder.filter(k=>ALL.indexOf(k)>=0):[];
   ALL.forEach(k=>{ if(po.indexOf(k)<0)po.push(k); }); return po; }
@@ -981,7 +981,7 @@ function addPerson(name){
           <div class="daterange"><input type="date" class="p-gg-s" title="Geçici görev başlangıcı"><span>–</span>
             <input type="date" class="p-gg-e" title="Geçici görev bitişi"></div></div>
         <div class="pdetay-alan"><label>Gün bazlı istisna</label>
-          <input type="text" class="p-onlyday" placeholder="bu günlerde gündüz: 7,8" title="Yalnız bu günlerde nöbet verilmez (gündüz)">
+          <input type="text" class="p-onlyday" placeholder="bu günlerde gündüz: 7,8" title="Bu günlere GÜNDÜZ MESAİSİ yazılır ve korunur; o günlere nöbet verilmez. Uygulanamazsa sebebi listenin altında not olarak çıkar.">
           <input type="text" class="p-onlyn16" placeholder="bu günlerde kısa nöbet: 12" title="Bu günlerde nöbet uzun değil KISA (16s) olsun">
           <input type="text" class="p-onlyn24" placeholder="bu günlerde uzun nöbet: 20" title="Bu günlerde nöbet kısa değil UZUN (24s) olsun"></div>
       </div></details></div>

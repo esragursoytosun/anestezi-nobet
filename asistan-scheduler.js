@@ -118,7 +118,8 @@
       // ÖNCELİK SIRASI: aynı güne birden çok kural denk gelirse ÜSTTEKİ (öndeki) kazanır.
       // pref=çalışma tercihi (gün nöbet isteği) · offReq=boş gün isteği · leave=yıllık izin ·
       // offDay=haftalık izin günü (doluysa aynı haftada kaydırılır) · startNI=aya N.İ başla · preLeave=izin öncesi nöbet+boşluk
-      priorityOrder: ['pref', 'offReq', 'leave', 'offDay', 'startNI', 'preLeave'],
+      // dayReq = "bu günlerde gündüz" isteği (kişiye özel gün listesi)
+      priorityOrder: ['pref', 'dayReq', 'offReq', 'leave', 'offDay', 'startNI', 'preLeave'],
       // ÖZEL VARDİYALAR (kullanıcı ekler): ızgarada ELLE atanır; saat/gündüz/lejantta sayılır.
       // (Otomatik dağıtım çekirdek vardiyalarla yapılır; özel vardiyaların otomatiğe girmesi sonra.)
       //   { code:'C1', label:'12s', hours:12, daytime:true, color:'#0891b2' }
@@ -138,8 +139,15 @@
     r.oncallMax = Math.max(r.oncallMax || 0, r.oncallPerDay);
     r.weekendOncallMax = Math.max(r.weekendOncallMax || 0, r.weekendOncallPerDay);
     // ÖNCELİK SIRASI normalize: bilinmeyen anahtarlar atılır, eksikler varsayılan sırayla sona eklenir
-    var PRIO_ALL = ['pref', 'offReq', 'leave', 'offDay', 'startNI', 'preLeave'];
+    var PRIO_ALL = ['pref', 'dayReq', 'offReq', 'leave', 'offDay', 'startNI', 'preLeave'];
     var po = (p && Array.isArray(p.priorityOrder)) ? p.priorityOrder.filter(function (k) { return PRIO_ALL.indexOf(k) >= 0; }) : [];
+    /* GÖÇ: 'dayReq' sonradan eklendi. Eksikse SONA değil, 'pref'in hemen
+       ardına konur — ikisi de kişinin o güne dair açık isteği; birini
+       listenin dibine atmak "isteğim dikkate alınmadı" demek olurdu. */
+    if (po.length && po.indexOf('dayReq') < 0) {
+      var pi = po.indexOf('pref');
+      po.splice(pi >= 0 ? pi + 1 : 0, 0, 'dayReq');
+    }
     PRIO_ALL.forEach(function (k) { if (po.indexOf(k) < 0) po.push(k); });
     r.priorityOrder = po;
     // DENGE ÖNCELİKLERİ: serbest sayı ama makul aralığa sıkıştırılır (0 ya da
@@ -343,6 +351,21 @@
       if (p.preLeaveKisaldi) warnings.push('💡 ' + p.name + ': aylık saat hedefini tutturmak için izin öncesi dinlenme boşluğu kısaltıldı. ' +
         'Boşluğun korunmasını isterseniz "İzin ve dinlenme" bölümünden kapatabilirsiniz (o zaman saat eksik kalır).');
       noteReq(p.onlyN16, 'NS', 'kısa nöbet'); noteReq(p.onlyN24, 'NL', 'uzun nöbet');
+      /* GÜNDÜZ İSTEĞİ karşılanmadıysa sebebini söyle — sessiz kalmak, isteğin
+         hiç girilmemiş gibi görünmesine yol açıyordu. */
+      (p.onlyDay || []).forEach(function (dn) {
+        var c = a[dn] || '';
+        if (c === 'M') return;
+        if (p.onlyNobet) { warnings.push('💡 ' + p.name + ': ' + dn + '. gün gündüz isteği uygulanamadı (bu kişi “sadece nöbet”).'); return; }
+        var why = (c === 'YI' || c === 'GG') ? 'yıllık izin/geçici görev'
+          : (c === 'OFF') ? 'haftalık izin günü'
+          : (c === 'NI') ? 'nöbet sonrası dinlenme'
+          : (isOncall(c)) ? 'o güne nöbet yazıldı'
+          : (c === 'HT' || c === 'RT') ? 'hafta sonu/resmi tatil'
+          : 'daha öncelikli bir kural bu günü kapattı';
+        warnings.push('💡 ' + p.name + ': ' + dn + '. gün gündüz isteği uygulanamadı (' + why +
+          '). Öncelik sırasında “Bu günlerde gündüz” kuralını yukarı taşırsanız öne geçer.');
+      });
       return { name: p.name, target: p.target, hours: hours, fark: fark, mesai: mesai, nl: nl, ns: ns,
         ni: ni, uci: uci, weekendNobet: wkn, noNobet: !!p.noNobet, dayOnly: !!p.dayOnly, onlyNobet: !!p.onlyNobet, senior: !!p.senior,
         onlyN16: p.onlyN16 || [], onlyN24: p.onlyN24 || [], onlyDay: p.onlyDay || [], lockedOff: p.lockedOff || [],
@@ -515,6 +538,23 @@
             if (!wants) return;
             if (!prefEligible(Pp, d, wants)) return;              // dinlenme/uygunluk (sıra kararı: hücre durumu)
             placeCover(Pp, dd, wants);
+          });
+        });
+      },
+      /* BU GÜNLERDE GÜNDÜZ: kişinin o güne "gündüz çalışayım" isteği.
+         Ölçüldü ve kullanıcı bildirdi: bu istek YALNIZCA "o gün nöbet verme"
+         diye işliyordu; mesai yazan hiçbir katman yoktu, gün çoğu zaman boş
+         (Ü.İ) ya da dinlenme (N.İ) kalıyordu — istenen 12 günün 5'ine mesai
+         yazılmıştı. Artık istek olumlu olarak da uygulanır: mesai yazılır ve
+         mustMesai ile korunur (sonraki fazlar taşıyamaz/silemez). */
+      dayReq: function () {
+        people.forEach(function (Pp) {
+          if (Pp.onlyNobet) return;              // "sadece nöbet" kişiye mesai yazılmaz
+          Pp.onlyDay.forEach(function (dn) {
+            if (dn < 1 || dn > nDays) return;
+            var c = Pp.assign[dn];
+            if (c !== '' && c !== 'HT' && c !== 'RT') return;   // daha öncelikli kural günü kapmış
+            Pp.assign[dn] = 'M'; Pp.hours += P.mesaiHours; Pp.mustMesai.add(dn);
           });
         });
       },
