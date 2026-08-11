@@ -210,7 +210,7 @@
     sekilSapma:        400,                      // ayarlanan nöbet şeklinden sapan her nöbet ('zorunlu' modda)
     adaletNobet:        16, adaletHaftaSonu: 14,
     adaletGun:          12,                      // çalışılan GÜN sayısı adaleti
-    gunduzDenge:         4, ekstraGun:      8
+    gunduzDenge:         4, ekstraGun:     35,   // "bu günlerde daha fazla kişi olsun" tercihi
   };
 
   // Set ya da dizi -> dizi (analiz hem motor içinden Set'le hem recompute'tan diziyle çağrılır)
@@ -362,6 +362,27 @@
       if (P.minSeniorDaytime > 0 && dd.workday && srGun < P.minSeniorDaytime) warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüzde ' + srGun + ' kıdemli (en az ' + P.minSeniorDaytime + ' olmalı).');
     });
 
+    /* EKSTRA GÜNDÜZ GÜNLERİ: kullanıcı "bu günlerde daha fazla kişi olsun"
+       dediyse, o günlerin normal günlerden GERÇEKTEN kalabalık olması
+       beklenir. Asgari sayı tutsa bile ortalama eşitse tercih fiilen
+       uygulanmamış demektir (ölçüldü: 12 kişilik izinli ayda ekstra günler
+       normal günlerden 0.17 kişi DAHA AZ çıkıyordu). Bu durum artık
+       sessizce geçilmiyor. */
+    if ((P.daytimeExtraDays || []).length && P.daytimeExtra > P.daytimeMin) {
+      var ekT = 0, ekN = 0, nrT = 0, nrN = 0;
+      daysArr.forEach(function (dd) {
+        if (!dd.workday) return;
+        var g = 0;
+        plist.forEach(function (pp) { if (pp.noNobet) return; if (coversDaytime((grid[pp.name] || {})[dd.day], P)) g++; });
+        if (P.daytimeExtraDays.indexOf(dd.dow) >= 0) { ekT += g; ekN++; } else { nrT += g; nrN++; }
+      });
+      if (ekN && nrN) {
+        var fark = (ekT / ekN) - (nrT / nrN);
+        if (fark < 0.5) warnings.push('💡 Ekstra gündüz günleri: bu günlerde ortalama ' + (ekT / ekN).toFixed(1) +
+          ' kişi var, diğer iş günlerinde ' + (nrT / nrN).toFixed(1) + ' — istenen "daha kalabalık" farkı oluşmadı. ' +
+          'Asgari sayı tutuyor ama kadro bu ay fazlasına yetmiyor; izinleri yaymak ya da o günlerin asgarisini yükseltmek işe yarar.');
+      }
+    }
     /* NÖBET ŞEKLİ SAPMASI — bilgi notu. "Zor durumda kalınca 16 yapılsın"
        diyen yöneticinin görmek istediği tam olarak bu: NE ZAMAN zorunlu
        kalındı. Kişinin kendi tür isteğiyle yazılanlar sayılmaz. */
