@@ -1483,32 +1483,45 @@
        ALTINDA kalan herkese, uygun boş iş günlerinde mesai yazılır —
        kilitli günlere, boş gün isteğine ve izinlere dokunulmaz.
        Rolü gereği hedefe zorlanmayanlar (Sorumlu, sadece nöbet) hariç. */
+    /* Bu gün çalışma olsaydı üst üste çalışma serisi kaç olurdu? */
+    function seriOlurdu(Pp, d) {
+      var n = 1, a, b;
+      for (a = d - 1; a >= 1; a--) { var ca = Pp.assign[a]; if (ca === 'M' || isOncall(ca)) n++; else break; }
+      for (b = d + 1; b <= nDays; b++) { var cb = Pp.assign[b]; if (cb === 'M' || isOncall(cb)) n++; else break; }
+      return n;
+    }
     people.forEach(function (Pp) {
       if (Pp.noNobet || Pp.onlyNobet) return;
-      // 1. GEÇİŞ: serbest boş iş günleri
+      /* Aday günler iki kümede: SERBEST boş iş günleri ve İZİN ÖNCESİ
+         dinlenme için kilitlenmiş günler. Kişinin KENDİ boş gün isteğine
+         hiçbir durumda dokunulmaz. */
+      var serbest = [], kilitli = [];
       for (var d = 1; d <= nDays; d++) {
-        if (Pp.hours + P.mesaiHours > Pp.target) break;      // hedefi aşma
-        if (!days[d - 1].workday || Pp.assign[d] !== 'UCI') continue;
-        if (Pp.lockedOff.has(d) || Pp.offReq.has(d)) continue;
-        Pp.assign[d] = 'M'; Pp.hours += P.mesaiHours;
+        if (!days[d - 1].workday || Pp.assign[d] !== 'UCI' || Pp.offReq.has(d)) continue;
+        if (Pp.preLeaveLock.has(d)) { if (P.hoursBeforePreLeaveGap !== false) kilitli.push(d); }
+        else if (!Pp.lockedOff.has(d)) serbest.push(d);
       }
-      /* 2. GEÇİŞ: hâlâ eksikse İZİN ÖNCESİ dinlenme boşluğunu kısalt.
-         Ölçüldü ve kullanıcı bildirdi ("-8 saat yazıyor"): tamamlamaya
-         yetecek boş gün VARDI ama üçü de izin öncesi kuralıyla kilitliydi,
-         kimse sebebini göremiyordu. Kişinin KENDİ boş gün isteğine asla
-         dokunulmaz; yalnız motorun koyduğu dinlenme boşluğu kısaltılır ve
-         sebep not olarak bildirilir. İzine EN YAKIN günler korunur, uzaktaki
-         kısaltılır (dinlenme izne bitişik kalsın). */
-      if (P.hoursBeforePreLeaveGap === false) return;
-      var adaylar = [];
-      for (var d2 = 1; d2 <= nDays; d2++) {
-        if (!days[d2 - 1].workday || Pp.assign[d2] !== 'UCI') continue;
-        if (Pp.offReq.has(d2) || !Pp.preLeaveLock.has(d2)) continue;
-        adaylar.push(d2);
+      /* SIRA ÖNEMLİ. Denetim testi yakaladı: bu adım en sonda çalıştığı için
+         ceza fonksiyonunun görüş alanı dışında kalıyor ve "üst üste en fazla
+         N gün çalışma" tavanını çiğneyebiliyordu (ölçüldü: tavan 3 iken
+         4 gün üst üste M yazılmıştı). Artık önce tavanı BOZMAYAN günler
+         denenir; hedef hâlâ dolmuyorsa ancak o zaman tavan aşılır — saat
+         hedefi kullanıcı için daha önemli, ama bedava değil: aşım analizde
+         uyarı olarak görünür. */
+      function doldur(liste, tavaniKoru, izinKilidi) {
+        for (var i = 0; i < liste.length; i++) {
+          var g = liste[i];
+          if (Pp.hours + P.mesaiHours > Pp.target) return;      // hedefi aşma
+          if (Pp.assign[g] !== 'UCI') continue;                  // önceki geçişte doldurulmuş
+          if (tavaniKoru && P.maxConsecutiveWork > 0 && seriOlurdu(Pp, g) > P.maxConsecutiveWork) continue;
+          Pp.assign[g] = 'M'; Pp.hours += P.mesaiHours;
+          if (izinKilidi) Pp.preLeaveKisaldi = true;
+        }
       }
-      for (var ai = 0; ai < adaylar.length && Pp.hours + P.mesaiHours <= Pp.target; ai++) {
-        Pp.assign[adaylar[ai]] = 'M'; Pp.hours += P.mesaiHours; Pp.preLeaveKisaldi = true;
-      }
+      doldur(serbest, true, false);     // 1) tavanı bozmayan serbest günler
+      doldur(kilitli, true, true);      // 2) tavanı bozmayan izin öncesi günler
+      doldur(serbest, false, false);    // 3) mecbur kalınca tavanı aş
+      doldur(kilitli, false, true);
     });
 
     var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });

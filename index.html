@@ -268,6 +268,13 @@
   .bosdurum{background:var(--inset);border:1px dashed var(--line2);border-radius:8px;padding:16px 18px;
     font-size:12.5px;color:var(--muted);line-height:1.6}
   .bosdurum b{color:var(--txt)}
+  .denetim{border:1px solid var(--line2);border-radius:9px;padding:11px 13px;margin-bottom:14px;font-size:12.5px;line-height:1.65}
+  .denetim.temiz{border-color:#14532d;background:#0b1f14;color:#86efac}
+  .denetim.var{border-color:#78350f;background:#1f1608;color:#fcd34d}
+  .denetim b{color:inherit}
+  .denetim ul{margin:7px 0 0;padding-left:19px}
+  .denetim li{margin-bottom:5px}
+  .denetim .cz{color:var(--muted);display:block;font-size:11.5px;margin-top:1px}
   .tb-ayirac{width:1px;height:22px;background:var(--line2);flex-shrink:0;margin:0 2px}
   .statusbar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;align-items:center;gap:12px;
     padding:9px 16px;background:rgba(22,27,34,.97);backdrop-filter:blur(8px);border-top:1px solid var(--line2);
@@ -412,51 +419,31 @@
       <div class="settings">
         <nav class="setnav" id="setNav"></nav>
         <div class="setbody" id="setBody">
+        <div id="ayarDenetim"></div>
+
         <div class="advgrp">
-          <h4>Temel ayarlar</h4>
-          <p class="help">Bir birim kurarken genellikle <b>yalnızca bu bölüm</b> değiştirilir. Diğer bölümler uygun varsayılanlarla gelir.</p>
+          <h4>1 · Her gün kaç kişi</h4>
+          <p class="help">Bu birimin <b>kapsama ihtiyacı</b> — listenin bozulamaz iskeleti. Buradaki sayılar tutmazsa uyarı çıkar; motor başka her şeyden önce bunları sağlamaya çalışır.</p>
           <div class="keycards">
-            <div class="kc"><div class="t">Hafta içi nöbetçi sayısı</div><input type="text" id="oncallPerDay" placeholder="örn. 2 veya 2-3"><div class="kh">Her hafta içi gecesi kaç kişi nöbet tutsun. Aralık yazarsanız (2-3) en az ilk sayı garanti edilir.</div></div>
-            <div class="kc"><div class="t">Gündüz en az kaç kişi</div><input type="number" id="daytimeMin"><div class="kh">Hafta içi 08–17 arası sahada bulunması gereken en az kişi. 24s nöbetçi bu sayıya dahildir.</div></div>
+            <div class="kc"><div class="t">Hafta içi nöbetçi</div><input type="text" id="oncallPerDay" placeholder="örn. 2 veya 2-3"><div class="kh">Her hafta içi gecesi kaç kişi nöbet tutsun. Aralık yazarsanız (2-3) en az ilk sayı garanti edilir, kadro elverirse ikinciye çıkılır.</div></div>
             <div class="kc"><div class="t">Hafta sonu / tatil nöbetçi</div><input type="text" id="weekendOncallPerDay" placeholder="örn. 2 veya 2-3"><div class="kh">Cumartesi, Pazar ve resmi tatillerde kaç kişi nöbet tutsun.</div></div>
+            <div class="kc"><div class="t">Gündüz en az kaç kişi</div><input type="number" id="daytimeMin"><div class="kh">Hafta içi 08–17 arası sahada bulunması gereken en az kişi. Gündüzü kapsayan nöbetçi (24s) bu sayıya dahildir.</div></div>
           </div>
-          <div class="row" style="margin-bottom:2px">
-            <label class="chk"><input type="checkbox" id="useShortOncall"> Kısa nöbet kullanılsın</label>
-            <label class="chk"><input type="checkbox" id="preLeaveOncall"> Yıllık izin öncesi nöbet koy</label>
-            <label class="chk" title="Açıkken: gündüz kişi sayıları (hafta içi min, Salı/Perşembe ekstra) normal yoldan tutturulamazsa, o günlerde sayıyı tutturmak için FAZLA MESAİ verilir. Kapalıyken kimse hedefini aşmaz (boşluk olursa uyarı verir)."><input type="checkbox" id="overtimeForCounts"> Gerekirse fazla mesai ver (gündüz sayıları tutsun)</label>
-          </div>
-        </div>
-        <div class="advgrp">
-          <h4>Nöbet şekli</h4>
-          <p class="help">Hafta içi ve hafta sonu/tatil nöbetlerinin <b>uzun (24s)</b> mu <b>kısa (16s)</b> mı olacağını ayrı ayrı seçin. Kısa seçilebilmesi için yukarıdaki <b>“Kısa nöbet kullanılsın”</b> açık olmalı; kapalıyken her ikisi de uzun (24s) tutulur.</p>
+          <p class="help" style="margin-top:12px">Bazı günler daha yoğunsa (örn. ameliyat günleri) o günler için ayrı bir sayı verin.</p>
           <div class="row">
-            <div class="fld"><label>Hafta içi nöbet şekli</label><select id="defaultOncall"><option value="long">Uzun (24s)</option><option value="short">Kısa (16s)</option></select></div>
-            <div class="fld"><label>Hafta sonu / tatil nöbet şekli</label><select id="weekendOncall"><option value="long">Uzun (24s)</option><option value="short">Kısa (16s)</option></select></div>
-            <div class="fld"><label>Bu şekle ne kadar bağlı kalınsın</label>
-              <select id="shiftTypePref">
-                <option value="zorunlu">Zorunlu kalınca sapılsın (önerilen)</option>
-                <option value="asla">Asla sapılmasın</option>
-                <option value="serbest">Serbest — motor karar versin</option>
-              </select>
-              <span class="hint">Örn. birim 24s istiyorsa, 16s'e yalnız <b>saat hedefi ya da kapsama başka türlü tutmadığında</b> inilir; sapılan günler listenin altında not olarak yazılır. <b>Serbest</b> eski davranıştır (motor küçük bir kazanç için bile şekli değiştirebilir). <b>Asla</b> yalnız o gün başka türlü nöbetçi bulunamıyorsa sapar — kapsama her şeyin önündedir. Kişinin kendi tür isteği bu ayardan bağımsız, her zaman geçerlidir.</span></div>
+            <div class="fld"><label>Yoğun günlerde gündüz en az kaç kişi</label><input type="number" id="daytimeExtra"><span class="hint">Yandaki günlerde geçerli. Normal günün üstünde bir sayı girin, yoksa "yoğun gün" ayarı bir şey değiştirmez.</span></div>
+            <div class="fld"><label>Yoğun günler</label><div id="extraDays" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:5px"></div></div>
           </div>
-        </div>
-        <div class="advgrp">
-          <h4>Öncelik sırası</h4>
-          <p class="help">Aynı güne birden fazla kural denk gelirse <b>ÜSTTEKİ kazanır</b> ve günü kapar; alttaki o güne uygulanmaz. ↑/↓ ile sıralayın. Özel durum: <b>Haftalık izin günü</b> daha öncelikli bir kurala denk gelirse iptal olmaz — izin <b>aynı haftanın başka boş gününe kaydırılır</b>.</p>
-          <div id="prioList"></div>
-        </div>
-        <div class="advgrp">
-          <h4>Kıdem kuralları</h4>
-          <p class="help">Personel tablosunda <b>“Kıdemli”</b> işaretli kişiler kıdemli sayılır. Burada her gün <b>nöbette</b> ve her hafta içi <b>gündüzde</b> en az kaç kıdemli bulunması gerektiğini belirleyin. <b>0</b> = kapalı. Yeterli kıdemli yoksa o günler uyarı olarak listelenir (kapsama yine bozulmaz).</p>
+          <p class="help" style="margin-top:12px">Kıdemli bulunma şartı (personel tablosunda <b>Kıdemli</b> işaretli kişiler). <b>0 = kapalı.</b></p>
           <div class="row">
             <div class="fld"><label>Nöbette en az kaç kıdemli</label><input type="number" id="minSeniorOncall" min="0" style="width:80px"></div>
             <div class="fld"><label>Gündüzde en az kaç kıdemli</label><input type="number" id="minSeniorDaytime" min="0" style="width:80px"></div>
           </div>
         </div>
+
         <div class="advgrp">
-          <h4>Vardiya tipleri</h4>
-          <p class="help">Bu birimde kullanılan vardiyaların <b>saatini ve adını</b> belirleyin. <b>“Gündüzü kapsar”</b> işaretliyse o vardiya 08-17 gündüz sayısına dahil olur (örn. 24s nöbet gündüzü kapsar; 16s akşam nöbeti kapsamaz). Otomatik dağıtım bu 3 çekirdek vardiyayı kullanır.</p>
+          <h4>2 · Vardiyalar</h4>
+          <p class="help">Bu birimde hangi vardiyalar var, kaç saat ve hangi gün hangisi kullanılıyor. <b>Bir kez kurulur, sonra pek değişmez.</b></p>
           <div class="shiftrow"><i class="sw" style="background:var(--c-M)"></i>
             <b style="min-width:96px">Gündüz mesai</b>
             <div class="fld"><label>Kaç saat</label><input type="number" id="mesaiHours"></div>
@@ -470,63 +457,86 @@
             <span class="hint">Tam gün nöbet (örn. 08-08, 24s).</span></div>
           <div class="shiftrow"><i class="sw" style="background:var(--c-NS)"></i>
             <b style="min-width:96px">Kısa nöbet</b>
+            <label class="chk"><input type="checkbox" id="useShortOncall"> Kullanılsın</label>
             <div class="fld"><label>Kaç saat</label><input type="number" id="oncallShortHours"></div>
             <div class="fld"><label>Listede görünen ad</label><input type="text" id="oncallShortLabel" style="width:120px"></div>
             <label class="chk"><input type="checkbox" id="oncallShortDaytime"> Gündüz sayısına dahil</label>
-            <span class="hint">Akşam/kısa nöbet (örn. 16-08, 16s).</span></div>
-          <h4 style="margin-top:14px">Özel vardiyalar (elle atanır)</h4>
-          <p class="help">İhtiyacınız olan başka bir vardiya tipini buradan <b>ekleyin</b> (örn. 12 saatlik gündüz, icap, yarım gün). Eklediğiniz vardiya; <b>ızgarada hücreye tıklayınca seçilebilir</b>, saatleri toplama, “gündüzü kapsar” ise gündüz sayısına ve lejanta dahil olur. <span class="muted">(Şimdilik elle atanır; otomatik dağıtıma katılması, kuralları netleşince eklenecek.)</span></p>
+            <span class="hint">Akşam/kısa nöbet (örn. 16-08, 16s). Kapalıysa aşağıdaki "kısa" seçimleri uygulanmaz.</span></div>
+          <p class="help" style="margin-top:14px">Hangi gün hangi nöbet şekli kullanılsın:</p>
+          <div class="row">
+            <div class="fld"><label>Hafta içi</label><select id="defaultOncall"><option value="long">Uzun nöbet</option><option value="short">Kısa nöbet</option></select></div>
+            <div class="fld"><label>Hafta sonu / tatil</label><select id="weekendOncall"><option value="long">Uzun nöbet</option><option value="short">Kısa nöbet</option></select></div>
+            <div class="fld"><label>Bu seçime ne kadar bağlı kalınsın</label>
+              <select id="shiftTypePref">
+                <option value="zorunlu">Zorunlu kalınca sapılsın (önerilen)</option>
+                <option value="asla">Asla sapılmasın</option>
+                <option value="serbest">Serbest — motor karar versin</option>
+              </select>
+              <span class="hint">Sapılan günler listenin altında not olarak yazılır. Kişinin kendi tür isteği bu ayardan bağımsız, her zaman geçerlidir.</span></div>
+          </div>
+          <h4 style="margin-top:18px">Özel vardiyalar (elle atanır)</h4>
+          <p class="help">Başka bir vardiya tipi (12 saatlik gündüz, icap, yarım gün…) ekleyin. Izgarada hücreye tıklayınca seçilebilir; saatleri toplama, "gündüzü kapsar" ise gündüz sayısına ve lejanta dahil olur. <span class="muted">(Şimdilik elle atanır; otomatik dağıtıma katılması sonra eklenecek.)</span></p>
           <div id="customShifts"></div>
           <button type="button" class="sm sec" onclick="addCustomShift()">+ Vardiya tipi ekle</button>
         </div>
+
         <div class="advgrp">
-          <h4>Ekstra gündüz</h4>
-          <p class="help">Belirli günlerde (örn. ameliyatların yoğun olduğu Salı/Perşembe) gündüzde <b>daha fazla kişi</b> gerekiyorsa, o günleri işaretleyin ve o günler için minimumu girin.</p>
+          <h4>3 · Aylık çalışma</h4>
+          <p class="help">Kişi başına aylık saat hedefi ve hedef tutmadığında ne yapılacağı.</p>
           <div class="row">
-            <div class="fld"><label>Bu günlerde gündüz en az kaç kişi</label><input type="number" id="daytimeExtra"><span class="hint">İşaretli günlerde en az kaç kişi gündüzde olsun.</span></div>
-            <div class="fld"><label>Günler</label><div id="extraDays" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:5px"></div></div>
+            <div class="fld"><label>Kişi başı aylık çalışma hedefi</label><input type="number" id="targetPerWorkday"><span class="hint">Her iş günü kaç saat sayılsın (standart 8). Örn. 23 iş günü olan ayda hedef 184 saat. Yıllık ve haftalık izin günleri hedeften düşülür.</span></div>
+            <div class="fld"><label>Az personel uyarı eşiği</label><input type="number" id="minStaffWarn"><span class="hint">Nöbetçi sayısı bunun altındayken sorun çıkarsa "+1 kişi gerekir" notu verilir.</span></div>
           </div>
-        </div>
-        <div class="advgrp">
-          <h4>İzin ve dinlenme</h4>
-          <p class="help">Yıllık izne ayrılan kişiye <b>izinden hemen önce</b> nasıl davranılacağı ve kimsenin çok uzun süre boşta kalmaması.</p>
           <div class="row">
-            <div class="fld"><label>İzinden kaç iş günü önce nöbet tutsun</label><input type="number" id="preLeaveDaysBefore"><span class="hint">İzin öncesi nöbet bu kadar gün önceye konur (tercih).</span></div>
-            <div class="fld"><label>Sığmazsa kaç iş günü önce</label><input type="number" id="preLeaveDaysBeforeFallback"><span class="hint">Tercih edilen güne sığmazsa yedek mesafe.</span></div>
-            <div class="fld"><label>İzinden önce kaç gün dinlensin</label><input type="number" id="preLeaveGap"><span class="hint">İzine girmeden önce bu kadar gün ücretli izin (dinlenme).</span></div>
-            <div class="fld"><label>Nöbet sonrası dinlenme (gün)</label><input type="number" id="postOncallRest"><span class="hint">Nöbetten sonra kaç gün N.İ (gelmez).</span></div>
-            <label class="chk" title="Kişi aylık saat hedefinin altında kalıyorsa ve tek çare izin öncesi dinlenme boşluğunu kısaltmaksa, boşluk kısaltılır ve sebep listede not olarak yazılır. Kapatırsanız boşluk korunur, saat eksik kalır."><input type="checkbox" id="hoursBeforePreLeaveGap"> Aylık saat hedefi, izin öncesi dinlenmeden önce gelsin</label>
-            <span class="hint">Kapalıyken izin öncesi boşluk her durumda korunur; hedefe ulaşılamazsa kişi eksik saatle kalır. Kişinin kendi <b>boş gün isteğine</b> hiçbir durumda dokunulmaz.</span>
+            <label class="chk" title="Açıkken: gündüz kişi sayıları normal yoldan tutturulamazsa, o günlerde sayıyı tutturmak için FAZLA MESAİ verilir. Kapalıyken kimse hedefini aşmaz; açık kalırsa uyarı çıkar."><input type="checkbox" id="overtimeForCounts"> Gündüz sayısı tutmazsa fazla mesai verilebilsin</label>
           </div>
+          <span class="hint">Kapalıyken kimse aylık hedefini aşmaz — gündüz açığı kapanamazsa uyarı olarak bildirilir. Açıkken açık kapatılır ama o kişiler hedefin üstüne çıkar.</span>
         </div>
+
         <div class="advgrp">
-          <h4>Aylık hedef</h4>
-          <p class="help">Aylık çalışma hedefi ve kapasite uyarısı.</p>
+          <h4>4 · Dinlenme ve izin</h4>
+          <p class="help">Nöbet sonrası dinlenme ve yıllık izne ayrılan kişiye izinden hemen önce nasıl davranılacağı.</p>
           <div class="row">
-            <div class="fld"><label>Kişi başı aylık çalışma hedefi</label><input type="number" id="targetPerWorkday"><span class="hint">Her iş günü kaç saat sayılsın (standart 8). Örn. 23 iş günü olan bir ayda hedef 184 saat olur. Yıllık ve haftalık izin günleri hedeften düşülür.</span></div>
-            <div class="fld"><label>Az personel uyarısı (kişi sayısı)</label><input type="number" id="minStaffWarn"><span class="hint">Nöbetçi sayısı bunun altındaysa ve sorun çıkarsa “+1 kişi” notu verilir.</span></div>
+            <div class="fld"><label>Nöbet sonrası dinlenme (gün)</label><input type="number" id="postOncallRest"><span class="hint">Nöbetten sonra kaç gün N.İ (işe gelmez).</span></div>
           </div>
-        </div>
-        <div class="advgrp">
-          <h4>Çalışma düzeni ve denge</h4>
-          <p class="help">Boş günlerin nasıl verileceği, hafta sonu üst sınırı ve yükün kişiler arasında nasıl dengeleneceği — <b>personelin en çok fark ettiği ayarlar burada</b>.</p>
+          <div class="row" style="margin-top:6px">
+            <label class="chk"><input type="checkbox" id="preLeaveOncall"> Yıllık izin öncesi nöbet koy</label>
+          </div>
           <div class="row">
-            <div class="fld"><label>Boş günler nasıl verilsin</label>
-              <select id="idleStyle"><option value="dagitik">Dağıtık — aya tek tek serpilsin</option><option value="toplu">Toplu — arka arkaya verilsin</option></select>
-              <span class="hint"><b>Toplu</b> seçin: aynı sayıdaki boş gün daha az blokta toplanır ve <b>"1 gün çalış, 1 gün boş, yine çalış"</b> deseni azaltılır — personel gerçek bir mola alır. Aşağıdaki iki sınır yine geçerlidir; daha uzun mola için onları da yükseltin.</span></div>
+            <div class="fld"><label>İzinden kaç iş günü önce nöbet</label><input type="number" id="preLeaveDaysBefore"><span class="hint">Tercih edilen mesafe.</span></div>
+            <div class="fld"><label>Sığmazsa kaç iş günü önce</label><input type="number" id="preLeaveDaysBeforeFallback"><span class="hint">Yedek mesafe.</span></div>
+            <div class="fld"><label>Nöbet konamazsa izinden önce kaç gün dinlensin</label><input type="number" id="preLeaveGap"><span class="hint">Yalnız <b>yedek</b> kural: izin öncesi nöbet yukarıdaki mesafelerin hiçbirine sığmazsa bu kadar gün boş bırakılır. Nöbet konabildiğinde boşluk zaten nöbet gününden izne kadar uzar, bu sayı kullanılmaz.</span></div>
+          </div>
+          <div class="row">
+            <label class="chk" title="Kişi aylık saat hedefinin altında kalıyorsa ve tek çare izin öncesi dinlenme boşluğunu kısaltmaksa, boşluk kısaltılır ve sebep listede not olarak yazılır."><input type="checkbox" id="hoursBeforePreLeaveGap"> Aylık saat hedefi, izin öncesi dinlenmeden önce gelsin</label>
+          </div>
+          <span class="hint">Kapalıyken izin öncesi boşluk her durumda korunur; hedefe ulaşılamazsa kişi eksik saatle kalır. Kişinin kendi <b>boş gün isteğine</b> hiçbir durumda dokunulmaz.</span>
+        </div>
+
+        <div class="advgrp">
+          <h4>5 · Çalışan koruması</h4>
+          <p class="help">Kimsenin aşırı yorulmaması ve boş günlerin işe yarar biçimde verilmesi. <b>Personelin en çok fark ettiği ayarlar burada.</b></p>
+          <div class="row">
+            <div class="fld"><label>Üst üste en fazla kaç gün çalışılabilir</label><input type="number" id="maxConsecutiveWork">
+              <span class="hint">Nöbet + gündüz mesai birlikte sayılır; hafta sonu çalışılırsa seri kırılmaz. Rolü gereği her gün gelenler (Sorumlu / sadece gündüz) hariç. 0 = sınır yok.</span></div>
             <div class="fld"><label>Hafta sonu / tatil nöbeti üst sınırı</label><input type="number" id="maxWeekendDuties">
-              <span class="hint">Kişi başına aylık en fazla kaç hafta sonu nöbeti. Aşağıdaki <i>denge</i> ayarı ortalamaya yaklaştırır; bu ise <b>kesin tavan</b> koyar. <b>0 = sınır yok.</b></span></div>
-            <div class="fld"><label>Üst üste en fazla kaç gün ÇALIŞILABİLİR</label><input type="number" id="maxConsecutiveWork">
-              <span class="hint">Nöbet + gündüz mesai birlikte sayılır (hafta sonu çalışılırsa seri kırılmaz). Çalışan açısından en yorucu şey budur; ayrıca uzun serilerin <b>hep aynı kişilere düşmemesi</b> aşağıdaki <i>Çalışma düzeni dengesi</i> ile sağlanır. Rolü gereği her gün gelenler (Sorumlu / sadece gündüz) bu kuralın dışındadır. 0 = sınır yok.</span></div>
-            <div class="fld"><label>Üst üste en fazla kaç İŞ GÜNÜ boşta kalabilir</label><input type="number" id="maxConsecutiveOff">
-              <span class="hint">Yalnız hafta içi günleri sayar (N.İ + Ü.İ). Araya giren hafta sonu bu sayımı sıfırlar.</span></div>
-            <div class="fld"><label>Üst üste en fazla kaç GÜN işe gelmeyebilir</label><input type="number" id="maxAbsentDays">
-              <span class="hint">Takvim günü: hafta sonu, tatil ve haftalık izin <b>dahil</b> — listeye bakınca görünen boşluk. Yıllık izin ve geçici görev bu kurala girmez. 0 = kapalı.</span></div>
+              <span class="hint">Kişi başına aylık kesin tavan. 0 = sınır yok.</span></div>
           </div>
+          <p class="help" style="margin-top:12px">Boş günler nasıl verilsin:</p>
           <div class="row">
-            <label class="chk" title="Açıkken: geçen aylarda çok nöbet/hafta sonu tutan bu ay daha az tutar — tek ayda eşit bölünemeyen küsurat (örn. 60 nöbet / 11 kişi) hep aynı kişiye gitmez, dönüşümlü dağılır. Kapalıyken her ay yalnız kendi içinde dengelenir; küsuratın kime düştüğü aydan aya takip edilmez."><input type="checkbox" id="carryFairness"> Aylar arası adalet (önceki ayların birikimi dengeye katılsın)</label>
+            <div class="fld"><label>Boş gün düzeni</label>
+              <select id="idleStyle"><option value="dagitik">Dağıtık — aya tek tek serpilsin</option><option value="toplu">Toplu — arka arkaya verilsin</option></select>
+              <span class="hint"><b>Toplu</b>: aynı sayıdaki boş gün daha az blokta toplanır, "1 gün çalış 1 gün boş" deseni azalır — gerçek bir mola olur.</span></div>
+            <div class="fld"><label>Üst üste en fazla kaç gün işe gelmeyebilir</label><input type="number" id="maxAbsentDays">
+              <span class="hint"><b>Takvim günü</b> — hafta sonu ve tatil dahil, yani listeye bakınca görünen boşluk. Yıllık izin ve geçici görev bu kurala girmez. 0 = kapalı.</span></div>
+            <div class="fld"><label>…bunun en fazla kaçı iş günü olabilir</label><input type="number" id="maxConsecutiveOff">
+              <span class="hint">Yukarıdakinin iş günü karşılığı. Örn. 3 iş günü + araya giren hafta sonu ≈ 5 takvim günü. Bu sayı üsttekinden büyük olamaz.</span></div>
           </div>
-          <p class="help" style="margin-top:10px">Kural ihlalleri (her gün yeterli nöbetçi, fazla mesai olmaması, gündüz minimumu) <b>her zaman önce gelir</b> — aşağıdakiler yalnız bunlar sağlandıktan sonra hangi dengenin öne çıkacağını belirler. Birbiriyle yarışırlar: birini yükseltmek diğerinden biraz ödün verdirir.</p>
+        </div>
+
+        <div class="advgrp">
+          <h4>6 · Adalet</h4>
+          <p class="help">Kural ihlalleri (yeterli nöbetçi, fazla mesai olmaması, gündüz sayısı) <b>her zaman önce gelir</b>. Aşağıdakiler yalnız bunlar sağlandıktan sonra hangi dengenin öne çıkacağını belirler — birbiriyle yarışırlar, birini yükseltmek diğerinden biraz ödün verdirir.</p>
           <div class="row">
             <div class="fld"><label>Hafta sonu / tatil nöbeti dengesi</label>
               <select id="weightWeekend"></select>
@@ -537,14 +547,23 @@
             <div class="fld"><label>Nöbetleri aya eşit yayma</label>
               <select id="weightSpread"></select>
               <span class="hint">Nöbetlerin aynı haftaya yığılmaması, gün aşırı nöbet olmaması.</span></div>
-            <div class="fld"><label>Üst üste boş gün kalmaması</label>
+            <div class="fld"><label>Uzun boşluklardan kaçınma</label>
               <select id="weightIdle"></select>
-              <span class="hint">Uzun boşluklardan kaçınma (yukarıdaki iki sınırla birlikte çalışır).</span></div>
+              <span class="hint">Boş günlerin uzun bloklar hâlinde birikmemesi. <b>Boş gün düzeni "Toplu" ise bu ayar ters yönde çalışır</b> — ikisini birden yükseltmeyin.</span></div>
             <div class="fld"><label>Çalışma düzeni dengesi</label>
               <select id="weightRhythm"></select>
-              <span class="hint">İki şeyi birden dengeler: <b>(1)</b> herkes yaklaşık aynı sayıda <b>gün</b> işe gelsin (24s nöbet ağırlıklı kişi daha az gün gelir), <b>(2)</b> uzun üst üste çalışma serileri hep aynı kişilere düşmesin. "Bazıları sık, bazıları seyrek" ya da "hep ben arka arkaya çalışıyorum" şikâyeti varsa yükseltin.</span></div>
+              <span class="hint">Herkes yaklaşık aynı sayıda <b>gün</b> gelsin ve uzun üst üste çalışma serileri hep aynı kişilere düşmesin.</span></div>
           </div>
-          <span class="hint">Birikim tablosunu görmek için üst çubuktan <b>Adalet Panosu</b>'nu açın. Tek ay içindeki denge bu ayardan bağımsız olarak her zaman korunur.</span>
+          <div class="row" style="margin-top:10px">
+            <label class="chk" title="Açıkken: geçen aylarda çok nöbet/hafta sonu tutan bu ay daha az tutar. Kapalıyken her ay yalnız kendi içinde dengelenir."><input type="checkbox" id="carryFairness"> Aylar arası adalet (önceki ayların birikimi dengeye katılsın)</label>
+          </div>
+          <span class="hint">Birikim tablosunu görmek için üst çubuktan <b>Adalet Panosu</b>'nu açın. Tek ay içindeki denge bu ayardan bağımsız her zaman korunur.</span>
+        </div>
+
+        <div class="advgrp">
+          <h4>7 · Çakışan istekler</h4>
+          <p class="help">Aynı güne birden fazla kural denk gelirse <b>üstteki kazanır</b> ve günü kapar; alttaki o güne uygulanmaz. ↑/↓ ile sıralayın. Özel durum: <b>Haftalık izin günü</b> daha öncelikli bir kurala denk gelirse iptal olmaz — izin <b>aynı haftanın başka boş gününe kaydırılır</b>.</p>
+          <div id="prioList"></div>
         </div>
         </div><!-- /setBody -->
       </div><!-- /settings -->
@@ -655,7 +674,7 @@
 </div>
 <div class="foot">Nöbet Planlama Asistanı · <b>v44</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=43"></script>
+<script src="asistan-scheduler.js?v=44"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -781,6 +800,97 @@ function nobetSekliAdi(p,hangi){
   return s+' saatlik';
 }
 function kisiAraligi(min,max){ const a=+min||0, b=+max||a; return a===b?(a+' kişi'):(a+'–'+b+' kişi'); }
+/* ---- AYAR DENETİMİ ----
+   Ayarlar organik büyüdü ve bazıları birbiriyle çelişiyor: örn. "boş günler
+   toplu olsun" ile "uzun boşluklardan kaçın" doğrudan zıt; "kısa nöbet
+   kapalı" iken "hafta içi kısa nöbet" seçmek sessizce yok sayılıyor. Bunlar
+   üretimden ÖNCE, ayar ekranında söylenmezse kullanıcı sebebini hiç
+   göremiyor. Burada her değişiklikte yeniden hesaplanır.
+   Kadroya bağlı denetimler (kıdemli sayısı, hafta sonu tavanı) personel
+   tablosundan okunur — o yüzden kişi ekleyip çıkarınca da tazelenir. */
+function ayarDenetimi(){
+  const kutu=document.getElementById('ayarDenetim'); if(!kutu) return;
+  const p=curProfile(); const S=[];
+  const say=v=>parseFloat(v)||0;
+  let kisiler=[]; try{ kisiler=readPersonnel(); }catch(e){}
+  const nobetci=kisiler.filter(k=>!k.noNobet&&!k.dayOnly).length;
+  const kidemli=kisiler.filter(k=>k.senior&&!k.noNobet).length;
+  const rng=v=>{const a=parseRange(String(v??''));return a;};
+
+  // 1) Boş gün düzeni ile "uzun boşluklardan kaçınma" zıt
+  if(p.idleStyle==='toplu' && say(p.weightIdle)>=2.5)
+    S.push(['Boş günler <b>Toplu</b> seçili ama <b>“Uzun boşluklardan kaçınma”</b> önceliği yüksek.',
+      'Bu ikisi birbirinin tersi: biri boş günleri birleştirmek, öteki dağıtmak ister. Toplu istiyorsanız bu önceliği Normal ya da Düşük yapın.']);
+  // 2) Toplu ama sınır çok dar
+  if(p.idleStyle==='toplu' && say(p.maxConsecutiveOff)<=2)
+    S.push(['Boş günler <b>Toplu</b> seçili ama üst üste boş <b>iş günü</b> sınırı '+p.maxConsecutiveOff+'.',
+      'Blok bu sınırdan uzun olamaz, yani "toplu" pratikte çalışmaz. Gerçek bir mola için sınırı 3–4 yapın.']);
+  // 3) İki boşluk sınırı tutarsız
+  if(say(p.maxAbsentDays)>0 && say(p.maxConsecutiveOff)>say(p.maxAbsentDays))
+    S.push(['İş günü sınırı ('+p.maxConsecutiveOff+') takvim günü sınırından ('+p.maxAbsentDays+') büyük.',
+      'Takvim günü sayısı iş günlerini zaten kapsar; küçük olamaz. Takvim sınırını en az '+(say(p.maxConsecutiveOff)+2)+' yapın.']);
+  // 4) Kısa nöbet kapalı ama kısa seçilmiş
+  if(p.useShortOncall===false && (p.defaultOncall==='short'||p.weekendOncall==='short'))
+    S.push(['<b>Kısa nöbet kullanılsın</b> kapalı, ama nöbet şekli olarak “Kısa” seçilmiş.',
+      'Kısa nöbet kapalıyken bu seçim yok sayılır ve her nöbet uzun tutulur. Ya kutuyu açın ya seçimi “Uzun” yapın.']);
+  // 5) Yoğun gün seçili ama sayı fazla değil
+  if((p.daytimeExtraDays||[]).length && say(p.daytimeExtra)<=say(p.daytimeMin))
+    S.push(['Yoğun gün seçilmiş ama o günlerin sayısı ('+p.daytimeExtra+') normal günden ('+p.daytimeMin+') fazla değil.',
+      '“Yoğun gün” ayarı bu hâliyle hiçbir şey değiştirmez. Sayıyı normal günün üstüne çıkarın ya da günlerin işaretini kaldırın.']);
+  // 6) Aylık hedef vardiya saatleriyle tam dolmuyor
+  {
+    const saatler=[say(p.mesaiHours),say(p.oncallLongHours)];
+    if(p.useShortOncall!==false) saatler.push(say(p.oncallShortHours));
+    (p.customShifts||[]).forEach(c=>{ if(say(c.hours)>0) saatler.push(say(c.hours)); });
+    const ge=(a,b)=>{a=Math.abs(a);b=Math.abs(b);while(b){const t=a%b;a=b;b=t;}return a;};
+    const adim=saatler.filter(x=>x>0).reduce((a,b)=>ge(a,b),0);
+    const hedef=say(p.targetPerWorkday);
+    if(adim>1 && hedef>0 && (hedef%adim)!==0)
+      S.push(['Günlük hedef '+hedef+' saat, ama vardiya saatleri hep '+adim+'’in katı ('+saatler.filter(x=>x>0).join('/')+').',
+        'Aylık hedef bu adımlarla tam dolmaz; herkes birkaç saat eksik kalır ve her ay aynı uyarı çıkar. Hedefi ya da vardiya saatlerini birbirine uydurun.']);
+  }
+  // 7) Kıdemli kapasitesi
+  if(say(p.minSeniorOncall)>0 && kidemli>0){
+    const nobetSaat=Math.max(say(p.oncallLongHours),say(p.oncallShortHours))||24;
+    const kisiBasi=Math.floor((say(p.targetPerWorkday)*21)/nobetSaat);
+    const gereken=say(p.minSeniorOncall)*30;
+    if(kisiBasi>0 && kidemli*kisiBasi<gereken)
+      S.push(['“Her nöbette en az '+p.minSeniorOncall+' kıdemli” için ayda ~'+gereken+' kıdemli-nöbet gerekiyor; '+kidemli+' kıdemli en fazla ~'+(kidemli*kisiBasi)+' tutabilir.',
+        'Saat sınırı yüzünden bu kural her gün sağlanamaz, her ay uyarı çıkar. En az '+Math.ceil(gereken/kisiBasi)+' kıdemli gerekir ya da kuralı gevşetin.']);
+  }
+  // 8) Hafta sonu tavanı matematiksel olarak yetmiyor
+  if(say(p.maxWeekendDuties)>0 && nobetci>0){
+    const hsNobet=9*rng(p.weekendOncallPerDay)[0];
+    if(hsNobet>nobetci*say(p.maxWeekendDuties))
+      S.push(['Hafta sonu tavanı '+p.maxWeekendDuties+' ama ayda ~'+hsNobet+' hafta sonu nöbeti var ve '+nobetci+' nöbetçi kişi bu tavanla en fazla '+(nobetci*say(p.maxWeekendDuties))+' tutabilir.',
+        'Tavan bu kadroyla tutturulamaz; hafta sonu günleri açık kalır. Tavanı '+Math.ceil(hsNobet/nobetci)+' yapın.']);
+  }
+  // 11) Toplu boş blok ile çalışma tavanı aynı günleri paylaşır
+  if(p.idleStyle==='toplu' && say(p.maxConsecutiveWork)>0 && say(p.maxConsecutiveOff)>=say(p.maxConsecutiveWork))
+    S.push(['Boş günler <b>Toplu</b> ve boş blok sınırı '+p.maxConsecutiveOff+' iken üst üste çalışma tavanı '+p.maxConsecutiveWork+'.',
+      'Bu ikisi aynı günleri paylaşır: boş bloklar uzadıkça çalışma blokları da uzar. Ölçüldü — bu bileşimde motor saat hedefini tavana tercih ediyor ve tavan aşılıyor. Tavanı en az '+(say(p.maxConsecutiveOff)+2)+' yapın ya da boş blok sınırını düşürün.']);
+  // 9) Nöbet şeklinden asla sapma + kısa nöbet kapalı = anlamsız
+  if(p.shiftTypePref==='asla' && p.useShortOncall===false)
+    S.push(['“Asla sapılmasın” seçili ama zaten tek bir nöbet şekli var (kısa nöbet kapalı).',
+      'Bu ayarın etkisi yok; kafa karıştırmaması için “Zorunlu kalınca” bırakabilirsiniz.']);
+  // 10) Kadro kapsama için yetersiz (kaba alt sınır)
+  if(nobetci>0){
+    const gunluk=rng(p.oncallPerDay)[0], hs=rng(p.weekendOncallPerDay)[0];
+    const gerekenNobet=21*gunluk+9*hs;
+    const nobetSaat=Math.max(say(p.oncallLongHours),1);
+    const kapasite=nobetci*Math.floor((say(p.targetPerWorkday)*21)/nobetSaat);
+    if(kapasite>0 && gerekenNobet>kapasite)
+      S.push(['Ayda ~'+gerekenNobet+' nöbet gerekiyor; '+nobetci+' nöbetçi kişi saat sınırıyla en fazla ~'+kapasite+' tutabilir.',
+        'Bu kadroyla her gün istenen nöbetçi sayısı sağlanamaz. Nöbetçi sayısını düşürün, kısa nöbeti açın ya da kadroyu artırın.']);
+  }
+
+  if(!S.length){
+    kutu.innerHTML='<div class="denetim temiz"><b>✓ Ayarlar tutarlı.</b> Birbiriyle çelişen ya da bu kadroyla imkânsız bir ayar bulunamadı.</div>';
+  } else {
+    kutu.innerHTML='<div class="denetim var"><b>⚠ '+S.length+' ayar sorunu</b> — liste üretmeden önce bakın:'
+      +'<ul>'+S.map(x=>'<li>'+x[0]+'<span class="cz">'+x[1]+'</span></li>').join('')+'</ul></div>';
+  }
+}
 function renderRuleSummary(){
   const ul=document.getElementById('ruleSummary'); if(!ul) return;
   const p=curProfile(); const L=[];
@@ -817,6 +927,7 @@ function renderRuleSummary(){
     ? `Nöbet yükü <b>aylar arası</b> dengelenir: geçen ay çok tutan bu ay az tutar.`
     : `Her ay <b>yalnız kendi içinde</b> dengelenir; önceki ayların birikimi dikkate alınmaz.`);
   ul.innerHTML=L.map(x=>`<li>${x}</li>`).join('');
+  ayarDenetimi();
 }
 
 // ===== TARİH / İZİN ARALIĞI (anestezi gibi) =====
