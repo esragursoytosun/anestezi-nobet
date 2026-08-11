@@ -98,6 +98,18 @@
          YÜKÜNÜN kişiler arasında dengelenmesi ise "çalışma düzeni dengesi"
          önceliğiyle sağlanır. 0 = sınır yok. */
       maxConsecutiveWork: 6,
+      /* AYARLANAN NÖBET ŞEKLİNE BAĞLILIK.
+         Kullanıcı: "anestezi 24 çalışmak istiyor, zor durumda kalınca 16
+         yapılsın". Ölçüldü: hafta içi 24s isteyen birimlerde nöbetlerin
+         %17.2'si istenmeden 16s'e iniyordu (28 ayın 10'unda) — çünkü motor
+         için indirmenin HİÇBİR bedeli yoktu, ufak bir konfor kazancı için
+         bile yapıyordu.
+           'serbest' : bedelsiz (eski davranış)
+           'zorunlu' : indirme bir bedel taşır; yalnız gerçekten işe
+                       yarıyorsa (saat/kapsama sıkışması) yapılır — VARSAYILAN
+           'asla'    : yalnız kapsama başka türlü sağlanamıyorsa
+         Kişinin KENDİ tür isteği bu kuraldan bağımsızdır, her zaman geçerli. */
+      shiftTypePref: 'zorunlu',
       /* İzin öncesi dinlenme boşluğu, aylık saat hedefinin önüne geçmesin.
          Açıkken: kişi hedefinin altında kalıyorsa ve tek çare izin öncesi
          boşluğu kısaltmaksa, o boşluk kısaltılır ve sebep not olarak yazılır.
@@ -140,6 +152,7 @@
     var ma = parseInt(r.maxAbsentDays, 10); r.maxAbsentDays = (ma >= 0 && ma <= 31) ? ma : 5;
     var mw = parseInt(r.maxWeekendDuties, 10); r.maxWeekendDuties = (mw >= 0 && mw <= 31) ? mw : 0;
     var mcw = parseInt(r.maxConsecutiveWork, 10); r.maxConsecutiveWork = (mcw >= 0 && mcw <= 31) ? mcw : 6;
+    if (['serbest', 'zorunlu', 'asla'].indexOf(r.shiftTypePref) < 0) r.shiftTypePref = 'zorunlu';
     return r; }
 
   // Vardiya kodları sabit arketip: M(mesai), NL(uzun nöbet), NS(kısa nöbet) + izin türleri.
@@ -194,6 +207,7 @@
     tekGunAda:          90,                      // TOPLU düzende: 1 gün çalışıp yine boşa çıkma
     calismaKisi:      1000, calismaGun:    600,   // üst üste çalışma tavanı aşımı (kişi + aşan her gün)
     adaletSeri:         30,                      // uzun çalışma serisi YÜKÜNÜN kişiler arası dengesi
+    sekilSapma:        400,                      // ayarlanan nöbet şeklinden sapan her nöbet ('zorunlu' modda)
     adaletNobet:        16, adaletHaftaSonu: 14,
     adaletGun:          12,                      // çalışılan GÜN sayısı adaleti
     gunduzDenge:         4, ekstraGun:      8
@@ -348,6 +362,28 @@
       if (P.minSeniorDaytime > 0 && dd.workday && srGun < P.minSeniorDaytime) warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüzde ' + srGun + ' kıdemli (en az ' + P.minSeniorDaytime + ' olmalı).');
     });
 
+    /* NÖBET ŞEKLİ SAPMASI — bilgi notu. "Zor durumda kalınca 16 yapılsın"
+       diyen yöneticinin görmek istediği tam olarak bu: NE ZAMAN zorunlu
+       kalındı. Kişinin kendi tür isteğiyle yazılanlar sayılmaz. */
+    if (P.shiftTypePref !== 'serbest') {
+      var kisaAcik = P.useShortOncall !== false;
+      var hIci = (P.defaultOncall === 'short' && kisaAcik) ? 'NS' : 'NL';
+      var hSonu = (P.weekendOncall === 'short' && kisaAcik) ? 'NS' : 'NL';
+      var etiket = { NL: P.oncallLongLabel, NS: P.oncallShortLabel };
+      var sapan = [];
+      daysArr.forEach(function (dd) {
+        var ayar = (dd.weekend || dd.holiday) ? hSonu : hIci;
+        plist.forEach(function (pp) {
+          var c = (grid[pp.name] || {})[dd.day];
+          if (c !== 'NL' && c !== 'NS') return;
+          if ((pp.onlyN16 || []).indexOf(dd.day) >= 0 || (pp.onlyN24 || []).indexOf(dd.day) >= 0) return;   // kişinin isteği
+          if (c !== ayar) sapan.push(dd.day + '. gün ' + pp.name + ' (' + etiket[c] + ')');
+        });
+      });
+      if (sapan.length) warnings.push('💡 Nöbet şekli: ' + sapan.length + ' nöbet ayarlanandan farklı yazıldı — ' +
+        sapan.slice(0, 6).join(', ') + (sapan.length > 6 ? ' …' : '') +
+        '. Saat hedefi ya da kapsama başka türlü tutmadığı için zorunlu kalındı.');
+    }
     if (kacinilmazVar) {
       warnings.push('💡 AYAR NOTU: Bu birimin vardiyaları ' + vardiyaSaatleri.join('/') + ' saatlik; her çalışma ' + adim +
         ' saatin katı ekliyor. Aylık hedef bu adımlarla tam dolmadığı için birkaç saat artıyor — bu bir planlama hatası değil, ' +
@@ -826,6 +862,11 @@
        (kapsama/fazla mesai/gündüz) ÇARPILMAZ — onlar her zaman önde. */
     var AG = { hs: P.weightWeekend, nb: P.weightDuty, ya: P.weightSpread, bo: P.weightIdle, ri: P.weightRhythm };
     var TOPLU = P.idleStyle === 'toplu';
+    /* Ayarlanan nöbet şeklinden sapmanın bedeli. 'asla' modunda bedel
+       kapsama ihlalinin ALTINDA tutulur: gün boş kalmaktansa kısa nöbet
+       yazılır — kapsama her şeyin önünde. */
+    var SEKIL_CEZA = P.shiftTypePref === 'serbest' ? 0
+                   : P.shiftTypePref === 'asla' ? 20000 : W.sekilSapma;
     function penalty() {
         var s = 0;
         // ADALET için toplama: kişi başına nöbet sayısı, hafta sonu nöbeti, nöbet günleri (yayılım), hedef ağırlığı
@@ -906,6 +947,16 @@
             }
             if (P.maxConsecutiveWork > 0 && crMax > P.maxConsecutiveWork) s += W.calismaKisi;
             seriArr.push(yuk); seriW.push(gw); totSeri += yuk; sumSw += gw;
+          }
+          /* NÖBET ŞEKLİ SAPMASI: o gün için ayarlanan türden başka bir nöbet
+             yazıldıysa bedel. Kişinin kendi isteği varsa muaf. */
+          if (SEKIL_CEZA > 0) {
+            for (var sd2 = 1; sd2 <= nDays; sd2++) {
+              var sc = Pp.assign[sd2];
+              if (!isOncall(sc)) continue;
+              if (Pp.onlyN16.has(sd2) || Pp.onlyN24.has(sd2)) continue;   // kişinin açık isteği — muaf
+              if (sc !== dayType(days[sd2 - 1])) s += SEKIL_CEZA;
+            }
           }
           // HAFTA SONU ÜST SINIRI: kesin tavan (denge çarpanından bağımsız, sert)
           if (P.maxWeekendDuties > 0 && wk > P.maxWeekendDuties) s += W.hsTavanKisi + (wk - P.maxWeekendDuties) * W.hsTavanEk;

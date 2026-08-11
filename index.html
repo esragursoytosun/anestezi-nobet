@@ -432,6 +432,13 @@
           <div class="row">
             <div class="fld"><label>Hafta içi nöbet şekli</label><select id="defaultOncall"><option value="long">Uzun (24s)</option><option value="short">Kısa (16s)</option></select></div>
             <div class="fld"><label>Hafta sonu / tatil nöbet şekli</label><select id="weekendOncall"><option value="long">Uzun (24s)</option><option value="short">Kısa (16s)</option></select></div>
+            <div class="fld"><label>Bu şekle ne kadar bağlı kalınsın</label>
+              <select id="shiftTypePref">
+                <option value="zorunlu">Zorunlu kalınca sapılsın (önerilen)</option>
+                <option value="asla">Asla sapılmasın</option>
+                <option value="serbest">Serbest — motor karar versin</option>
+              </select>
+              <span class="hint">Örn. birim 24s istiyorsa, 16s'e yalnız <b>saat hedefi ya da kapsama başka türlü tutmadığında</b> inilir; sapılan günler listenin altında not olarak yazılır. <b>Serbest</b> eski davranıştır (motor küçük bir kazanç için bile şekli değiştirebilir). <b>Asla</b> yalnız o gün başka türlü nöbetçi bulunamıyorsa sapar — kapsama her şeyin önündedir. Kişinin kendi tür isteği bu ayardan bağımsız, her zaman geçerlidir.</span></div>
           </div>
         </div>
         <div class="advgrp">
@@ -648,7 +655,7 @@
 </div>
 <div class="foot">Nöbet Planlama Asistanı · <b>v44</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=41"></script>
+<script src="asistan-scheduler.js?v=42"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -662,7 +669,7 @@ const exWrap=document.getElementById('extraDays');
 const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel','oncallLongDaytime','useShortOncall',
   'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','daytimeMin','daytimeExtra',
   'weekendOncall','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
-  'postOncallRest','maxConsecutiveOff','maxAbsentDays','maxWeekendDuties','maxConsecutiveWork','idleStyle','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
+  'postOncallRest','maxConsecutiveOff','maxAbsentDays','maxWeekendDuties','maxConsecutiveWork','idleStyle','shiftTypePref','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
 /* DENGE ÖNCELİKLERİ: motorda ÇARPAN olarak yaşıyor (0.4/1/2.5/6). Seçenekler
    sayı değeri taşır; RULE_FIELDS'in genel yolu string bırakırdı, o yüzden
    ayrı okunup parseFloat ile yazılır. */
@@ -779,6 +786,8 @@ function renderRuleSummary(){
   const p=curProfile(); const L=[];
   L.push(`Hafta içi her gece <b>${kisiAraligi(p.oncallPerDay,p.oncallMax)}</b> nöbet tutar (${nobetSekliAdi(p,'week')} nöbet).`);
   L.push(`Hafta sonu ve resmi tatillerde <b>${kisiAraligi(p.weekendOncallPerDay,p.weekendOncallMax)}</b> nöbet tutar (${nobetSekliAdi(p,'weekend')} nöbet).`);
+  if(p.shiftTypePref==='asla') L.push(`Nöbet şeklinden <b>sapılmaz</b> (yalnız o gün başka türlü nöbetçi bulunamazsa).`);
+  else if(p.shiftTypePref!=='serbest') L.push(`Nöbet şekline bağlı kalınır; <b>yalnız zorunlu kalınca</b> diğer şekle inilir ve sebebi not edilir.`);
   const TAM_GUN=['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
   const gunler=(p.daytimeExtraDays||[]).map(d=>TAM_GUN[d]).filter(Boolean);
   L.push(`Gündüz (08–17) en az <b>${p.daytimeMin} kişi</b> bulunur` +
