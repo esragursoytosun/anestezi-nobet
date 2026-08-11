@@ -90,6 +90,14 @@
          kişiyi tek başına sınırlamaz; bu ayar KESİN tavan koyar.
          0 = sınır yok. */
       maxWeekendDuties: 0,
+      /* ÜST ÜSTE ÇALIŞMA TAVANI — çalışan gözüyle en yorucu şey.
+         Kullanıcı bildirdi: "isteği olmadan arka arkaya gündüz verilmesi
+         adalete uygun değil". Ölçüldü: en uzun seri 6 güne kadar çıkıyor ve
+         KİŞİLER ARASI fark ortalama 2.8 gün — biri 6 gün üst üste çalışırken
+         bir başkası 3 günü hiç geçmiyor. Bu tavan üst sınırı koyar; seri
+         YÜKÜNÜN kişiler arasında dengelenmesi ise "çalışma düzeni dengesi"
+         önceliğiyle sağlanır. 0 = sınır yok. */
+      maxConsecutiveWork: 6,
       /* İzin öncesi dinlenme boşluğu, aylık saat hedefinin önüne geçmesin.
          Açıkken: kişi hedefinin altında kalıyorsa ve tek çare izin öncesi
          boşluğu kısaltmaksa, o boşluk kısaltılır ve sebep not olarak yazılır.
@@ -131,6 +139,7 @@
     r.idleStyle = (r.idleStyle === 'toplu') ? 'toplu' : 'dagitik';
     var ma = parseInt(r.maxAbsentDays, 10); r.maxAbsentDays = (ma >= 0 && ma <= 31) ? ma : 5;
     var mw = parseInt(r.maxWeekendDuties, 10); r.maxWeekendDuties = (mw >= 0 && mw <= 31) ? mw : 0;
+    var mcw = parseInt(r.maxConsecutiveWork, 10); r.maxConsecutiveWork = (mcw >= 0 && mcw <= 31) ? mcw : 6;
     return r; }
 
   // Vardiya kodları sabit arketip: M(mesai), NL(uzun nöbet), NS(kısa nöbet) + izin türleri.
@@ -183,6 +192,8 @@
     bosBlok:            60,                      // TOPLU düzende: her ayrı boşluk bloğu (az blok = uzun mola)
     hsTavanKisi:      4000, hsTavanEk:    1500,   // hafta sonu üst sınırı aşımı (kişi + aşan her nöbet)
     tekGunAda:          90,                      // TOPLU düzende: 1 gün çalışıp yine boşa çıkma
+    calismaKisi:      1000, calismaGun:    600,   // üst üste çalışma tavanı aşımı (kişi + aşan her gün)
+    adaletSeri:         30,                      // uzun çalışma serisi YÜKÜNÜN kişiler arası dengesi
     adaletNobet:        16, adaletHaftaSonu: 14,
     adaletGun:          12,                      // çalışılan GÜN sayısı adaleti
     gunduzDenge:         4, ekstraGun:      8
@@ -273,6 +284,18 @@
       for (var gi3 = 1; gi3 < onG.length; gi3++) if (onG[gi3] - onG[gi3 - 1] === 2) gaGun.push(onG[gi3 - 1] + '–' + onG[gi3]);
       if (gaGun.length) warnings.push('💡 ' + p.name + ': gün aşırı nöbet (' + gaGun.join(', ') +
         '. günler) — bir gün nöbet, bir gün boş, yine nöbet. Kaçınılamadı; uygun biriyle elle takas edebilirsiniz.');
+      /* ÜST ÜSTE ÇALIŞMA: rolü gereği her gün gelenler (Sorumlu / sadece
+         gündüz) bu kuralın dışında — onlarda uzun seri normaldir. */
+      if (P.maxConsecutiveWork > 0 && !p.noNobet && !p.dayOnly) {
+        var cRun = 0, cMax = 0, cBas = 0, cEnBas = 0;
+        for (var cd2 = 1; cd2 <= nDays; cd2++) {
+          if (present(a[cd2] || '')) { if (cRun === 0) cBas = cd2; cRun++; if (cRun > cMax) { cMax = cRun; cEnBas = cBas; } }
+          else cRun = 0;
+        }
+        if (cMax > P.maxConsecutiveWork)
+          warnings.push(p.name + ': ' + cMax + ' gün üst üste çalışıyor (' + cEnBas + '–' + (cEnBas + cMax - 1) +
+            '. günler; en fazla ' + P.maxConsecutiveWork + ' olmalı).');
+      }
       if (P.maxWeekendDuties > 0 && wkn > P.maxWeekendDuties)
         warnings.push(p.name + ': ' + wkn + ' hafta sonu/tatil nöbeti (en fazla ' + P.maxWeekendDuties + ' olmalı).');
       if (best > P.maxConsecutiveOff) warnings.push((p.onlyNobet ? '💡 ' : '') + p.name + ': ' + best + ' iş günü üst üste izinli/boşta' + (p.onlyNobet ? ' (sadece nöbet — mesai yazılmadığı için doğal).' : ' (en fazla ' + P.maxConsecutiveOff + ' olmalı).'));
@@ -347,7 +370,7 @@
       }
     }
     var nNobet = plist.filter(function (p) { return !p.noNobet; }).length;
-    var hasGap = warnings.some(function (w) { return /sadece \d+ nöbetçi|gündüzde \d+ kişi|üst üste izinli|üst üste işe gelmiyor/.test(w); });
+    var hasGap = warnings.some(function (w) { return /sadece \d+ nöbetçi|gündüzde \d+ kişi|üst üste izinli|üst üste işe gelmiyor|üst üste çalışıyor/.test(w); });
     if (hasGap && nNobet < P.minStaffWarn) {
       warnings.push('💡 ÖNERİ: Bu ay ' + nNobet + ' nöbetçi kişi var; bu izin yoğunluğu için kapasite sınırda. ' +
         'Çözüm: çakışan izinleri farklı haftalara yayın ya da o ay 1 kişi daha ekleyin.');
@@ -811,6 +834,8 @@
            (Sorumlu, sadece gündüz) ve hiç mesai almayan (sadece nöbet) kişiler
            bu dengenin DIŞINDA — onların gün sayısı rolden geliyor. */
         var gnArr = [], gwArr = [], totGun = 0, sumGw = 0;
+        // UZUN ÇALIŞMA SERİSİ YÜKÜ (kişi başına) — dengesi aşağıda cezalanır
+        var seriArr = [], seriW = [], totSeri = 0, sumSw = 0;
         for (var i = 0; i < people.length; i++) {
           var Pp = people[i], h = Pp.hours;
           /* KİŞİ BAŞINA SABİT + saat başına eğim. Sabit olmadan arama, bir
@@ -867,6 +892,20 @@
           if (!Pp.noNobet && !Pp.dayOnly && !Pp.onlyNobet) {
             var gun = 0; for (var gd = 1; gd <= nDays; gd++) { var gc = Pp.assign[gd]; if (gc === 'M' || isOncall(gc)) gun++; }
             var gw = Pp.target || 1; gnArr.push(gun); gwArr.push(gw); totGun += gun; sumGw += gw;
+            /* ARDA ARDA ÇALIŞMA: tavan aşımı SERT; ayrıca 4. günden itibaren
+               biriken "yorgunluk yükü" hesaplanır. Yükün TOPLAMINI azaltmak
+               yetmez — kimde biriktiği de önemli; denge aşağıda kurulur.
+               Rolü gereği her gün gelenler (Sorumlu / sadece gündüz) hariç. */
+            var cr = 0, crMax = 0, yuk = 0;
+            for (var cd = 1; cd <= nDays; cd++) {
+              var cc2 = Pp.assign[cd];
+              if (cc2 === 'M' || isOncall(cc2)) { cr++; if (cr > crMax) crMax = cr;
+                if (P.maxConsecutiveWork > 0 && cr > P.maxConsecutiveWork) s += W.calismaGun;
+                if (cr >= 4) yuk += cr - 3;
+              } else cr = 0;
+            }
+            if (P.maxConsecutiveWork > 0 && crMax > P.maxConsecutiveWork) s += W.calismaKisi;
+            seriArr.push(yuk); seriW.push(gw); totSeri += yuk; sumSw += gw;
           }
           // HAFTA SONU ÜST SINIRI: kesin tavan (denge çarpanından bağımsız, sert)
           if (P.maxWeekendDuties > 0 && wk > P.maxWeekendDuties) s += W.hsTavanKisi + (wk - P.maxWeekendDuties) * W.hsTavanEk;
@@ -906,6 +945,11 @@
            de çok olduğu için uzun boşluk hep aynı kişilere düşüyordu. */
         if (sumGw > 0) for (var gi2 = 0; gi2 < gnArr.length; gi2++) {
           s += Math.abs(gnArr[gi2] - totGun * gwArr[gi2] / sumGw) * W.adaletGun * AG.ri;
+        }
+        /* UZUN SERİ YÜKÜ ADALETİ: "biri hep 5-6 gün üst üste, öteki hiç 3'ü
+           geçmiyor" durumunu kırar (ölçüldü: kişiler arası fark ort. 2.8 gün). */
+        if (sumSw > 0) for (var si = 0; si < seriArr.length; si++) {
+          s += Math.abs(seriArr[si] - totSeri * seriW[si] / sumSw) * W.adaletSeri * AG.ri;
         }
         s += spacing * W.yayilim * AG.ya;              // nöbetleri aya eşit yay (kümeleşme/sıkışma)
         // KIDEM: her gün nöbette / hafta içi gündüzde EN AZ kaç kıdemli (sert ceza)
@@ -1425,6 +1469,7 @@
       else if (/üst üste izinli/.test(w)) s += W.ustUsteKisi * SAG.bo;
       else if (/üst üste işe gelmiyor/.test(w)) s += W.bosGunKisi * SAG.bo;
       else if (/hafta sonu\/tatil nöbeti \(en fazla/.test(w)) s += W.hsTavanKisi;
+      else if (/gün üst üste çalışıyor/.test(w)) s += W.calismaKisi;
       else if (/gündüzde \d+ kişi/.test(w)) s += W.gunduzGun;
       else s += W.digerUyari;
     });
