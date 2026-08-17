@@ -32,6 +32,19 @@
       daytimeMin: 2,                                       // hafta içi gündüz min (oncall-daytime + mesai)
       daytimeExtraDays: [2, 4],                            // ekstra gündüz istenen günler (dow: Sal=2, Per=4)
       daytimeExtra: 3,                                     // o günlerde gündüz min
+      /* GÜNDÜZ ÜST SINIRI — kullanıcı bildirdi: "günlük çalışması gereken
+         insan sayısını düşürmeyip mesai veriyor". Ölçüldü: istenen gündüz
+         2.43 kişi iken gerçekleşen 5.55 (günde 3.1 fazla). Sebep aritmetik —
+         herkesin aylık saat hedefi dolmak zorunda, nöbetler o saatin ancak
+         bir kısmını tüketiyor, kalanı zorunlu olarak gündüz mesaisi oluyor.
+         Bu sınır konursa fazlası ÜCRETLİ İZİN olur ve o kişiler hedefin
+         altında kalır — bilinçli bir tercih, o yüzden varsayılan KAPALI.
+         0 = sınır yok. */
+      daytimeMax: 0,
+      /* ARKA ARKAYA NÖBET SINIRI: dinlenme arası dışında boşluk bırakmadan
+         zincirlenen nöbet sayısı (nöbet → dinlenme → nöbet → dinlenme → …).
+         0 = sınır yok. */
+      maxDutyChain: 0,
       weekendForceLong: true,                              // (eski) — weekendOncall'a göç eder; tutuluyor
       weekendOncall: 'long',                               // hafta sonu/tatil nöbet şekli: 'long'(24) | 'short'(16)
       weekendOncallPerDay: 2,                              // hafta sonu/tatil nöbetçi EN AZ
@@ -160,6 +173,10 @@
     var ma = parseInt(r.maxAbsentDays, 10); r.maxAbsentDays = (ma >= 0 && ma <= 31) ? ma : 5;
     var mw = parseInt(r.maxWeekendDuties, 10); r.maxWeekendDuties = (mw >= 0 && mw <= 31) ? mw : 0;
     var mcw = parseInt(r.maxConsecutiveWork, 10); r.maxConsecutiveWork = (mcw >= 0 && mcw <= 31) ? mcw : 6;
+    var dmx = parseInt(r.daytimeMax, 10); r.daytimeMax = (dmx >= 0 && dmx <= 99) ? dmx : 0;
+    // üst sınır, istenen minimumun altına düşemez (yoksa kural kendi kendini yer)
+    if (r.daytimeMax > 0) r.daytimeMax = Math.max(r.daytimeMax, r.daytimeMin, r.daytimeExtra);
+    var mdc = parseInt(r.maxDutyChain, 10); r.maxDutyChain = (mdc >= 0 && mdc <= 31) ? mdc : 0;
     if (['serbest', 'zorunlu', 'asla'].indexOf(r.shiftTypePref) < 0) r.shiftTypePref = 'zorunlu';
     return r; }
 
@@ -214,6 +231,11 @@
     hsTavanKisi:      4000, hsTavanEk:    1500,   // hafta sonu üst sınırı aşımı (kişi + aşan her nöbet)
     tekGunAda:          90,                      // TOPLU düzende: 1 gün çalışıp yine boşa çıkma
     calismaKisi:      1000, calismaGun:    600,   // üst üste çalışma tavanı aşımı (kişi + aşan her gün)
+    /* Gündüz üst sınırı, EKSİK SAAT'ten (6000) GÜÇLÜ olmak zorunda: aksi
+       halde motor "saatimi doldurayım" diyerek tavanı her gün çiğner ve ayar
+       hiç işlemez (ölçüldü: tavan 4 iken ortalama 6.10, en çok 10). */
+    gunduzTavanGun:  12000, gunduzTavanKisi: 3000, // gündüz üst sınırı aşımı (gün + aşan her kişi)
+    zincirKisi:       1200, zincirNobet:    500,  // arka arkaya nöbet zinciri aşımı
     adaletSeri:         30,                      // uzun çalışma serisi YÜKÜNÜN kişiler arası dengesi
     sekilSapma:        400,                      // ayarlanan nöbet şeklinden sapan her nöbet ('zorunlu' modda)
     adaletNobet:        16, adaletHaftaSonu: 14,
@@ -263,6 +285,9 @@
           warnings.push(p.name + ' (sorumlu · sadece gündüz): bu ay ' + avail + ' iş günü var → en fazla ' + (avail * P.mesaiHours) + ' saat.');
         } else if (p.onlyNobet) {
           warnings.push('💡 ' + p.name + ' (sadece nöbet): bu ay ' + (nl + ns) + ' nöbet, ' + hours + ' saat (mesai yazılmaz).');
+        } else if (P.daytimeMax > 0) {
+          warnings.push('💡 ' + p.name + ': ' + (-fark) + ' saat eksik — gündüz üst sınırı (' + P.daytimeMax +
+            ' kişi) yüzünden daha fazla mesai yazılamadı. Bu bilinçli bir tercih: sınırı yükseltirseniz saat dolar.');
         } else if (p.preLeaveKisaldi) {
           warnings.push(p.name + ': EKSİK ' + (-fark) + ' saat (hedef ' + p.target + '). İzin öncesi dinlenme boşluğu da kullanıldı, yine de yetmedi.');
         } else if (adim > 1 && (p.target % adim) > 0 && (-fark) <= (p.target % adim)) {
@@ -317,6 +342,17 @@
         if (cMax > P.maxConsecutiveWork)
           warnings.push(p.name + ': ' + cMax + ' gün üst üste çalışıyor (' + cEnBas + '–' + (cEnBas + cMax - 1) +
             '. günler; en fazla ' + P.maxConsecutiveWork + ' olmalı).');
+      }
+      /* ARKA ARKAYA NÖBET ZİNCİRİ uyarısı */
+      if (P.maxDutyChain > 0) {
+        var zOn = []; for (var zd = 1; zd <= nDays; zd++) if (isOncall(a[zd] || '')) zOn.push(zd);
+        var zAdim2 = (P.postOncallRest || 0) + 1, zR = 1, zMax = 1, zBas = zOn.length ? zOn[0] : 0, zEnBas = zBas;
+        for (var zj = 1; zj < zOn.length; zj++) {
+          if (zOn[zj] - zOn[zj - 1] <= zAdim2 + 1) { zR++; if (zR > zMax) { zMax = zR; zEnBas = zBas; } }
+          else { zR = 1; zBas = zOn[zj]; }
+        }
+        if (zMax > P.maxDutyChain)
+          warnings.push(p.name + ': ' + zMax + ' nöbet arka arkaya (' + zEnBas + '. günden itibaren; en fazla ' + P.maxDutyChain + ' olmalı).');
       }
       if (P.maxWeekendDuties > 0 && wkn > P.maxWeekendDuties)
         warnings.push(p.name + ': ' + wkn + ' hafta sonu/tatil nöbeti (en fazla ' + P.maxWeekendDuties + ' olmalı).');
@@ -381,6 +417,8 @@
       var needN = oncallNeed(dd);
       if (nob < needN) warnings.push(dd.day + '. gün (' + dd.dowName + '): sadece ' + nob + ' nöbetçi (' + needN + ' gerekli).');
       if (dd.workday && gun < dayNeed(dd)) warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüzde ' + gun + ' kişi (en az ' + dayNeed(dd) + ' olmalı).');
+      if (dd.workday && P.daytimeMax > 0 && gun > P.daytimeMax)
+        warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüzde ' + gun + ' kişi (en fazla ' + P.daytimeMax + ' olmalı).');
       if (P.minSeniorOncall > 0 && srNob < P.minSeniorOncall) warnings.push(dd.day + '. gün (' + dd.dowName + '): nöbette ' + srNob + ' kıdemli (en az ' + P.minSeniorOncall + ' olmalı).');
       if (P.minSeniorDaytime > 0 && dd.workday && srGun < P.minSeniorDaytime) warnings.push(dd.day + '. gün (' + dd.dowName + '): gündüzde ' + srGun + ' kıdemli (en az ' + P.minSeniorDaytime + ' olmalı).');
     });
@@ -784,14 +822,21 @@
     // EŞİT ARALIKLI seçilir -> boşluklar aya tekli dağılır.
     people.forEach(function (Pp) {
       if (Pp.onlyNobet) return;                            // "sadece nöbet": hiç mesai yazılmaz
-      var free = []; days.forEach(function (dd) { if (dd.workday && Pp.assign[dd.day] === '' && !Pp.offReq.has(dd.day)) free.push(dd.day); });
+      /* Gündüz üst sınırı varsa o güne artık mesai yazılmaz; kişi hedefin
+         altında kalabilir (bilinçli tercih, analizde sebebiyle bildirilir). */
+      var free = []; days.forEach(function (dd) { if (dd.workday && Pp.assign[dd.day] === '' && !Pp.offReq.has(dd.day)
+        && !(P.daytimeMax > 0 && daytimeCount(dd.day) >= P.daytimeMax)) free.push(dd.day); });
       var budget = Math.floor((Pp.target - Pp.hours) / P.mesaiHours);
       if (budget <= 0 || !free.length) return;
-      if (budget >= free.length) { free.forEach(function (d) { addMesai(Pp, d); }); return; }
+      /* Tavan denetimi her yazımdan ÖNCE tekrarlanır: liste başta kurulup
+         sonra hepsi doldurulursa, aynı güne birden çok kişi yazılıp tavan
+         sessizce aşılıyordu. */
+      var yazilabilir = function (d) { return !(P.daytimeMax > 0 && daytimeCount(d) >= P.daytimeMax); };
+      if (budget >= free.length) { free.forEach(function (d) { if (yazilabilir(d)) addMesai(Pp, d); }); return; }
       var picked = {}, cnt = 0;
       for (var k = 0; k < budget; k++) { var ix = Math.min(free.length - 1, Math.floor((k + 0.5) * free.length / budget)); if (!picked[free[ix]]) { picked[free[ix]] = 1; cnt++; } }
       for (var i2 = 0; i2 < free.length && cnt < budget; i2++) if (!picked[free[i2]]) { picked[free[i2]] = 1; cnt++; }   // yuvarlama çakışması tamamla
-      free.forEach(function (d) { if (picked[d]) addMesai(Pp, d); });
+      free.forEach(function (d) { if (picked[d] && yazilabilir(d)) addMesai(Pp, d); });
     });
 
     // ---- 2.5) KALAN BOŞ İŞ GÜNLERİ -> ÜCRETLİ İZİN ----
@@ -944,7 +989,14 @@
              kişinin 24 saatlik fazlasını üç kişiye bölmeyi bedava sanıyordu;
              kullanıcı tarafında bu 1 uyarı yerine 3 uyarı demek. */
           if (h > Pp.target) s += W.fazlaMesaiKisi + (h - Pp.target) * W.fazlaMesaiSaat;
-          else if (h < Pp.target && !Pp.noNobet && !Pp.onlyNobet) s += W.eksikKisi + (Pp.target - h) * W.eksikSaat;  // (sadece-nöbet HARİÇ: hedefe zorlanmaz -> gün aşırı yığılmaz)
+          /* Gündüz üst sınırı konmuşsa aylık hedef ZORUNLULUK değil TAVAN olur:
+             kullanıcı bilerek "günde şu kadar kişiden fazlası gelmesin" dedi,
+             artan saat ücretli izne dönüşür. Ceza tamamen kalkmaz (fırsat
+             varken hedef yine doldurulur) ama tavanı ezmez. */
+          else if (h < Pp.target && !Pp.noNobet && !Pp.onlyNobet) {
+            var eksikCarpan = (P.daytimeMax > 0) ? 0.12 : 1;
+            s += (W.eksikKisi + (Pp.target - h) * W.eksikSaat) * eksikCarpan;
+          }
           var run = 0, runMax = 0, nc = 0, wk = 0, onDays = [], bosBlokSayisi = 0;
           for (var d = 1; d <= nDays; d++) { var c = Pp.assign[d];
             if (isOncall(c)) { nc++; onDays.push(d); if (days[d - 1].weekend || days[d - 1].holiday) wk++; }
@@ -1027,12 +1079,26 @@
             // GÜN AŞIRI NÖBET (2 gün arayla: N _ N): mecbur kalmadıkça kaçın — nöbetleri yay.
             // İlk gün-aşırı çiftinden itibaren cezalı, zincir uzadıkça ARTAN (nöbet-boş-nöbet-boş... engellenir).
             var gaRun = 1; for (var ga = 1; ga < onDays.length; ga++) { if (onDays[ga] - onDays[ga - 1] === 2) { gaRun++; s += gaRun * gaRun * W.gunAsiri * AG.ya; } else gaRun = 1; }
+            /* ARKA ARKAYA NÖBET ZİNCİRİ: dinlenme dışında boşluk bırakmadan
+               sıralanan nöbetler. Dinlenme 1 gün ise "nöbet-boş-nöbet" zincir
+               sayılır; 2 gün ise "nöbet-boş-boş-nöbet". Kullanıcı isteği:
+               sayısı sınırlandırılabilsin. */
+            if (P.maxDutyChain > 0) {
+              var zAdim = (P.postOncallRest || 0) + 1, zRun = 1;
+              for (var zi = 1; zi < onDays.length; zi++) {
+                if (onDays[zi] - onDays[zi - 1] <= zAdim + 1) { zRun++;
+                  if (zRun > P.maxDutyChain) s += W.zincirNobet;
+                } else zRun = 1;
+              }
+              if (zRun > P.maxDutyChain) s += W.zincirKisi;
+            }
           }
         }
         // gündüz min (sert) + DAĞILIM ŞEKİLLENDİRME (ekstra gün = normal ort + 1..2, aşırı yığma yok)
         var normVals = [], extras = [];
         for (var k = 0; k < workdayNums.length; k++) { var dn = workdayNums[k], dday = days[dn - 1], need = dayNeed(dday), g = daytimeCount(dn);
           if (g < need) s += W.gunduzGun + (need - g) * W.gunduzKisi;   // uyarı GÜN başına doğuyor -> eşik cezası da gün başına
+          if (P.daytimeMax > 0 && g > P.daytimeMax) s += W.gunduzTavanGun + (g - P.daytimeMax) * W.gunduzTavanKisi;
           if (dday.isExtra) extras.push(g); else normVals.push(g);
         }
         if (normVals.length) {
@@ -1078,7 +1144,8 @@
         var Pp = people[(rnd() * people.length) | 0];
         if (Pp.onlyNobet) return null;
         if (Pp.hours + P.mesaiHours > Pp.target) return null;
-        var Us = []; for (var d = 1; d <= nDays; d++) if (days[d - 1].workday && Pp.assign[d] === 'UCI' && !Pp.lockedOff.has(d) && !Pp.offReq.has(d)) Us.push(d);
+        var Us = []; for (var d = 1; d <= nDays; d++) if (days[d - 1].workday && Pp.assign[d] === 'UCI' && !Pp.lockedOff.has(d) && !Pp.offReq.has(d)
+          && !(P.daytimeMax > 0 && daytimeCount(d) >= P.daytimeMax)) Us.push(d);
         if (!Us.length) return null;
         var dd = Us[(rnd() * Us.length) | 0]; Pp.assign[dd] = 'M'; Pp.hours += P.mesaiHours;
         return function () { Pp.assign[dd] = 'UCI'; Pp.hours -= P.mesaiHours; };
@@ -1130,7 +1197,8 @@
         var Pp = people[(rnd() * people.length) | 0], Ms = [], Us = [];
         for (var d = 1; d <= nDays; d++) { var c = Pp.assign[d];
           if (c === 'M' && !Pp.mustMesai.has(d)) Ms.push(d);
-          else if (days[d - 1].workday && c === 'UCI' && !Pp.lockedOff.has(d) && !Pp.offReq.has(d)) Us.push(d); }
+          else if (days[d - 1].workday && c === 'UCI' && !Pp.lockedOff.has(d) && !Pp.offReq.has(d)
+            && !(P.daytimeMax > 0 && daytimeCount(d) >= P.daytimeMax)) Us.push(d); }
         if (!Ms.length || !Us.length) return null;
         var d1 = Ms[(rnd() * Ms.length) | 0], d2 = Us[(rnd() * Us.length) | 0];
         Pp.assign[d1] = 'UCI'; Pp.assign[d2] = 'M';
@@ -1538,6 +1606,8 @@
       var serbest = [], kilitli = [];
       for (var d = 1; d <= nDays; d++) {
         if (!days[d - 1].workday || Pp.assign[d] !== 'UCI' || Pp.offReq.has(d)) continue;
+        if (P.daytimeMax > 0 && daytimeCount(d) >= P.daytimeMax) continue;   // gündüz üst sınırı
+
         if (Pp.preLeaveLock.has(d)) { if (P.hoursBeforePreLeaveGap !== false) kilitli.push(d); }
         else if (!Pp.lockedOff.has(d)) serbest.push(d);
       }
@@ -1595,6 +1665,8 @@
       else if (/üst üste işe gelmiyor/.test(w)) s += W.bosGunKisi * SAG.bo;
       else if (/hafta sonu\/tatil nöbeti \(en fazla/.test(w)) s += W.hsTavanKisi;
       else if (/gün üst üste çalışıyor/.test(w)) s += W.calismaKisi;
+      else if (/nöbet arka arkaya/.test(w)) s += W.zincirKisi;
+      else if (/kişi \(en fazla \d+ olmalı\)/.test(w)) s += W.gunduzTavanGun;
       else if (/gündüzde \d+ kişi/.test(w)) s += W.gunduzGun;
       else s += W.digerUyari;
     });

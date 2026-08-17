@@ -428,6 +428,7 @@
             <div class="kc"><div class="t">Hafta içi nöbetçi</div><input type="text" id="oncallPerDay" placeholder="örn. 2 veya 2-3"><div class="kh">Her hafta içi gecesi kaç kişi nöbet tutsun. Aralık yazarsanız (2-3) en az ilk sayı garanti edilir, kadro elverirse ikinciye çıkılır.</div></div>
             <div class="kc"><div class="t">Hafta sonu / tatil nöbetçi</div><input type="text" id="weekendOncallPerDay" placeholder="örn. 2 veya 2-3"><div class="kh">Cumartesi, Pazar ve resmi tatillerde kaç kişi nöbet tutsun.</div></div>
             <div class="kc"><div class="t">Gündüz en az kaç kişi</div><input type="number" id="daytimeMin"><div class="kh">Hafta içi 08–17 arası sahada bulunması gereken en az kişi. Gündüzü kapsayan nöbetçi (24s) bu sayıya dahildir.</div></div>
+            <div class="kc"><div class="t">Gündüz en fazla kaç kişi</div><input type="number" id="daytimeMax"><div class="kh"><b>0 = sınır yok.</b> Sınır koymazsanız gündüz sayısı istediğinizden çok daha yüksek çıkar — çünkü herkesin aylık saat hedefi dolmak zorunda ve nöbetler o saatin ancak bir kısmını tüketir. Sınır koyarsanız fazlası <b>ücretli izne</b> döner ve o kişiler hedefin altında kalır; bu bilinçli bir tercihtir, listede not olarak yazılır.</div></div>
           </div>
           <p class="help" style="margin-top:12px">Bazı günler daha yoğunsa (örn. ameliyat günleri) o günler için ayrı bir sayı verin.</p>
           <div class="row">
@@ -515,25 +516,30 @@
 
         <div class="advgrp">
           <h4>5 · Çalışan koruması</h4>
-          <p class="help">Kimsenin aşırı yorulmaması ve boş günlerin işe yarar biçimde verilmesi. <b>Personelin en çok fark ettiği ayarlar burada.</b></p>
-          <div class="row">
-            <div class="fld"><label>Üst üste en fazla kaç gün çalışılabilir</label><input type="number" id="maxConsecutiveWork">
-              <span class="hint">Nöbet + gündüz mesai birlikte sayılır; hafta sonu çalışılırsa seri kırılmaz. Rolü gereği her gün gelenler (Sorumlu / sadece gündüz) hariç. 0 = sınır yok.</span></div>
-            <div class="fld"><label>Hafta sonu / tatil nöbeti üst sınırı</label><input type="number" id="maxWeekendDuties">
-              <span class="hint">Kişi başına aylık kesin tavan. 0 = sınır yok.</span></div>
-          </div>
-          <p class="help" style="margin-top:12px">Boş günler nasıl verilsin:</p>
-          <div class="row">
-            <div class="fld"><label>Boş gün düzeni</label>
-              <select id="idleStyle"><option value="dagitik">Dağıtık — aya tek tek serpilsin</option><option value="toplu">Toplu — arka arkaya verilsin</option></select>
-              <span class="hint"><b>Toplu</b>: aynı sayıdaki boş gün daha az blokta toplanır, "1 gün çalış 1 gün boş" deseni azalır — gerçek bir mola olur.</span></div>
-            <div class="fld"><label>Üst üste en fazla kaç gün işe gelmeyebilir</label><input type="number" id="maxAbsentDays">
-              <span class="hint"><b>Takvim günü</b> — hafta sonu ve tatil dahil, yani listeye bakınca görünen boşluk. Yıllık izin ve geçici görev bu kurala girmez. 0 = kapalı.</span></div>
-            <div class="fld"><label>…bunun en fazla kaçı iş günü olabilir</label><input type="number" id="maxConsecutiveOff">
-              <span class="hint">Yukarıdakinin iş günü karşılığı. Örn. 3 iş günü + araya giren hafta sonu ≈ 5 takvim günü. Bu sayı üsttekinden büyük olamaz.</span></div>
-          </div>
-        </div>
+          <p class="help">Kimsenin aşırı yorulmaması. <b>0 yazarsanız o sınır kapanır.</b></p>
 
+          <p class="help" style="margin-top:4px"><b>Üst üste çalışma</b></p>
+          <div class="row">
+            <div class="fld"><label>En fazla kaç gün üst üste çalışılabilir</label><input type="number" id="maxConsecutiveWork">
+              <span class="hint">Nöbet + gündüz birlikte sayılır.</span></div>
+            <div class="fld"><label>En fazla kaç nöbet arka arkaya</label><input type="number" id="maxDutyChain">
+              <span class="hint">Nöbet → dinlenme → nöbet → dinlenme… zinciri. Arada boş gün olmadan kaç nöbet tutulabilir.</span></div>
+            <div class="fld"><label>Aylık en fazla kaç hafta sonu nöbeti</label><input type="number" id="maxWeekendDuties">
+              <span class="hint">Kişi başına kesin tavan.</span></div>
+          </div>
+
+          <p class="help" style="margin-top:14px"><b>Boş günler</b></p>
+          <div class="row">
+            <div class="fld"><label>Nasıl verilsin</label>
+              <select id="idleStyle"><option value="dagitik">Dağıtık — tek tek</option><option value="toplu">Toplu — arka arkaya</option></select>
+              <span class="hint"><b>Toplu</b>: gerçek bir mola olur, "1 gün çalış 1 gün boş" azalır.</span></div>
+            <div class="fld"><label>En fazla kaç gün üst üste gelmeyebilir</label><input type="number" id="maxAbsentDays">
+              <span class="hint">Takvim günü — hafta sonu dahil. Yıllık izin sayılmaz.</span></div>
+            <div class="fld"><label>…kaçı iş günü olabilir</label><input type="number" id="maxConsecutiveOff">
+              <span class="hint">Üstekinin iş günü karşılığı; ondan büyük olamaz.</span></div>
+          </div>
+          <span class="hint">Rolü gereği her gün gelenler (Sorumlu / sadece gündüz) üst üste çalışma sınırının dışındadır. Bu sınırların <b>hep aynı kişilere yüklenmemesi</b> için <i>6 · Adalet</i> bölümündeki "Çalışma düzeni dengesi"ni yükseltin.</span>
+        </div>
         <div class="advgrp">
           <h4>6 · Adalet</h4>
           <p class="help">Kural ihlalleri (yeterli nöbetçi, fazla mesai olmaması, gündüz sayısı) <b>her zaman önce gelir</b>. Aşağıdakiler yalnız bunlar sağlandıktan sonra hangi dengenin öne çıkacağını belirler — birbiriyle yarışırlar, birini yükseltmek diğerinden biraz ödün verdirir.</p>
@@ -674,7 +680,7 @@
 </div>
 <div class="foot">Nöbet Planlama Asistanı · <b>v44</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=45"></script>
+<script src="asistan-scheduler.js?v=46"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -688,7 +694,7 @@ const exWrap=document.getElementById('extraDays');
 const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel','oncallLongDaytime','useShortOncall',
   'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','daytimeMin','daytimeExtra',
   'weekendOncall','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
-  'postOncallRest','maxConsecutiveOff','maxAbsentDays','maxWeekendDuties','maxConsecutiveWork','idleStyle','shiftTypePref','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
+  'postOncallRest','maxConsecutiveOff','maxAbsentDays','maxWeekendDuties','maxConsecutiveWork','maxDutyChain','daytimeMax','idleStyle','shiftTypePref','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
 /* DENGE ÖNCELİKLERİ: motorda ÇARPAN olarak yaşıyor (0.4/1/2.5/6). Seçenekler
    sayı değeri taşır; RULE_FIELDS'in genel yolu string bırakırdı, o yüzden
    ayrı okunup parseFloat ile yazılır. */
@@ -865,6 +871,18 @@ function ayarDenetimi(){
       S.push(['Hafta sonu tavanı '+p.maxWeekendDuties+' ama ayda ~'+hsNobet+' hafta sonu nöbeti var ve '+nobetci+' nöbetçi kişi bu tavanla en fazla '+(nobetci*say(p.maxWeekendDuties))+' tutabilir.',
         'Tavan bu kadroyla tutturulamaz; hafta sonu günleri açık kalır. Tavanı '+Math.ceil(hsNobet/nobetci)+' yapın.']);
   }
+  // 12) Gündüz üst sınırı ile saat hedefi arasındaki bilinçli takas
+  if(say(p.daytimeMax)>0 && nobetci>0){
+    const nobetSaat=Math.max(say(p.oncallLongHours),1);
+    const nobetGun=21*rng(p.oncallPerDay)[0]+9*rng(p.weekendOncallPerDay)[0];
+    const nobetSaatToplam=nobetGun*nobetSaat;
+    const kapasite=(nobetci+1)*say(p.targetPerWorkday)*21;
+    const kalanMesai=Math.max(0,kapasite-nobetSaatToplam)/Math.max(say(p.mesaiHours),1);
+    const gunlukGereken=kalanMesai/21;
+    if(gunlukGereken>say(p.daytimeMax)+0.5)
+      S.push(['Gündüz üst sınırı '+p.daytimeMax+' ama saat hedefleri günde ~'+gunlukGereken.toFixed(1)+' kişilik mesai gerektiriyor.',
+        'Bu ikisi aynı anda tutamaz. Sınır kazanır: fazlası ücretli izne döner ve kişiler aylık hedefin altında kalır (listede not olarak yazılır). İstemiyorsanız sınırı ~'+Math.ceil(gunlukGereken)+' yapın ya da 0 (sınır yok) bırakın.']);
+  }
   // 11) Toplu boş blok ile çalışma tavanı aynı günleri paylaşır
   if(p.idleStyle==='toplu' && say(p.maxConsecutiveWork)>0 && say(p.maxConsecutiveOff)>=say(p.maxConsecutiveWork))
     S.push(['Boş günler <b>Toplu</b> ve boş blok sınırı '+p.maxConsecutiveOff+' iken üst üste çalışma tavanı '+p.maxConsecutiveWork+'.',
@@ -905,7 +923,9 @@ function renderRuleSummary(){
   L.push(`Nöbetten sonra <b>${p.postOncallRest} gün</b> dinlenme verilir.`);
   L.push(`Kişi başı aylık hedef: her iş günü <b>${p.targetPerWorkday} saat</b>. Yıllık ve haftalık izinler hedeften düşülür.`);
   if(p.preLeaveOncall) L.push(`Yıllık izne çıkmadan <b>${p.preLeaveDaysBefore} iş günü</b> önce nöbet konur, izinden önce <b>${p.preLeaveGap} gün</b> dinlenme verilir.`);
+  if(p.daytimeMax>0) L.push(`Gündüzde <b>en fazla ${p.daytimeMax} kişi</b> bulunur; fazlası ücretli izne döner (saat hedefi bu sınırın altında kalabilir).`);
   if(p.maxConsecutiveWork>0) L.push(`Kimse üst üste <b>${p.maxConsecutiveWork} günden</b> fazla çalışmaz (nöbet + mesai birlikte).`);
+  if(p.maxDutyChain>0) L.push(`Kimse arka arkaya <b>${p.maxDutyChain} nöbetten</b> fazla tutmaz.`);
   L.push(`Kimse üst üste <b>${p.maxConsecutiveOff} iş gününden</b> fazla boşta kalmaz.`);
   if(p.maxAbsentDays>0) L.push(`Kimse üst üste <b>${p.maxAbsentDays} günden</b> fazla işe gelmeden kalmaz (hafta sonu dahil; yıllık izin hariç).`);
   L.push(p.idleStyle==='toplu'
