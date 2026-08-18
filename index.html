@@ -526,6 +526,8 @@
               <span class="hint">Nöbet → dinlenme → nöbet → dinlenme… zinciri. Arada boş gün olmadan kaç nöbet tutulabilir.</span></div>
             <div class="fld"><label>Aylık en fazla kaç hafta sonu nöbeti</label><input type="number" id="maxWeekendDuties">
               <span class="hint">Kişi başına kesin tavan.</span></div>
+            <div class="fld"><label>Yıllık izindekine en fazla kaç nöbet</label><input type="number" id="maxDutyWhenOnLeave">
+              <span class="hint">İzinli kişinin penceresi daraldığı için orantılı pay bile <b>sıkışık</b> gelir. Bu sayı konunca o kişi tavanın üstüne çıkmaz, payı diğerlerine dağılır. En az 3 iş günü izni olanlara uygulanır. 0 = orantılı (eski davranış).</span></div>
           </div>
 
           <p class="help" style="margin-top:14px"><b>Boş günler</b></p>
@@ -682,7 +684,7 @@
 </div>
 <div class="foot">Nöbet Planlama Asistanı · <b>v44</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=47"></script>
+<script src="asistan-scheduler.js?v=48"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -696,7 +698,7 @@ const exWrap=document.getElementById('extraDays');
 const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel','oncallLongDaytime','useShortOncall',
   'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','daytimeMin','daytimeExtra',
   'weekendOncall','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
-  'postOncallRest','maxConsecutiveOff','maxAbsentDays','maxWeekendDuties','maxConsecutiveWork','maxDutyChain','daytimeMax','idleStyle','shiftTypePref','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
+  'postOncallRest','maxConsecutiveOff','maxAbsentDays','maxWeekendDuties','maxConsecutiveWork','maxDutyChain','maxDutyWhenOnLeave','daytimeMax','idleStyle','shiftTypePref','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
 /* DENGE ÖNCELİKLERİ: motorda ÇARPAN olarak yaşıyor (0.4/1/2.5/6). Seçenekler
    sayı değeri taşır; RULE_FIELDS'in genel yolu string bırakırdı, o yüzden
    ayrı okunup parseFloat ile yazılır. */
@@ -930,6 +932,7 @@ function renderRuleSummary(){
   if(p.daytimeMax>0) L.push(`Gündüzde <b>en fazla ${p.daytimeMax} kişi</b> bulunur; fazlası ücretli izne döner (saat hedefi bu sınırın altında kalabilir).`);
   if(p.maxConsecutiveWork>0) L.push(`Kimse üst üste <b>${p.maxConsecutiveWork} günden</b> fazla çalışmaz (nöbet + mesai birlikte).`);
   if(p.maxDutyChain>0) L.push(`Kimse arka arkaya <b>${p.maxDutyChain} nöbetten</b> fazla tutmaz.`);
+  if(p.maxDutyWhenOnLeave>0) L.push(`Yıllık izni olan kişiye en fazla <b>${p.maxDutyWhenOnLeave} nöbet</b> yazılır (sıkıştırılmaz).`);
   L.push(`Kimse üst üste <b>${p.maxConsecutiveOff} iş gününden</b> fazla boşta kalmaz.`);
   if(p.maxAbsentDays>0) L.push(`Kimse üst üste <b>${p.maxAbsentDays} günden</b> fazla işe gelmeden kalmaz (hafta sonu dahil; yıllık izin hariç).`);
   L.push(p.idleStyle==='toplu'

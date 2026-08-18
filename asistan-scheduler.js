@@ -45,6 +45,17 @@
          zincirlenen nöbet sayısı (nöbet → dinlenme → nöbet → dinlenme → …).
          0 = sınır yok. */
       maxDutyChain: 0,
+      /* YILLIK İZİNDEKİNİN NÖBETİ. Kullanıcı: "1 kişi yıllık izindeyse ve
+         herkese ortalama 6 nöbet düşüyorsa, o kişiye 1 ya da daha az nöbet
+         yazılabilir; çok sıkışmasına gerek yok."
+         Ölçüldü — haklı: motor payı kalan saate ORANTILI veriyordu, ama
+         izinlinin penceresi daraldığı için yoğunluk artıyordu (20 gün izinli
+         kişi 10 müsait günde 2 nöbet = yoğunluk 0.200; diğerleri 0.161).
+         Bu sayı konunca izinli kişi bu tavanın üstüne çıkmaz ve nöbet
+         adaleti hesabından ÇIKARILIR — payı diğerlerine dağılır, ikisi
+         birbiriyle çekişmez. 0 = kapalı (eski orantılı davranış).
+         Kural yalnız kayda değer izni olanlara uygulanır (>= 5 iş günü). */
+      maxDutyWhenOnLeave: 0,
       weekendForceLong: true,                              // (eski) — weekendOncall'a göç eder; tutuluyor
       weekendOncall: 'long',                               // hafta sonu/tatil nöbet şekli: 'long'(24) | 'short'(16)
       weekendOncallPerDay: 2,                              // hafta sonu/tatil nöbetçi EN AZ
@@ -187,6 +198,7 @@
     // üst sınır, istenen minimumun altına düşemez (yoksa kural kendi kendini yer)
     if (r.daytimeMax > 0) r.daytimeMax = Math.max(r.daytimeMax, r.daytimeMin, r.daytimeExtra);
     var mdc = parseInt(r.maxDutyChain, 10); r.maxDutyChain = (mdc >= 0 && mdc <= 31) ? mdc : 0;
+    var mdl = parseInt(r.maxDutyWhenOnLeave, 10); r.maxDutyWhenOnLeave = (mdl >= 0 && mdl <= 31) ? mdl : 0;
     if (['serbest', 'zorunlu', 'asla'].indexOf(r.shiftTypePref) < 0) r.shiftTypePref = 'zorunlu';
     return r; }
 
@@ -246,6 +258,7 @@
        hiç işlemez (ölçüldü: tavan 4 iken ortalama 6.10, en çok 10). */
     gunduzTavanGun:  12000, gunduzTavanKisi: 3000, // gündüz üst sınırı aşımı (gün + aşan her kişi)
     zincirKisi:       1200, zincirNobet:    500,  // arka arkaya nöbet zinciri aşımı
+    izinNobetKisi:    5000, izinNobetEk:   2000,  // izinli kişiye tavandan fazla nöbet
     adaletSeri:         30,                      // uzun çalışma serisi YÜKÜNÜN kişiler arası dengesi
     sekilSapma:        400,                      // ayarlanan nöbet şeklinden sapan her nöbet ('zorunlu' modda)
     adaletNobet:        16, adaletHaftaSonu: 14,
@@ -366,6 +379,8 @@
         if (zMax > P.maxDutyChain)
           warnings.push(p.name + ': ' + zMax + ' nöbet arka arkaya (' + zEnBas + '. günden itibaren; en fazla ' + P.maxDutyChain + ' olmalı).');
       }
+      if (P.maxDutyWhenOnLeave > 0 && (p.izinIsGunu || 0) >= 3 && (nl + ns) > P.maxDutyWhenOnLeave)
+        warnings.push(p.name + ': yıllık izinli ama ' + (nl + ns) + ' nöbet yazıldı (en fazla ' + P.maxDutyWhenOnLeave + ' olmalı).');
       if (P.maxWeekendDuties > 0 && wkn > P.maxWeekendDuties)
         warnings.push(p.name + ': ' + wkn + ' hafta sonu/tatil nöbeti (en fazla ' + P.maxWeekendDuties + ' olmalı).');
       if (best > P.maxConsecutiveOff) warnings.push((p.onlyNobet ? '💡 ' : '') + p.name + ': ' + best + ' iş günü üst üste izinli/boşta' + (p.onlyNobet ? ' (sadece nöbet — mesai yazılmadığı için doğal).' : ' (en fazla ' + P.maxConsecutiveOff + ' olmalı).'));
@@ -417,7 +432,7 @@
       return { name: p.name, target: p.target, hours: hours, fark: fark, mesai: mesai, nl: nl, ns: ns,
         ni: ni, uci: uci, weekendNobet: wkn, noNobet: !!p.noNobet, dayOnly: !!p.dayOnly, onlyNobet: !!p.onlyNobet, senior: !!p.senior,
         onlyN16: p.onlyN16 || [], onlyN24: p.onlyN24 || [], onlyDay: p.onlyDay || [], lockedOff: p.lockedOff || [],
-        preLeaveKisaldi: !!p.preLeaveKisaldi,
+        preLeaveKisaldi: !!p.preLeaveKisaldi, izinIsGunu: p.izinIsGunu || 0,
         offReq: toArr(p.offReq) };   // recompute'a taşınır: elle düzenlemeden sonra da çelişki notu korunur
     });
 
@@ -563,6 +578,9 @@
         onlyDay: new Set(p.onlyDay || []), onlyN16: new Set(p.onlyN16 || []), onlyN24: new Set(p.onlyN24 || []), offReq: new Set(p.offReq || []),
         assign: assign, target: target, hours: 0, nobetDays: [], lastNobet: -99, weekendNobet: 0,
         preLeaveLock: preLeaveLock, preLeaveKisaldi: false,
+        // izinli iş günü sayısı (yıllık izin + geçici görev); tavan buna bağlı
+        izinIsGunu: leaveWork,
+        izinTavanli: (P.maxDutyWhenOnLeave > 0 && leaveWork >= 3),
         carryNc: cy ? (cy.nc || 0) : 0, carryWk: cy ? (cy.wk || 0) : 0,
         lockedOff: lockedOff, mustMesai: mustMesai };
     });
@@ -1093,7 +1111,12 @@
           }
           // HAFTA SONU ÜST SINIRI: kesin tavan (denge çarpanından bağımsız, sert)
           if (P.maxWeekendDuties > 0 && wk > P.maxWeekendDuties) s += W.hsTavanKisi + (wk - P.maxWeekendDuties) * W.hsTavanEk;
-          if (!Pp.noNobet) { var w = Pp.target || 1; ncArr.push(nc); wkArr.push(wk); wArr.push(w); crNc.push(Pp.carryNc || 0); crWk.push(Pp.carryWk || 0); totNc += nc; totWk += wk; sumW += w; totCrNc += (Pp.carryNc || 0); totCrWk += (Pp.carryWk || 0);
+          /* İZİN TAVANI: aşımı sert cezalı. Tavanlı kişi nöbet ADALETİ
+             hesabına girmez — yoksa "orantılı payını al" ile "tavanı aşma"
+             birbiriyle çekişir ve ikisi de tutmaz. */
+          if (Pp.izinTavanli && nc > P.maxDutyWhenOnLeave)
+            s += W.izinNobetKisi + (nc - P.maxDutyWhenOnLeave) * W.izinNobetEk;
+          if (!Pp.noNobet && !Pp.izinTavanli) { var w = Pp.target || 1; ncArr.push(nc); wkArr.push(wk); wArr.push(w); crNc.push(Pp.carryNc || 0); crWk.push(Pp.carryWk || 0); totNc += nc; totWk += wk; sumW += w; totCrNc += (Pp.carryNc || 0); totCrWk += (Pp.carryWk || 0);
             // YAYILIM: kişinin kendi nöbetleri aya eşit aralıklı mı (kısa aralık cezalı)
             if (onDays.length > 1) { var ideal = nDays / onDays.length; for (var q = 1; q < onDays.length; q++) { var gap = onDays[q] - onDays[q - 1]; if (gap < ideal) spacing += (ideal - gap); } }
             // GÜN AŞIRI NÖBET (2 gün arayla: N _ N): mecbur kalmadıkça kaçın — nöbetleri yay.
@@ -1433,7 +1456,10 @@
        ve önceki ayların birikimini (carry) içerir. */
     function adaletOnar() {
       if (!(LS_ITER > 0)) return;
-      var havuz = people.filter(function (p) { return !p.noNobet; });
+      /* İzin tavanı olan kişi adalet havuzunun DIŞINDA: yoksa bu faz onu
+         ortalamaya çekmeye çalışır ve tavanla çekişir (ölçüldü: 10 günlük
+         izinde tavan 1 iken 3 nöbet kalıyordu). */
+      var havuz = people.filter(function (p) { return !p.noNobet && !p.izinTavanli; });
       if (havuz.length < 2) return;
       var sumW = 0; havuz.forEach(function (p) { sumW += (p.target || 1); });
       if (!sumW) return;
@@ -1578,6 +1604,55 @@
       }
     }
 
+    /* ---- İZİN TAVANI ONARIMI ----
+       Tavanı aşan izinli kişinin fazla nöbetleri, tavansız birine devredilir.
+       Hedefli ve doğrudan: ceza fonksiyonuna bırakmak yetmiyordu, çünkü
+       devri yapacak rastgele hamlenin doğru kişi+gün çiftini bulma olasılığı
+       düşük. Devir yalnız toplam ceza artmıyorsa kabul edilir. */
+    function izinTavanOnar() {
+      if (!(LS_ITER > 0) || !(P.maxDutyWhenOnLeave > 0)) return;
+      for (var tur = 0; tur < 20; tur++) {
+        var kisi = null, fazla = 0;
+        for (var i = 0; i < people.length; i++) {
+          var Pp = people[i]; if (!Pp.izinTavanli) continue;
+          var nc = 0; for (var d = 1; d <= nDays; d++) if (isOncall(Pp.assign[d])) nc++;
+          if (nc - P.maxDutyWhenOnLeave > fazla) { fazla = nc - P.maxDutyWhenOnLeave; kisi = Pp; }
+        }
+        if (!kisi) break;
+        var gunler = [];
+        for (var d2 = 1; d2 <= nDays; d2++) if (isOncall(kisi.assign[d2])) gunler.push(d2);
+        var oldu = false;
+        for (var gi = 0; gi < gunler.length && !oldu; gi++) {
+          var adaylar = devirAdaylari(kisi, gunler[gi]).filter(function (B) { return !B.izinTavanli; });
+          for (var ai = 0; ai < adaylar.length && !oldu; ai++) {
+            var B = adaylar[ai];
+            var once = penalty(), geriList = [nobetDevret(kisi, B, gunler[gi])];
+            /* SAAT TELAFİSİ — bu olmadan onarım ateşlenmiyordu: devirle
+               devralan ~24 saat kazanıp hedefini aşıyor, izinli kişi de
+               hedefin altına düşüyor; ceza haklı olarak reddediyordu
+               (ölçüldü: 10 günlük izinde tavan 1 iken 3 nöbet kalıyordu).
+               Devralanın mesai günleri izinli kişinin boş günlerine taşınır. */
+            for (var dt = 1; dt <= nDays; dt++) {
+              if (kisi.onlyNobet) break;
+              if (kisi.hours >= kisi.target || B.hours <= B.target) break;
+              if (!days[dt - 1].workday) continue;
+              if (B.assign[dt] !== 'M' || B.mustMesai.has(dt)) continue;
+              if (kisi.assign[dt] !== 'UCI' || kisi.lockedOff.has(dt) || kisi.offReq.has(dt) || kisi.mustMesai.has(dt)) continue;
+              (function (dm) {
+                B.assign[dm] = 'UCI'; B.hours -= P.mesaiHours;
+                kisi.assign[dm] = 'M'; kisi.hours += P.mesaiHours;
+                geriList.push(function () { B.assign[dm] = 'M'; B.hours += P.mesaiHours;
+                  kisi.assign[dm] = 'UCI'; kisi.hours -= P.mesaiHours; });
+              })(dt);
+            }
+            if (penalty() <= once) oldu = true;
+            else { for (var gu = geriList.length - 1; gu >= 0; gu--) geriList[gu](); }
+          }
+        }
+        if (!oldu) break;
+      }
+    }
+
     /* ---- ONARIM TURLARI: sırayla ve EN İYİYİ SAKLAYARAK ----
        Dört onarım fazı da kendi ölçüsünde haklı ama birbirinin işini
        bozabiliyor: gün-aşırı onarımı nöbet devrederek adaleti, adalet devri
@@ -1589,7 +1664,7 @@
     if (LS_ITER > 0) {
       var oBest = penalty(), oSnap = snapAl();
       for (var oTur = 0; oTur < 3; oTur++) {
-        repairGunAsiri(); adaletOnar(); haftaSonuOnar(); kumeKirHepsi();
+        repairGunAsiri(); izinTavanOnar(); adaletOnar(); haftaSonuOnar(); kumeKirHepsi();
         var oCur = penalty();
         if (oCur < oBest) { oBest = oCur; oSnap = snapAl(); }
         else break;                       // bu tur bir şey kazandırmadı -> dur
@@ -1675,7 +1750,7 @@
     });
 
     var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });
-    var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, preLeaveKisaldi: Pp.preLeaveKisaldi, noNobet: Pp.noNobet, dayOnly: Pp.dayOnly, onlyNobet: Pp.onlyNobet, senior: Pp.senior, onlyN16: Array.from(Pp.onlyN16), onlyN24: Array.from(Pp.onlyN24), onlyDay: Array.from(Pp.onlyDay), lockedOff: Array.from(Pp.lockedOff), offReq: Array.from(Pp.offReq) }; });
+    var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, preLeaveKisaldi: Pp.preLeaveKisaldi, izinIsGunu: Pp.izinIsGunu, noNobet: Pp.noNobet, dayOnly: Pp.dayOnly, onlyNobet: Pp.onlyNobet, senior: Pp.senior, onlyN16: Array.from(Pp.onlyN16), onlyN24: Array.from(Pp.onlyN24), onlyDay: Array.from(Pp.onlyDay), lockedOff: Array.from(Pp.lockedOff), offReq: Array.from(Pp.offReq) }; });
     var av = analyze(gridA, plist, days, nDays, P);
     /* Etiketleme ANALİZDEN SONRA yapılır: algoritma ve analiz bu günleri
        'YI' olarak görmeli (aynı kurallar geçerli), yalnız DIŞARI verilen
@@ -1706,6 +1781,7 @@
       else if (/hafta sonu\/tatil nöbeti \(en fazla/.test(w)) s += W.hsTavanKisi;
       else if (/gün üst üste çalışıyor/.test(w)) s += W.calismaKisi;
       else if (/nöbet arka arkaya/.test(w)) s += W.zincirKisi;
+      else if (/yıllık izinli ama .* nöbet yazıldı/.test(w)) s += W.izinNobetKisi;
       else if (/kişi \(en fazla \d+ olmalı\)/.test(w)) s += W.gunduzTavanGun;
       else if (/gündüzde \d+ kişi/.test(w)) s += W.gunduzGun;
       else s += W.digerUyari;
@@ -1885,7 +1961,7 @@
   }
   function recompute(result) {
     var P = clampProfile(result.profile);
-    var plist = (result.totals || []).map(function (t) { return { name: t.name, target: t.target, noNobet: t.noNobet, dayOnly: t.dayOnly, onlyNobet: t.onlyNobet, senior: t.senior, onlyN16: t.onlyN16 || [], onlyN24: t.onlyN24 || [], onlyDay: t.onlyDay || [], lockedOff: t.lockedOff || [], offReq: t.offReq || [], preLeaveKisaldi: t.preLeaveKisaldi }; });
+    var plist = (result.totals || []).map(function (t) { return { name: t.name, target: t.target, noNobet: t.noNobet, dayOnly: t.dayOnly, onlyNobet: t.onlyNobet, senior: t.senior, onlyN16: t.onlyN16 || [], onlyN24: t.onlyN24 || [], onlyDay: t.onlyDay || [], lockedOff: t.lockedOff || [], offReq: t.offReq || [], preLeaveKisaldi: t.preLeaveKisaldi, izinIsGunu: t.izinIsGunu }; });
     return analyze(result.grid, plist, result.days, result.nDays, P);
   }
 
