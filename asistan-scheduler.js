@@ -87,6 +87,15 @@
          doldurur; ölçüldü — aynı ayda kimi 13 gün, kimi 10 gün geliyor ve
          az gelenin uzun boşluk yükü iki katına çıkıyordu (18'e karşı 43). */
       weightRhythm: 1,
+      /* KENDİ KENDİNİ DENGELEME. Kullanıcı geri bildirimi: "bazı kişilere çok
+         fazla mesai veriyor, dengesizlik var; bunları manuel ayarlamak zor,
+         kurallara eklemek kafa karıştırıyor."
+         Doğru cevap yeni bir ayar EKLEMEK değil — ayar sayısını artırmak
+         sorunun kendisiydi. Açıkken motor listeyi üretir, kişiler arası en
+         büyük haksızlığı ÖLÇER, hangi dengenin en kötü olduğunu bulur, o
+         dengenin ağırlığını kendi yükseltip yeniden dener ve en iyi sonucu
+         saklar. Kullanıcı hiçbir kaydırıcıya dokunmaz. */
+      autoBalance: true,
       /* BOŞ GÜN DÜZENİ — çalışanın gerçekten dinlenmesiyle ilgili tercih:
            'dagitik' : boş günler aya tek tek serpilir (eski davranış;
                        ölçüldü — boşlukların %70'i tek günlüktü)
@@ -170,6 +179,7 @@
     r.weightSpread = agK(r.weightSpread); r.weightIdle = agK(r.weightIdle);
     r.weightRhythm = agK(r.weightRhythm);
     r.idleStyle = (r.idleStyle === 'toplu') ? 'toplu' : 'dagitik';
+    r.autoBalance = (r.autoBalance !== false);
     var ma = parseInt(r.maxAbsentDays, 10); r.maxAbsentDays = (ma >= 0 && ma <= 31) ? ma : 5;
     var mw = parseInt(r.maxWeekendDuties, 10); r.maxWeekendDuties = (mw >= 0 && mw <= 31) ? mw : 0;
     var mcw = parseInt(r.maxConsecutiveWork, 10); r.maxConsecutiveWork = (mcw >= 0 && mcw <= 31) ? mcw : 6;
@@ -240,6 +250,8 @@
     sekilSapma:        400,                      // ayarlanan nöbet şeklinden sapan her nöbet ('zorunlu' modda)
     adaletNobet:        16, adaletHaftaSonu: 14,
     adaletGun:          12,                      // çalışılan GÜN sayısı adaleti
+    adaletMesai:        14,                      // MESAİ günü adaleti (tabloda en çok görülen sütun)
+    enKotuKat:           3,                      // "en kötü durumdaki kişi" ek çarpanı (minimax)
     gunduzDenge:         4, ekstraGun:     35,   // "bu günlerde daha fazla kişi olsun" tercihi
   };
 
@@ -983,6 +995,12 @@
         var gnArr = [], gwArr = [], totGun = 0, sumGw = 0;
         // UZUN ÇALIŞMA SERİSİ YÜKÜ (kişi başına) — dengesi aşağıda cezalanır
         var seriArr = [], seriW = [], totSeri = 0, sumSw = 0;
+        /* MESAİ ADALETİ: motor saati ve nöbeti dengeliyordu ama mesaiyi HİÇ
+           dengelemiyordu. Mesai nöbetten ARTAN şeydir: 1 nöbetlik fark 3 gün
+           mesai farkına dönüşür ve tabloda görülen sütun budur. Ölçüldü:
+           kişiler arası mesai farkı ortalama 5.10 gün, en kötü ayda 1'e karşı
+           13. Saatler eşit olsa bile yaşanan iş tamamen farklı. */
+        var msArr = [], msW = [], totMs = 0, sumMw = 0;
         for (var i = 0; i < people.length; i++) {
           var Pp = people[i], h = Pp.hours;
           /* KİŞİ BAŞINA SABİT + saat başına eğim. Sabit olmadan arama, bir
@@ -1046,6 +1064,8 @@
           if (!Pp.noNobet && !Pp.dayOnly && !Pp.onlyNobet) {
             var gun = 0; for (var gd = 1; gd <= nDays; gd++) { var gc = Pp.assign[gd]; if (gc === 'M' || isOncall(gc)) gun++; }
             var gw = Pp.target || 1; gnArr.push(gun); gwArr.push(gw); totGun += gun; sumGw += gw;
+            var ms = 0; for (var md = 1; md <= nDays; md++) if (Pp.assign[md] === 'M') ms++;
+            msArr.push(ms); msW.push(gw); totMs += ms; sumMw += gw;
             /* ARDA ARDA ÇALIŞMA: tavan aşımı SERT; ayrıca 4. günden itibaren
                biriken "yorgunluk yükü" hesaplanır. Yükün TOPLAMINI azaltmak
                yetmez — kimde biriktiği de önemli; denge aşağıda kurulur.
@@ -1112,17 +1132,37 @@
         // ADALET cezaları: KÜMÜLATİF (önceki aylar + bu ay), hedef-oranlı ADİL paydan sapma.
         // Önceki aylarda çok nöbet/hafta sonu tutan bu ay daha az alsın (rotasyon hafızası).
         var cumTotNc = totNc + totCrNc, cumTotWk = totWk + totCrWk;
+        var enNc = 0, enWk = 0;
         for (var f = 0; f < ncArr.length; f++) {
           var fairNc = cumTotNc * wArr[f] / sumW, fairWk = cumTotWk * wArr[f] / sumW;
-          s += Math.abs((ncArr[f] + crNc[f]) - fairNc) * W.adaletNobet * AG.nb;   // nöbet sayısı adaleti (kümülatif) — gün-aşırı yayılımı dengeyi EZEMEZ
-          s += Math.abs((wkArr[f] + crWk[f]) - fairWk) * W.adaletHaftaSonu * AG.hs;   // hafta sonu/tatil nöbeti adaleti (kümülatif, daha değerli)
+          var sNc = Math.abs((ncArr[f] + crNc[f]) - fairNc), sWk = Math.abs((wkArr[f] + crWk[f]) - fairWk);
+          s += sNc * W.adaletNobet * AG.nb;   // nöbet sayısı adaleti (kümülatif)
+          s += sWk * W.adaletHaftaSonu * AG.hs;   // hafta sonu/tatil nöbeti adaleti (kümülatif)
+          if (sNc > enNc) enNc = sNc; if (sWk > enWk) enWk = sWk;
         }
+        // EN KÖTÜ KİŞİ ayrıca cezalı: toplamı düşürmek yetmez, kimse çok sapmasın
+        s += enNc * W.adaletNobet * W.enKotuKat * AG.nb;
+        s += enWk * W.adaletHaftaSonu * W.enKotuKat * AG.hs;
         /* ÇALIŞMA SIKLIĞI ADALETİ: herkes hedefiyle orantılı sayıda GÜN işe
            gelsin. Uzun boşluk cezası (yukarıda) yalnız boşluğun UZUNLUĞUNU
            kısıtlıyor, KİMDE biriktiğini değil; az gün gelen kişinin boş günü
            de çok olduğu için uzun boşluk hep aynı kişilere düşüyordu. */
         if (sumGw > 0) for (var gi2 = 0; gi2 < gnArr.length; gi2++) {
           s += Math.abs(gnArr[gi2] - totGun * gwArr[gi2] / sumGw) * W.adaletGun * AG.ri;
+        }
+        /* MESAİ ADALETİ + EN KÖTÜ KİŞİ (minimax).
+           Sapmaların TOPLAMINI azaltmak yetmiyor: on kişi kusursuzken bir
+           kişinin çok sapması toplamda ucuz kalıyor, ama şikâyet eden hep o
+           kişi oluyor. Bu yüzden en büyük sapma AYRICA cezalandırılır —
+           optimizasyon "kimse çok mağdur olmasın"a yönelir. */
+        if (sumMw > 0) {
+          var enMs = 0;
+          for (var mi = 0; mi < msArr.length; mi++) {
+            var sapMs = Math.abs(msArr[mi] - totMs * msW[mi] / sumMw);
+            s += sapMs * W.adaletMesai * AG.ri;
+            if (sapMs > enMs) enMs = sapMs;
+          }
+          s += enMs * W.adaletMesai * W.enKotuKat * AG.ri;
         }
         /* UZUN SERİ YÜKÜ ADALETİ: "biri hep 5-6 gün üst üste, öteki hiç 3'ü
            geçmiyor" durumunu kırar (ölçüldü: kişiler arası fark ort. 2.8 gün). */
@@ -1755,13 +1795,102 @@
     var best = fin[0]; best.alternatives = fin; best.meta = best.meta || {}; best.meta.tried = attempts; best.meta.distinct = fin.length;
     return best;
   }
+
+  /* ---- HAKSIZLIK ÖLÇÜMÜ ----
+     Her boyutta "adil paydan EN ÇOK sapan kişi" kaç birim sapmış? Toplam
+     değil en kötüsü bakılır: on kişi kusursuzken bir kişinin çok sapması
+     toplamda ucuz görünür ama şikâyet eden hep o kişidir. */
+  function haksizlikOlc(r) {
+    var t = (r.totals || []).filter(function (x) { return !x.noNobet && !x.dayOnly && !x.onlyNobet; });
+    if (t.length < 2) return null;
+    var sw = 0; t.forEach(function (x) { sw += (x.target || 1); }); if (!sw) return null;
+    var tNc = 0, tWk = 0, tMs = 0, tGun = 0;
+    t.forEach(function (x) { tNc += (x.duty != null ? x.duty : (x.nl || 0) + (x.ns || 0));
+      tWk += x.weekendNobet || 0; tMs += x.mesai || 0; tGun += (x.mesai || 0) + (x.nl || 0) + (x.ns || 0); });
+    var o = { nobet: 0, haftaSonu: 0, mesai: 0, gun: 0 };
+    t.forEach(function (x) {
+      var pay = (x.target || 1) / sw;
+      var nc = (x.duty != null ? x.duty : (x.nl || 0) + (x.ns || 0));
+      o.nobet = Math.max(o.nobet, Math.abs(nc - tNc * pay));
+      o.haftaSonu = Math.max(o.haftaSonu, Math.abs((x.weekendNobet || 0) - tWk * pay));
+      o.mesai = Math.max(o.mesai, Math.abs((x.mesai || 0) - tMs * pay));
+      o.gun = Math.max(o.gun, Math.abs(((x.mesai || 0) + (x.nl || 0) + (x.ns || 0)) - tGun * pay));
+    });
+    /* Boyutlar farklı birimlerde: 1 nöbetlik haksızlık, 1 günlük mesai
+       haksızlığından ağır hissedilir. Kabul edilebilir eşiğe bölerek
+       karşılaştırılabilir hale getirilir (1.0 = eşikte). */
+    var esik = { nobet: 1.0, haftaSonu: 1.0, mesai: 2.0, gun: 1.5 };
+    var enKotu = 0, boyut = null;
+    for (var k in o) { var v = o[k] / esik[k]; if (v > enKotu) { enKotu = v; boyut = k; } }
+    return { ham: o, enKotu: enKotu, boyut: boyut };
+  }
+
+  /* ---- KENDİ KENDİNİ DENGELEME ----
+     Kullanıcı kaydırıcı çevirmesin diye motor kendi çeviriyor: en kötü
+     boyutun ağırlığını yükseltip yeniden üretir, sonuçlardan EN KÖTÜ
+     HAKSIZLIĞI en küçük olanı seçer (minimax). Kolay aylarda ilk ölçüm
+     eşiğin altında kalır ve hiç ek tur çalışmaz — süre değişmez. */
+  var BOYUT_AGIRLIK = { nobet: 'weightDuty', haftaSonu: 'weightWeekend', mesai: 'weightRhythm', gun: 'weightRhythm' };
+  function buildScheduleAuto(config) {
+    var ilk = buildSchedule(config);
+    var P0 = clampProfile(config && config.profile);
+    if (!P0.autoBalance || (config && config.__variant !== undefined) || (config && config.__attempts <= 1)) return ilk;
+    /* KURAL İHLALİ SAYISI ARTAMAZ. Otomatik denge adaleti kovalarken bir
+       uyarıyı kabul edebiliyordu (ölçüldü: temiz ay 93'ten 91'e düşmüştü).
+       Kural ihlali her zaman adaletten önce gelir; ek turlar yalnız uyarı
+       sayısı AYNI ya da DAHA AZ olduğunda kabul edilir. */
+    var sertSay = function (r) { return (r.warnings || []).filter(function (w) { return w.indexOf('💡') !== 0; }).length; };
+    var ilkUyari = sertSay(ilk);
+    var enIyi = ilk, olc = haksizlikOlc(ilk);
+    if (!olc) return ilk;
+    var enIyiSkor = olc.enKotu;
+    var carpan = {}, denenen = [];
+    /* Ek turlar UCUZ olmalı: ilk tur zaten iyi bir çözüm buldu; burada
+       aranan sadece "ağırlığı değiştirince daha adil olur mu?". Tam bütçeyle
+       (80 aday) çalıştırmak süreyi 1.3sn'den 5.3sn'ye çıkarıyordu — 30 aday
+       kazancın neredeyse tamamını çok daha ucuza veriyor.
+       Eşik 1.2: sınıra çok yakın durumlar için üç tur daha çalıştırmak,
+       kazandırdığından pahalı. */
+    var attemptsOto = 30;
+    for (var tur = 0; tur < 3 && enIyiSkor > 1.2; tur++) {
+      var hedef = BOYUT_AGIRLIK[olc.boyut]; if (!hedef) break;
+      carpan[hedef] = (carpan[hedef] || 1) * 2.5;
+      var prof = {}; for (var k2 in (config.profile || {})) prof[k2] = config.profile[k2];
+      for (var w in carpan) prof[w] = Math.min(10, (parseFloat(config.profile && config.profile[w]) || 1) * carpan[w]);
+      var c2 = {}; for (var k3 in config) c2[k3] = config[k3];
+      c2.profile = prof; c2.__attempts = Math.min(attemptsOto, config.__attempts || 80);
+      var r2 = buildSchedule(c2);
+      var o2 = haksizlikOlc(r2);
+      denenen.push(olc.boyut);
+      if (o2 && o2.enKotu < enIyiSkor && sertSay(r2) <= ilkUyari) { enIyi = r2; enIyiSkor = o2.enKotu; olc = o2; }
+      else if (o2) { olc = o2; }
+      else break;
+    }
+    enIyi.meta = enIyi.meta || {};
+    enIyi.meta.otoDenge = denenen.length ? denenen : null;
+    enIyi.meta.haksizlik = enIyiSkor;
+    /* DENGE ÖZETİ: kullanıcı "dengesizlik var" diyor ama listede bunu
+       görecek bir yer yoktu — her sütunu tek tek saymak gerekiyordu.
+       Artık en çok sapan kişinin kaç birim saptığı doğrudan yazılıyor. */
+    var son = haksizlikOlc(enIyi);
+    if (son) {
+      var ad = { nobet: 'nöbet', haftaSonu: 'hafta sonu', mesai: 'mesai günü', gun: 'çalışma günü' };
+      var par = [];
+      for (var kk in son.ham) par.push(ad[kk] + ' ' + son.ham[kk].toFixed(1));
+      enIyi.warnings = (enIyi.warnings || []).concat(['💡 DENGE ÖZETİ — adil paydan en çok sapan kişi: ' + par.join(' · ') +
+        '. (Birim = nöbet/gün sayısı; 1’in altı iyi sayılır.)' +
+        (denenen.length ? ' Motor dengeyi kendi ayarladı: ' + denenen.map(function (b) { return ad[b] || b; }).join(', ') + '.' : '')]);
+    }
+    return enIyi;
+  }
   function recompute(result) {
     var P = clampProfile(result.profile);
     var plist = (result.totals || []).map(function (t) { return { name: t.name, target: t.target, noNobet: t.noNobet, dayOnly: t.dayOnly, onlyNobet: t.onlyNobet, senior: t.senior, onlyN16: t.onlyN16 || [], onlyN24: t.onlyN24 || [], onlyDay: t.onlyDay || [], lockedOff: t.lockedOff || [], offReq: t.offReq || [], preLeaveKisaldi: t.preLeaveKisaldi }; });
     return analyze(result.grid, plist, result.days, result.nDays, P);
   }
 
-  var API = { buildSchedule: buildSchedule, recompute: recompute, defaultProfile: defaultProfile,
+  var API = { buildSchedule: buildScheduleAuto, buildScheduleTek: buildSchedule, recompute: recompute, defaultProfile: defaultProfile,
+    haksizlikOlc: haksizlikOlc,
     daysInMonth: daysInMonth, DOW_TR: DOW_TR, hoursMap: hoursMap };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else root.AsistanScheduler = API;

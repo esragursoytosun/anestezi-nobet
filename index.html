@@ -542,6 +542,7 @@
         </div>
         <div class="advgrp">
           <h4>6 · Adalet</h4>
+          <p class="help"><b>Dengeyi motor kendi ayarlasın</b> açıkken aşağıdaki kaydırıcılara elle dokunmanıza gerek yoktur — motor en büyük haksızlığı bulup o dengeyi kendisi güçlendirir. Aşağısı yalnız özel bir tercihiniz varsa gerekir.</p>
           <p class="help">Kural ihlalleri (yeterli nöbetçi, fazla mesai olmaması, gündüz sayısı) <b>her zaman önce gelir</b>. Aşağıdakiler yalnız bunlar sağlandıktan sonra hangi dengenin öne çıkacağını belirler — birbiriyle yarışırlar, birini yükseltmek diğerinden biraz ödün verdirir.</p>
           <div class="row">
             <div class="fld"><label>Hafta sonu / tatil nöbeti dengesi</label>
@@ -561,6 +562,7 @@
               <span class="hint">Herkes yaklaşık aynı sayıda <b>gün</b> gelsin ve uzun üst üste çalışma serileri hep aynı kişilere düşmesin.</span></div>
           </div>
           <div class="row" style="margin-top:10px">
+            <label class="chk" title="Açıkken motor listeyi üretir, kişiler arası en büyük haksızlığı ölçer, hangi dengenin en kötü olduğunu bulur ve o dengenin ağırlığını KENDİ yükseltip yeniden dener. Aşağıdaki kaydırıcılara elle dokunmanıza gerek kalmaz. Kural ihlali sayısı asla artmaz. Üretim birkaç saniye uzar."><input type="checkbox" id="autoBalance"> <b>Dengeyi motor kendi ayarlasın</b> (önerilen)</label>
             <label class="chk" title="Açıkken: geçen aylarda çok nöbet/hafta sonu tutan bu ay daha az tutar. Kapalıyken her ay yalnız kendi içinde dengelenir."><input type="checkbox" id="carryFairness"> Aylar arası adalet (önceki ayların birikimi dengeye katılsın)</label>
           </div>
           <span class="hint">Birikim tablosunu görmek için üst çubuktan <b>Adalet Panosu</b>'nu açın. Tek ay içindeki denge bu ayardan bağımsız her zaman korunur.</span>
@@ -680,7 +682,7 @@
 </div>
 <div class="foot">Nöbet Planlama Asistanı · <b>v44</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=46"></script>
+<script src="asistan-scheduler.js?v=47"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -735,6 +737,7 @@ function fillRuleForm(){ const p=curProfile();
   document.getElementById('carryFairness').checked=(p.carryFairness!==false);
   // varsayılanı AÇIK: eski profillerde alan yok, !!p[f] onları yanlışlıkla kapatırdı
   document.getElementById('hoursBeforePreLeaveGap').checked=(p.hoursBeforePreLeaveGap!==false);
+  document.getElementById('autoBalance').checked=(p.autoBalance!==false);   // varsayılan AÇIK
   agirlikSecenekleriDoldur();
   AGIRLIK_ALANLARI.forEach(f=>{ const el=document.getElementById(f); if(el)el.value=agirlikDegeri(p[f]); });
   exWrap.querySelectorAll('input[data-dow]').forEach(cb=>{cb.checked=(p.daytimeExtraDays||[]).indexOf(parseInt(cb.dataset.dow,10))>=0;});
@@ -749,6 +752,7 @@ function readRuleForm(){ const p=curProfile();
   const r2=parseRange(document.getElementById('weekendOncallPerDay').value); p.weekendOncallPerDay=r2[0]; p.weekendOncallMax=r2[1];
   p.carryFairness=document.getElementById('carryFairness').checked;
   p.hoursBeforePreLeaveGap=document.getElementById('hoursBeforePreLeaveGap').checked;
+  p.autoBalance=document.getElementById('autoBalance').checked;
   AGIRLIK_ALANLARI.forEach(f=>{ const el=document.getElementById(f); if(el)p[f]=parseFloat(el.value)||1; });
   readCustomShifts(); saveProfiles(); renderRuleSummary(); }
 // ---- ÖZEL VARDİYALAR ----
