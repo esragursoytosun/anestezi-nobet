@@ -1776,6 +1776,67 @@
       repairGunAsiri();
     } else { repairGunAsiri(); }
 
+    /* ---- KAPSAMA SON ÇARE (değişmez kural) ----
+       "Her gün şu kadar nöbetçi" bu birimin bozulamaz iskeleti; buna
+       rağmen ceza puanıyla korunuyordu ve puan yarışını kaybedebiliyordu.
+       Stres testi (120 senaryo) 3 örnekte 5 gün açık buldu ve hiçbiri
+       YAPISAL değildi — her birinde o gün boşta duran uygun kişi vardı.
+       Sebep: kapsama garantisi "ertesi günü mesai olan" kişiyi eliyordu
+       (ör. 7 kişilik ayda 15. gün Pazar 0/2 iken dört kişi boştaydı).
+       Oysa ertesi günkü mesai dinlenmeye çevrilebilir — saat hedefinden
+       ya da konfordan vazgeçmek, kapsamayı açık bırakmaktan iyidir.
+       Burada kalan açıklar, YALNIZ yumuşak engelleri esneterek kapatılır;
+       izin, kişinin boş gün isteği, kilitli gün ve arka arkaya nöbet
+       yasağı burada da geçerlidir. Yapılan her esnetme listede not olarak
+       yazılır — sessizce kural bükülmez. */
+    var sonCareNot = [];
+    function kapsamaSonCare() {
+      days.forEach(function (dd) {
+        var d = dd.day, need = oncallNeed(dd);
+        for (var guard = 0; guard < need + 2 && oncallCount(d) < need; guard++) {
+          var kind = dayType(dd);
+          if (kind === 'NS' && !P.useShortOncall) kind = 'NL';
+          var pool = people.filter(function (Pp) {
+            if (Pp.noNobet || Pp.dayOnly) return false;
+            if (Pp.onlyDay.has(d)) return false;
+            if (Pp.onlyN16.has(d) && kind === 'NL') return false;
+            if (Pp.onlyN24.has(d) && kind === 'NS') return false;
+            if (Pp.offReq.has(d)) return false;                              // kişinin açık isteği: dokunulmaz
+            /* İZİN ÖNCESİ DİNLENME kilidi motorun kendi koyduğu bir KONFOR
+               kuralı, kişinin isteği değil. Ölçüldü: kapsama açığı kalan
+               günlerin çoğunda o gün boşta duran kişi vardı ve tek engel
+               buydu. Kapsama daha üstün: bu kilit son çarede esnetilir,
+               kişinin kendi boş gün isteği ise asla. */
+            if (Pp.lockedOff.has(d) && !Pp.preLeaveLock.has(d)) return false;
+            var cur = Pp.assign[d];
+            if (!(cur === '' || cur === 'HT' || cur === 'RT' || cur === 'UCI' || cur === 'M')) return false;
+            if (d > 1 && isOncall(Pp.assign[d - 1])) return false;           // arka arkaya nöbet: yasak
+            if (d < nDays) { var nx = Pp.assign[d + 1];
+              if (isOncall(nx) || nx === 'YI' || nx === 'OFF') return false; } // izin/ertesi gün nöbet: yasak
+            return true;
+          });
+          if (!pool.length) break;
+          pool.sort(function (x, y) {
+            var xn = x.nobetDays.length, yn = y.nobetDays.length; if (xn !== yn) return xn - yn;   // en az nöbet tutan
+            return (y.target - y.hours) - (x.target - x.hours);                                    // saati en boş olan
+          });
+          var A = pool[0], eski = A.assign[d];
+          A.hours += HOURS[kind] - (HOURS[eski] || 0);
+          A.assign[d] = kind; A.nobetDays.push(d); A.lastNobet = d;
+          if (dd.weekend || dd.holiday) A.weekendNobet++;
+          var esnetildi = (eski === 'M');
+          for (var r = 1; r <= P.postOncallRest && d + r <= nDays; r++) {
+            var nx2 = A.assign[d + r];
+            if (nx2 === '' || nx2 === 'HT' || nx2 === 'RT' || nx2 === 'UCI') { A.assign[d + r] = 'NI'; }
+            else if (nx2 === 'M') { A.hours -= P.mesaiHours; A.assign[d + r] = 'NI'; esnetildi = true; }
+            else break;
+          }
+          sonCareNot.push(d + '. gün ' + A.name + (esnetildi ? ' (mesaisi dinlenmeye çevrildi)' : ''));
+        }
+      });
+    }
+    kapsamaSonCare();
+
     // ---- 3.0) (opsiyonel) GEREKİRSE FAZLA MESAİ — LS'den SONRA, MİNİMUM ----
     // LS gündüz açıklarını saat-korumalı taşımalarla zaten en aza indirdi. Burada yalnız KALAN
     // (kaçınılmaz) açıklar için, o gün boşta (UCI) + EN AZ fazla mesaisi olan uygun kişiye sırayla
@@ -1881,6 +1942,10 @@
     var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });
     var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, preLeaveKisaldi: Pp.preLeaveKisaldi, izinIsGunu: Pp.izinIsGunu, noNobet: Pp.noNobet, dayOnly: Pp.dayOnly, onlyNobet: Pp.onlyNobet, senior: Pp.senior, onlyN16: Array.from(Pp.onlyN16), onlyN24: Array.from(Pp.onlyN24), onlyDay: Array.from(Pp.onlyDay), lockedOff: Array.from(Pp.lockedOff), offReq: Array.from(Pp.offReq) }; });
     var av = analyze(gridA, plist, days, nDays, P);
+    if (sonCareNot.length) av.warnings.push('💡 KAPSAMA KORUNDU: ' + sonCareNot.length +
+      ' gün için son çare atama yapıldı (' + sonCareNot.slice(0, 6).join(', ') +
+      (sonCareNot.length > 6 ? ' …' : '') + '). Nöbetçi sayısı bu birimin bozulamaz kuralı; ' +
+      'bunu tutturmak için saat hedefinden ya da mesaiden ödün verildi. İzinlere ve boş gün isteklerine dokunulmadı.');
     /* Etiketleme ANALİZDEN SONRA yapılır: algoritma ve analiz bu günleri
        'YI' olarak görmeli (aynı kurallar geçerli), yalnız DIŞARI verilen
        ızgarada 'GG' yazsın. Böylece hesaplar bozulmadan liste doğru okunur. */
@@ -1901,7 +1966,13 @@
     (r.warnings || []).forEach(function (w) {
       if (w.indexOf('💡') === 0) return;
       // Ağırlıklar W'den — cilanın içindeki penalty() ile AYNI ölçü (bkz. W tanımı)
-      if (/sadece \d+ nöbetçi/.test(w)) s += W.kapsama;
+      /* Açığın BÜYÜKLÜĞÜ de sayılır. Eskiden "2 gerekirken 1" ile
+         "2 gerekirken 0" aynı puanı alıyordu; sıralama ikisi arasında
+         kayıtsız kalıyor ve bazen daha kötü olanı seçiyordu (ölçüldü:
+         bir gün 1/2 iken seçilen adayda 0/2 oldu). */
+      var kg = w.match(/sadece (\d+) nöbetçi \((\d+) gerekli\)/);
+      if (kg) s += W.kapsama * Math.max(1, (+kg[2]) - (+kg[1]));
+      else if (/sadece \d+ nöbetçi/.test(w)) s += W.kapsama;
       else if (/FAZLA MESAİ/.test(w)) s += W.fazlaMesaiKisi;
       else if (/EKSİK/.test(w)) s += W.eksikKisi;
       else if (/kıdemli/.test(w)) s += W.kidemGun;

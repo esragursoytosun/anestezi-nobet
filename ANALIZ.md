@@ -226,6 +226,40 @@ toplamda yarışıyor. Sonuç: teoride kapsama hiç bozulmamalı, pratikte
 olmalı: kapsama, hiçbir hamlenin bozamayacağı bir değişmez (invariant)
 olarak kodlanmalı — ceza değil, kısıt.
 
+### UYGULANDI (2026-08-19)
+
+Önce **kapsama stres testi** yazıldı: 120 senaryo (6-16 kişi, 1-3
+nöbetçi, dört izin/istek yoğunluğu). Rutin takımda 0 çıkan ihlal burada
+çıktı — **3 örnekte 5 gün** ve hiçbiri yapısal değildi: her birinde o
+gün boşta duran uygun kişi vardı. Örneğin 7 kişilik bir ayda 15. gün
+Pazar **0/2** iken dört kişi boştaydı.
+
+İki sebep bulundu ve düzeltildi:
+
+1. **Kapsama garantisi "ertesi günü mesai olan" kişiyi eliyordu.** Oysa
+   o mesai dinlenmeye çevrilebilir. Eklenen **kapsama son çare** fazı,
+   kalan açıkları yalnız yumuşak engelleri esneterek kapatır; izin,
+   kişinin kendi boş gün isteği ve arka arkaya nöbet yasağı burada da
+   geçerlidir. Motorun kendi koyduğu *izin öncesi dinlenme* kilidi ise
+   esnetilebilir — o bir konfor kuralı, kişinin isteği değil. Yapılan
+   her esnetme listede not olarak yazılır, sessizce kural bükülmez.
+2. **Açığın büyüklüğü sayılmıyordu.** "2 gerekirken 1" ile "2 gerekirken
+   0" aynı puanı alıyordu; sıralama ikisi arasında kayıtsızdı ve bazen
+   daha kötü olanı seçiyordu (ölçüldü: bir gün 1/2 iken seçilen adayda
+   0/2 olmuştu). Artık ceza açık miktarıyla çarpılıyor.
+
+**Sonuç: 5 gün → 3 gün, ve artık hiçbir gün 0 nöbetçi değil.**
+
+Kalan 3 gün için tek tek bakıldı: her birinde engel **kullanıcının
+onayladığı bir kural** — kişinin kendi boş gün isteği, nöbet sonrası
+dinlenme, ya da "izin bitişi ile dönüş günü arasındaki hafta sonuna iş
+yazılmaz" kuralı. Bunları kapsama uğruna kırmak bilerek yapılmadı;
+uyarı olarak bildiriliyor ve kararı yönetici veriyor.
+
+Kalite değişmedi: 295/295 test, çok birimli takımda kapsama / nöbet
+şekli / eksik saat ihlali 0, ortalama uyarı 1.27, adalet 0.816 / 0.872.
+Kararlılık da bozulmadı (idempotent, %0.2-3.6).
+
 ---
 
 ## 6. Beşinci sorun: onarım fazları birbirini bozuyor
