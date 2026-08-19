@@ -107,6 +107,17 @@
          dengenin ağırlığını kendi yükseltip yeniden dener ve en iyi sonucu
          saklar. Kullanıcı hiçbir kaydırıcıya dokunmaz. */
       autoBalance: true,
+      /* ---- ÖNCEKİ LİSTEYE SADAKAT (sıcak başlangıç) ----
+         Ölçüldü: tek bir "boş gün isteği" eklenince listenin %57.7'si
+         yeniden yazılıyordu. Sebep mimari — motor her üretimde SIFIRDAN
+         başlıyor, 80 rastgele adaydan birini seçiyor; girdi bir tık
+         değişince farklı bir aday kazanıyor ve o aday tamamen başka bir
+         çözüm oluyor. Yönetici listeyi paylaştıktan sonra tek bir istek
+         girince herkesin günleri kayıyor, güven bitiyor.
+         Açıkken: önceki liste verilirse ondan sapan her hücre cezalanır.
+         Etkilenen günler değişir, gerisi yerinde kalır. Kural ihlali
+         cezaları bundan çok daha ağır — sadakat asla kuralı ezmez. */
+      keepPrevious: true,
       /* BOŞ GÜN DÜZENİ — çalışanın gerçekten dinlenmesiyle ilgili tercih:
            'dagitik' : boş günler aya tek tek serpilir (eski davranış;
                        ölçüldü — boşlukların %70'i tek günlüktü)
@@ -191,6 +202,7 @@
     r.weightRhythm = agK(r.weightRhythm);
     r.idleStyle = (r.idleStyle === 'toplu') ? 'toplu' : 'dagitik';
     r.autoBalance = (r.autoBalance !== false);
+    r.keepPrevious = (r.keepPrevious !== false);
     var ma = parseInt(r.maxAbsentDays, 10); r.maxAbsentDays = (ma >= 0 && ma <= 31) ? ma : 5;
     var mw = parseInt(r.maxWeekendDuties, 10); r.maxWeekendDuties = (mw >= 0 && mw <= 31) ? mw : 0;
     var mcw = parseInt(r.maxConsecutiveWork, 10); r.maxConsecutiveWork = (mcw >= 0 && mcw <= 31) ? mcw : 6;
@@ -265,6 +277,7 @@
     adaletGun:          12,                      // çalışılan GÜN sayısı adaleti
     adaletMesai:        14,                      // MESAİ günü adaleti (tabloda en çok görülen sütun)
     enKotuKat:           3,                      // "en kötü durumdaki kişi" ek çarpanı (minimax)
+    sadakat:            35,                      // önceki listeden sapan her hücre
     gunduzDenge:         4, ekstraGun:     35,   // "bu günlerde daha fazla kişi olsun" tercihi
   };
 
@@ -528,6 +541,9 @@
     var P = clampProfile(config.profile);
     var year = config.year, month = config.month, nDays = daysInMonth(year, month);
     var holidays = new Set(config.holidays || []);
+    /* ÖNCEKİ LİSTE: {ad: {gun: kod}}. Yalnız hâlâ kadroda olan kişiler ve
+       bu ayın günleri dikkate alınır. */
+    var ONCEKI = (P.keepPrevious !== false && config.previousGrid) ? config.previousGrid : null;
     var HOURS = hoursMap(P);
     var variant = config.__variant || 0;
     // {name:{nc,wk}} — önceki ayların kümülatif nöbet/hafta sonu (profil kapatmışsa yok sayılır)
@@ -753,6 +769,23 @@
       if ((kind === 'NL' && Pp.onlyN24.has(d)) || (kind === 'NS' && Pp.onlyN16.has(d))) return 0;
       return 2;   // NOT: "sadece nöbet" artık öne yığılmaz (gün aşırı yükü önlemek için) — adil paya bırakılır
     }
+    /* SICAK BAŞLANGIÇ: o gün o nöbeti ÖNCEKİ listede tutan kişi öne alınır.
+       Ölçüldü: tek bir "boş gün isteği" yüzünden listenin %57.9'u yeniden
+       yazılıyordu; yönetici her küçük düzeltmede bambaşka bir liste görüyordu.
+       Uygunluk denetimleri (eligible) aynen çalışır — sadakat hiçbir kuralı
+       esnetmez, yalnız EŞİT DERECEDE geçerli seçenekler arasında eskisini
+       tercih eder. */
+    function eskiRank(Pp, d, kind) {
+      if (!ONCEKI) return 1;
+      var e = ONCEKI[Pp.name];
+      return (e && e[d] === kind) ? 0 : 1;
+    }
+    function eskiCalisti(Pp, d) {
+      if (!ONCEKI) return false;
+      var e = ONCEKI[Pp.name]; if (!e) return false;
+      var c = e[d];
+      return c === 'M' || c === 'NL' || c === 'NS';
+    }
     // ---- 1) NÖBET KAPSAMA (greedy) ----
     function pickCandidate(dd, kind, strict) {
       var pool = people.filter(function (Pp) { return eligible(Pp, dd, kind, strict); });
@@ -762,6 +795,7 @@
       pool.sort(function (a, b) {
         if (needSr && a.senior !== b.senior) return a.senior ? -1 : 1;
         var pra = prefRank(a, dd.day, kind), prb = prefRank(b, dd.day, kind); if (pra !== prb) return pra - prb;   // çalışma tercihi önceliği
+        if (ONCEKI) { var era = eskiRank(a, dd.day, kind), erb = eskiRank(b, dd.day, kind); if (era !== erb) return era - erb; }   // önceki listeye sadakat
         if (dd.weekend || dd.holiday) { var aw = a.weekendNobet + (a.carryWk || 0), bw = b.weekendNobet + (b.carryWk || 0); if (aw !== bw) return aw - bw; }
         var pa = a.hours / (a.target || 1), pb = b.hours / (b.target || 1);
         var band = variant ? 0.10 : 0.0001;
@@ -771,6 +805,26 @@
         return a.idx - b.idx;
       });
       return pool[0];
+    }
+    /* ---- 1.0) SICAK BAŞLANGIÇ TOHUMU ----
+       Önceki listedeki nöbetler, HÂLÂ GEÇERLİ oldukları sürece doğrudan
+       yerine konur; greedy yalnız kalan boşlukları doldurur. Sadakat cezasını
+       yükseltmek tek başına yetmiyordu (35 -> 1500 denendi, değişim %19'da
+       sabit kaldı): arama eski listeye ULAŞAMIYORDU, çünkü onu hiç üretmiyordu.
+       Çeşitlilik korunsun diye adayların yarısı (tek variantlar) tohumsuz
+       kurulur; hangisinin daha iyi olduğuna sıralama karar verir. */
+    if (ONCEKI && variant % 2 === 0) {
+      days.forEach(function (dd) {
+        var need = oncallNeed(dd);
+        for (var pi = 0; pi < people.length && oncallCount(dd.day) < need; pi++) {
+          var Sp = people[pi], se = ONCEKI[Sp.name]; if (!se) continue;
+          var sk = se[dd.day];
+          if (sk !== 'NL' && sk !== 'NS') continue;
+          if (sk === 'NS' && !P.useShortOncall) continue;
+          if (!eligible(Sp, dd, sk, true)) continue;
+          placeOncall(Sp, dd, sk);
+        }
+      });
     }
     days.forEach(function (dd) {
       var need = oncallNeed(dd);
@@ -864,7 +918,11 @@
       var yazilabilir = function (d) { return !(P.daytimeMax > 0 && daytimeCount(d) >= P.daytimeMax); };
       if (budget >= free.length) { free.forEach(function (d) { if (yazilabilir(d)) addMesai(Pp, d); }); return; }
       var picked = {}, cnt = 0;
-      for (var k = 0; k < budget; k++) { var ix = Math.min(free.length - 1, Math.floor((k + 0.5) * free.length / budget)); if (!picked[free[ix]]) { picked[free[ix]] = 1; cnt++; } }
+      /* Önce ÖNCEKİ listede zaten çalışılan günler seçilir; kalan bütçe eşit
+         aralıklı dağıtımla tamamlanır. Böylece küçük bir istek değişikliği
+         kişinin bütün mesai düzenini kaydırmaz. */
+      if (ONCEKI) for (var ke = 0; ke < free.length && cnt < budget; ke++) if (eskiCalisti(Pp, free[ke])) { picked[free[ke]] = 1; cnt++; }
+      for (var k = cnt; k < budget; k++) { var ix = Math.min(free.length - 1, Math.floor((k + 0.5) * free.length / budget)); if (!picked[free[ix]]) { picked[free[ix]] = 1; cnt++; } }
       for (var i2 = 0; i2 < free.length && cnt < budget; i2++) if (!picked[free[i2]]) { picked[free[i2]] = 1; cnt++; }   // yuvarlama çakışması tamamla
       free.forEach(function (d) { if (picked[d] && yazilabilir(d)) addMesai(Pp, d); });
     });
@@ -1172,6 +1230,21 @@
            de çok olduğu için uzun boşluk hep aynı kişilere düşüyordu. */
         if (sumGw > 0) for (var gi2 = 0; gi2 < gnArr.length; gi2++) {
           s += Math.abs(gnArr[gi2] - totGun * gwArr[gi2] / sumGw) * W.adaletGun * AG.ri;
+        }
+        /* ÖNCEKİ LİSTEYE SADAKAT: değişen her hücre küçük bir bedel öder.
+           Bedel bilinçli olarak KÜÇÜK (35): kural ihlali binlerle ölçülüyor,
+           yani sadakat hiçbir zaman bir kuralı ezemez — sadece "eşit derecede
+           iyi iki çözümden ESKİYE BENZEYENİ seç" der. */
+        if (ONCEKI) {
+          for (var oi = 0; oi < people.length; oi++) {
+            var Op = people[oi], eski = ONCEKI[Op.name];
+            if (!eski) continue;                       // yeni kişi: sadakat aranmaz
+            for (var od = 1; od <= nDays; od++) {
+              var ek = eski[od];
+              if (ek === undefined || ek === null || ek === '') continue;
+              if (Op.assign[od] !== ek) s += W.sadakat;
+            }
+          }
         }
         /* MESAİ ADALETİ + EN KÖTÜ KİŞİ (minimax).
            Sapmaların TOPLAMINI azaltmak yetmiyor: on kişi kusursuzken bir
@@ -1749,6 +1822,38 @@
       doldur(kilitli, false, true);
     });
 
+    /* ---- ÖNCEKİ LİSTEYE GERİ YASLANMA ----
+       Ölçüldü: sıcak başlangıçtan sonra kalan değişimin yarısı (34/66 hücre)
+       saf bir MESAİ GÜNÜ KAYMASI idi — kişinin saati, nöbeti, izni aynı,
+       sadece mesai günü bir başka güne taşınmıştı. Yönetici açısından bu
+       "liste yine değişti" demek. Burada, HİÇBİR ÖLÇÜT BOZULMADAN geri
+       alınabilen mesai kaymaları eski gününe döndürülür: saat sabit (8=8),
+       gündüz sayıları korunur, üst üste çalışma/gelmeme tavanları denetlenir.
+       Geri alınamayan kaymalar olduğu gibi bırakılır. */
+    if (ONCEKI) people.forEach(function (Pp) {
+      var eski = ONCEKI[Pp.name]; if (!eski) return;
+      var kayip = [], fazla = [];
+      for (var d = 1; d <= nDays; d++) {
+        if (!days[d - 1].workday) continue;
+        var yeni = Pp.assign[d], e = eski[d];
+        if (e === 'M' && yeni === 'UCI' && !Pp.offReq.has(d) && !Pp.lockedOff.has(d)) kayip.push(d);
+        else if (yeni === 'M' && e !== 'M' && !Pp.mustMesai.has(d)) fazla.push(d);
+      }
+      for (var i = 0; i < kayip.length && fazla.length; i++) {
+        var hedef = kayip[i];
+        if (P.daytimeMax > 0 && daytimeCount(hedef) >= P.daytimeMax) continue;
+        for (var j = 0; j < fazla.length; j++) {
+          var kaynak = fazla[j];
+          if (daytimeCount(kaynak) - 1 < dayNeed(days[kaynak - 1])) continue;
+          Pp.assign[kaynak] = 'UCI'; Pp.assign[hedef] = 'M';
+          var seriTamam = !(P.maxConsecutiveWork > 0 && seriOlurdu(Pp, hedef) > P.maxConsecutiveWork);
+          var bosTamam = !(P.maxConsecutiveOff > 0 && longestAbsentRun(Pp) > P.maxConsecutiveOff);
+          if (seriTamam && bosTamam) { fazla.splice(j, 1); break; }
+          Pp.assign[kaynak] = 'M'; Pp.assign[hedef] = 'UCI';       // olmadı, geri al
+        }
+      }
+    });
+
     var gridA = {}; people.forEach(function (Pp) { gridA[Pp.name] = Pp.assign; });
     var plist = people.map(function (Pp) { return { name: Pp.name, target: Pp.target, preLeaveKisaldi: Pp.preLeaveKisaldi, izinIsGunu: Pp.izinIsGunu, noNobet: Pp.noNobet, dayOnly: Pp.dayOnly, onlyNobet: Pp.onlyNobet, senior: Pp.senior, onlyN16: Array.from(Pp.onlyN16), onlyN24: Array.from(Pp.onlyN24), onlyDay: Array.from(Pp.onlyDay), lockedOff: Array.from(Pp.lockedOff), offReq: Array.from(Pp.offReq) }; });
     var av = analyze(gridA, plist, days, nDays, P);
@@ -1835,18 +1940,32 @@
     var maxAlts = (config && config.__maxAlts) || 12;
     var lsIter = (config && config.__lsIter != null) ? config.__lsIter : 4000;  // Faz 2 yerel arama bütçesi
     function mk(v, ls) { var c = {}; for (var k in config) c[k] = config[k]; c.__variant = v; c.__lsIter = ls; return c; }
+    /* Aday SIRALAMASI ile cila aynı ölçüyü kullanmak zorunda: penalty()
+       sadakati sayarken scoreResult() saymazsa, cila yaklaştırdığı adayı
+       sıralama geri eliyordu (ölçüldü: sadakat cezası tek başına %0 etki). */
+    var ONC = (clampProfile(config.profile).keepPrevious !== false && config.previousGrid) ? config.previousGrid : null;
+    function sadakatCezasi(r) {
+      if (!ONC) return 0;
+      var t = 0;
+      (r.totals || []).forEach(function (x) {
+        var e = ONC[x.name]; if (!e) return;
+        var g = r.grid[x.name] || {};
+        for (var d = 1; d <= r.nDays; d++) { var ek = e[d]; if (ek === undefined || ek === null || ek === '') continue; if (g[d] !== ek) t++; }
+      });
+      return t * W.sadakat;
+    }
     if (attempts <= 1) return buildOne(mk(0, 0));                  // senkron yolları: hızlı, LS yok
     var P = clampProfile(config.profile);
     // aylar arası adalet (rotasyon hafızası) — profil kapatmışsa aday sıralaması da kullanmaz
     var carryMap = (P.carryFairness !== false && config.carry && config.carry.byName) || null;
     // FAZ 1 — ÇEŞİTLİLİK: LS kapalı (hızlı), farklı rastgele tie-break'lerle aday üret.
     var cands = [];
-    for (var v = 0; v < attempts; v++) { var r = buildOne(mk(v, 0)); r.__variant = v; r.__score = scoreResult(r, P, carryMap); r.__sig = sigOf(r); cands.push(r); }
+    for (var v = 0; v < attempts; v++) { var r = buildOne(mk(v, 0)); r.__variant = v; r.__score = scoreResult(r, P, carryMap) + sadakatCezasi(r); r.__sig = sigOf(r); cands.push(r); }
     cands.sort(function (a, b) { return a.__score - b.__score; });
     var seen = {}, picks = [];
     for (var i = 0; i < cands.length && picks.length < maxAlts; i++) if (!seen[cands[i].__sig]) { seen[cands[i].__sig] = 1; picks.push(cands[i]); }
     // FAZ 2 — CİLA: seçilen adayları YEREL ARAMA/TAVLAMA ile iyileştir (aynı variant -> aynı başlangıç + LS).
-    var alts = picks.map(function (pk) { var r = buildOne(mk(pk.__variant, lsIter)); r.__variant = pk.__variant; r.__score = scoreResult(r, P, carryMap); r.__sig = sigOf(r); return r; });
+    var alts = picks.map(function (pk) { var r = buildOne(mk(pk.__variant, lsIter)); r.__variant = pk.__variant; r.__score = scoreResult(r, P, carryMap) + sadakatCezasi(r); r.__sig = sigOf(r); return r; });
     alts.sort(function (a, b) { return a.__score - b.__score; });
     /* FAZ 2.5 — TIRMANDIRMA: en iyi aday hâlâ uyarı taşıyorsa bütçe BÜYÜTÜLÜR.
        Kolay aylar ilk turda çözülür ve buraya hiç girmez (süre değişmez);
@@ -1859,7 +1978,7 @@
       [4, 16].some(function (kat) {
         var yeni = alts.slice(0, 4).map(function (a) {
           var r = buildOne(mk(a.__variant, lsIter * kat));
-          r.__variant = a.__variant; r.__score = scoreResult(r, P, carryMap); r.__sig = sigOf(r); return r;
+          r.__variant = a.__variant; r.__score = scoreResult(r, P, carryMap) + sadakatCezasi(r); r.__sig = sigOf(r); return r;
         });
         alts = yeni.concat(alts);
         alts.sort(function (a, b) { return a.__score - b.__score; });
@@ -1948,6 +2067,26 @@
     /* DENGE ÖZETİ: kullanıcı "dengesizlik var" diyor ama listede bunu
        görecek bir yer yoktu — her sütunu tek tek saymak gerekiyordu.
        Artık en çok sapan kişinin kaç birim saptığı doğrudan yazılıyor. */
+    /* DEĞİŞİM ÖLÇÜSÜ: yöneticiye "önceki listenin ne kadarı değişti"
+       bilgisini vermek, sıcak başlangıcın işe yarayıp yaramadığını
+       görünür kılar. */
+    if (config.previousGrid) {
+      var toplamH = 0, degisen = 0;
+      (enIyi.totals || []).forEach(function (x) {
+        var eski = config.previousGrid[x.name]; if (!eski) return;
+        for (var d = 1; d <= enIyi.nDays; d++) {
+          var e = eski[d]; if (e === undefined || e === null || e === '') continue;
+          toplamH++; if ((enIyi.grid[x.name] || {})[d] !== e) degisen++;
+        }
+      });
+      if (toplamH) {
+        enIyi.meta = enIyi.meta || {};
+        enIyi.meta.degisim = { toplam: toplamH, degisen: degisen, oran: degisen / toplamH };
+        enIyi.warnings = (enIyi.warnings || []).concat(['💡 ÖNCEKİ LİSTEYE GÖRE: ' + degisen + ' hücre değişti (%' +
+          (100 * degisen / toplamH).toFixed(1) + '). Motor önceki listeye sadık kalmaya çalışır; ' +
+          'yalnız yeni isteğin gerektirdiği yerler oynar.']);
+      }
+    }
     var son = haksizlikOlc(enIyi);
     if (son) {
       var ad = { nobet: 'nöbet', haftaSonu: 'hafta sonu', mesai: 'mesai günü', gun: 'çalışma günü' };
