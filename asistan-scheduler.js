@@ -813,6 +813,30 @@
        sabit kaldı): arama eski listeye ULAŞAMIYORDU, çünkü onu hiç üretmiyordu.
        Çeşitlilik korunsun diye adayların yarısı (tek variantlar) tohumsuz
        kurulur; hangisinin daha iyi olduğuna sıralama karar verir. */
+    /* Tohumun kendi uygunluk denetimi var: greedy'nin kullandığı eligible()
+       burada YANLIŞ cevap veriyordu. İki sebep ölçüldü (60 nöbetin 19'u
+       reddediliyordu):
+         • Hafta sonu hücreleri kurulumda 'HT', tatil 'RT' yazılı; eligible
+           "hücre boş değil" deyip hepsini eliyordu. (Greedy de eleme yapıyor
+           zaten; hafta sonu nöbetlerini KAPSAMA GARANTİSİ yerleştiriyor.)
+         • "7 günde en fazla 3 nöbet" gibi konfor eşikleri: önceki liste
+           zaten kabul edilmiş bir liste, onu yeniden kurmak yeni bir ihlal
+           yaratmaz; gerçek sorun kalırsa yerel arama ve onarım düzeltir.
+       Düzeltmeden sonra: 59/60 tohumlandı ve motor kendi çıktısını girdi
+       olarak aldığında 420 hücrenin HİÇBİRİ oynamıyor (önce 48 oynuyordu). */
+    function tohumUygun(Pp, dd, kind) {
+      var d = dd.day, cur = Pp.assign[d];
+      if (Pp.noNobet || Pp.dayOnly) return false;
+      if (Pp.onlyDay.has(d)) return false;
+      if (Pp.onlyN16.has(d) && kind === 'NL') return false;
+      if (Pp.onlyN24.has(d) && kind === 'NS') return false;
+      if (Pp.lockedOff.has(d) || Pp.offReq.has(d)) return false;
+      if (!(cur === '' || cur === 'HT' || cur === 'RT')) return false;   // izin/istek/başka nöbet varsa dokunma
+      if (d > 1 && isOncall(Pp.assign[d - 1])) return false;             // dinlenme kuralı
+      if (d < nDays && isOncall(Pp.assign[d + 1])) return false;
+      if (Pp.hours + HOURS[kind] > Pp.target) return false;              // saat tavanı
+      return true;
+    }
     if (ONCEKI && variant % 2 === 0) {
       days.forEach(function (dd) {
         var need = oncallNeed(dd);
@@ -821,7 +845,7 @@
           var sk = se[dd.day];
           if (sk !== 'NL' && sk !== 'NS') continue;
           if (sk === 'NS' && !P.useShortOncall) continue;
-          if (!eligible(Sp, dd, sk, true)) continue;
+          if (!tohumUygun(Sp, dd, sk)) continue;
           placeOncall(Sp, dd, sk);
         }
       });

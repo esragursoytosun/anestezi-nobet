@@ -91,14 +91,42 @@ Beklenen sonuç: 1 boş gün isteği → %57.7 yerine ~%2-5 değişim.
 Kalite bedeli yok: 295/295 test geçiyor, çok birimli takımda kapsama /
 nöbet şekli / eksik saat ihlali 0, ortalama uyarı 1.27 (değişmedi).
 
-**Hedefe tam ulaşılmadı (%2-5 değil %9-14).** Kalan sapmanın kaynağı
-ölçüldü: motor kendi çıktısını girdi olarak alsa bile 48/420 hücre
-oynuyor (idempotent değil). Bunların çoğu onarım fazlarının (hafta sonu,
-gün aşırı, adalet) koşulsuz çalışıp önceki listeyi görmemesinden geliyor
-— bu da yol haritasındaki **5. madde** (onarım fazlarını tek yerel
-aramada birleştirmek) ile kapanır. Ayrıca "1 gün izin eklendi" örneği
-tesadüfen zaten kararlıydı (%0.2) ve sıcak başlangıç onu %11.7'ye
-çıkardı: sadakat, kendi başına daha iyi bir çözümü de eleyebiliyor.
+### TAMAMLANDI (2026-08-19, ikinci tur) — hedef aşıldı
+
+İlk turda %9-14'te takılmıştık. Aşama aşama ölçünce sebep tek bir
+satırda çıktı: **tohum, nöbetlerin üçte birini yerleştiremiyordu**
+(60 nöbetin 41'i). Reddedilme sebepleri sayıldığında:
+
+```
+red sebepleri: {"hücre dolu: HT": 16, "hücre dolu: RT": 2, "hücre dolu: NL": 1}
+```
+
+Hafta sonu hücreleri kurulumda `'HT'`, resmî tatil `'RT'` yazılı; tohum
+greedy'nin `eligible()` denetimini kullandığı için "hücre boş değil"
+deyip **bütün hafta sonu ve tatil nöbetlerini** eliyordu. (Aynı sınıfta
+bir hata daha önce `devirAdaylari`'nda da çıkmıştı — hafta sonu hücresi
+'HT' olduğu için hiçbir hafta sonu nöbeti devredilemiyordu.)
+
+Tohuma kendi uygunluk denetimi yazıldı: HT/RT hücrelerine izin verir,
+"7 günde en fazla 3 nöbet" gibi konfor eşiklerini aramaz (önceki liste
+zaten kabul edilmiş bir listedir; gerçek sorun kalırsa yerel arama ve
+onarım düzeltir). Tohumlama 41/60 → **59/60**.
+
+| Senaryo | Başlangıç | 1. tur | 2. tur |
+|---|---|---|---|
+| 1 boş gün isteği | %57.9 | %14.0 | **%0.2** |
+| 1 gün izin eklendi | %0.2 | %11.7 | **%0.2** |
+| 2 kişiye boş gün isteği | %59.5 | %9.0 | **%0.7** |
+| 1 kişi gündüz isteği | %55.0 | %9.3 | **%3.6** |
+
+**Motor artık idempotent:** kendi çıktısını girdi olarak aldığında
+420 hücrenin hiçbiri oynamıyor (önce 48 oynuyordu). Hedef %2-5 idi,
+sonuç %0.2-3.6.
+
+Kalite bedeli yok: 295/295 test, çok birimli takımda kapsama / nöbet
+şekli / eksik saat ihlali 0, ortalama uyarı 1.27, adalet sapması
+0.816 / 0.872 — hepsi değişmedi. Süre de artmadı (sıcak başlangıçlı
+üretim biraz daha hızlı: 1169 ms / 1688 ms).
 
 ---
 
@@ -209,6 +237,27 @@ küme kırma, izin tavanı, mesai tamamlama). Bu oturumda bunları
 Doğrusu: tek bir birleşik yerel arama, tüm hamle tiplerini (devir,
 takas, tür değiştirme, mesai taşıma) aynı havuzda tutmalı. Şu anki
 yapı, her yeni ihtiyaçta yeni bir faz eklemeye davet ediyor.
+
+### DURUM (2026-08-19): ölçülebilir zarar kalmadı, borç duruyor
+
+Bu maddenin somut zararı "onarım fazları önceki listeyi bozuyor"
+sanılıyordu. Aşama aşama ölçüm bunu **doğrulamadı**: sıcak başlangıç
+düzeldikten sonra her aşamada sapma 0:
+
+```
+  aşama                    sapma
+  1-nöbet+kapsama            204   (mesai henüz yazılmadı)
+  2-mesai dolgu               96
+  3-yerel arama                0
+  4-onarım turları             0
+  5-fazla mesai dolgu          0
+  6-mesai tamamlama            0
+  7-geri yaslanma              0
+```
+
+Yani onarım fazları artık ölçülebilir bir kayıp üretmiyor. Mimari borç
+(6 ayrı faz, her yeni ihtiyaçta bir yenisi) duruyor ama **acil değil**;
+yeni bir onarım fazı eklemek gerektiğinde birleştirme o zaman yapılmalı.
 
 ---
 
