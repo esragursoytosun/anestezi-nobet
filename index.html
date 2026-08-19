@@ -659,6 +659,7 @@
     <button class="sec sm" onclick="window.print()">Yazdır / PDF</button>
     <span class="tb-ayirac"></span>
     <button class="sec sm" onclick="backupExport()" title="Tüm ayları ve kural ayarlarını tek dosyaya indir">Yedek al</button>
+    <button class="sec sm" onclick="anonimTestCikar()" title="Bu birimin kurallarını ve kadro yapısını İSİMSİZ olarak indirir (herkes P1, P2… olur). Geliştirmede 'bu değişiklik bizim birimde ne yapıyor' sorusunu ölçmek için kullanılır; hiçbir kişisel bilgi içermez.">Anonim test dosyası</button>
     <button class="sec sm" onclick="backupImportPick()" title="Daha önce indirilmiş bir yedeği geri yükle">Geri yükle</button>
     <input type="file" id="backupFile" accept="application/json,.json" style="display:none" onchange="backupImport(this)">
     <span class="tb-ayirac"></span>
@@ -1579,6 +1580,39 @@ function backupExport(){
     new Date().toISOString().slice(0,10)+'.json';
   dl(new Blob([JSON.stringify(veri,null,1)],{type:'application/json'}),ad);
   flash('Yedek indirildi ✓');
+}
+/* ===== ANONİM TEST PROFİLİ =====
+   Amaç: gerçek birimlerin kural + kadro YAPISI geliştirme testlerine
+   girsin, kişisel bilgi girmesin. İsimler P1..Pn'e çevrilir; birim adı,
+   kullanıcı, not, sunucu bilgisi hiç yazılmaz. İzin/istek GÜN NUMARALARI
+   korunur — testin gerçekçi olması buna bağlı. */
+function anonimTestCikar(){
+  readRuleForm(); captureMonth();
+  const pr=curProfile();
+  const kurallar={}; Object.keys(pr).forEach(k=>{ if(k!=='name')kurallar[k]=pr[k]; });
+  const ad={};   // gerçek ad -> P1, P2...  (aylar arası tutarlı olsun)
+  const takma=(g)=>{ if(!ad[g])ad[g]='P'+(Object.keys(ad).length+1); return ad[g]; };
+  const aylar={};
+  Object.keys(MONTHS_DATA).forEach(ym=>{
+    const m=MONTHS_DATA[ym]||{};
+    aylar[ym]={
+      holidays:(m.holidays||[]).slice(),
+      personnel:(m.personnel||[]).map(k=>({
+        name:takma(k.name),
+        noNobet:!!k.noNobet, dayOnly:!!k.dayOnly, senior:!!k.senior, startNI:!!k.startNI,
+        onlyNobet:!!k.onlyNobet, offDay:(k.offDay!=null?k.offDay:null),
+        leaveYI:(k.leaveYI||[]).slice(), yiRanges:(k.yiRanges||[]).map(x=>({s:x.s,e:x.e})),
+        ggRange:k.ggRange?{s:k.ggRange.s,e:k.ggRange.e}:null, ggDays:(k.ggDays||[]).slice(),
+        offReq:(k.offReq||[]).slice(), onlyDay:(k.onlyDay||[]).slice(),
+        onlyN16:(k.onlyN16||[]).slice(), onlyN24:(k.onlyN24||[]).slice()
+      }))
+    };
+  });
+  const veri={ tur:'nobet-asistani-anonim-test', surum:1, profile:kurallar, aylar:aylar };
+  const kisi=(()=>{const k=Object.keys(aylar)[0];return k?aylar[k].personnel.length:0;})();
+  dl(new Blob([JSON.stringify(veri,null,1)],{type:'application/json'}),
+     'anonim-profil-'+kisi+'kisi-'+Object.keys(aylar).length+'ay.json');
+  flash('Anonim test dosyası indirildi ✓ (isim yok)');
 }
 function backupImportPick(){ document.getElementById('backupFile').click(); }
 function backupImport(inp){

@@ -19,6 +19,40 @@
    ===================================================================== */
 'use strict';
 var S = require(process.env.MOTOR || './asistan-scheduler.js');
+var fs = require('fs'), path = require('path');
+
+/* ---- GERÇEK BİRİMLER (anonim) ----
+   Sentetik profiller motorun genel sağlığını ölçer ama gerçek birimlerin
+   kural bileşimini yakalamaz — şikâyetler hep orada çıkıyordu. Uygulamadaki
+   "Anonim test dosyası" düğmesi bir birimin kurallarını ve kadro YAPISINI
+   isimsiz olarak indirir (herkes P1..Pn); dosya test-profiller/ klasörüne
+   konunca bu takım onu da ölçmeye başlar. Klasör boşsa hiçbir şey değişmez,
+   yani depo bu dosyalar olmadan da çalışır. */
+var PROFIL_DIZIN = path.join(__dirname, 'test-profiller');
+function gercekProfiller() {
+  var out = [];
+  if (!fs.existsSync(PROFIL_DIZIN)) return out;
+  fs.readdirSync(PROFIL_DIZIN).filter(function (f) { return /\.json$/i.test(f); }).forEach(function (f) {
+    var v;
+    try { v = JSON.parse(fs.readFileSync(path.join(PROFIL_DIZIN, f), 'utf8')); }
+    catch (e) { console.error('  ! ' + f + ' okunamadı: ' + e.message); return; }
+    if (!v || !v.aylar || !v.profile) { console.error('  ! ' + f + ' anonim test dosyası biçiminde değil.'); return; }
+    var ad = f.replace(/\.json$/i, '');
+    Object.keys(v.aylar).forEach(function (ym) {
+      var m = v.aylar[ym] || {}, par = ym.split('-');
+      if (!m.personnel || !m.personnel.length) return;
+      var ad2 = m.personnel.some(function (k) { return k.name && !/^P\d+$/.test(k.name); });
+      if (ad2) { console.error('  ! ' + f + ' içinde gerçek isim var gibi — atlandı.'); return; }
+      var prof = S.defaultProfile();
+      for (var kk in v.profile) prof[kk] = v.profile[kk];
+      prof.name = ad;
+      out.push({ ad: 'GERÇEK · ' + ad + ' · ' + ym, birim: 'GERÇEK · ' + ad,
+        cfg: { year: parseInt(par[0], 10), month: parseInt(par[1], 10),
+               holidays: (m.holidays || []).slice(), personnel: m.personnel, profile: prof } });
+    });
+  });
+  return out;
+}
 
 function lcg(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 
@@ -81,6 +115,7 @@ function ornekler() {
       });
     });
   });
+  gercekProfiller().forEach(function (g) { L.push(g); });   // varsa gerçek birimler de ölçüme girer
   return L;
 }
 
@@ -147,7 +182,7 @@ function calistir() {
   return { N: ex.length, T: T, birim: birimOzet, detay: detay };
 }
 
-module.exports = { calistir: calistir, ornekler: ornekler, birimler: birimler };
+module.exports = { calistir: calistir, ornekler: ornekler, birimler: birimler, gercekProfiller: gercekProfiller };
 
 if (require.main === module) {
   var r = calistir(), N = r.N, T = r.T;

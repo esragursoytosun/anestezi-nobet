@@ -139,6 +139,24 @@ P1..Pn'e çevrilmiş) test setine eklenmeli. Böylece bir değişiklik
 yapıldığında "Yenidoğan'da ne oluyor" sorusu saniyeler içinde
 cevaplanır.
 
+### YOL AÇILDI (2026-08-19) — dosyaları yönetici üretecek
+
+Gerçek veriye erişmeden bu maddeyi tamamlamak mümkün değil; onun yerine
+**mekanizma** kuruldu:
+
+- Uygulamaya **"Anonim test dosyası"** düğmesi eklendi. Birimin kural
+  profilini ve kadro YAPISINI indirir: isimler `P1..Pn`, birim adı /
+  kullanıcı / not / sunucu bilgisi hiç yazılmaz; izin ve istek **gün
+  numaraları** korunur (testin gerçekçiliği buna bağlı).
+- `test-birimler.js` artık `test-profiller/` klasöründeki `*.json`
+  dosyalarını sentetik profillerin yanında ölçüyor. Klasör boşsa hiçbir
+  şey değişmez. Dosyada `P1..Pn` dışında bir ad görürse o ayı **ölçmez
+  ve uyarır** — depo public olduğu için ikinci bir emniyet.
+
+**Kalan iş kullanıcıda:** Anestezi ve Yenidoğan Yakın İzlem birimlerinde
+düğmeye basıp inen dosyaları `test-profiller/` klasörüne koymak. O anda
+madde tamamlanır.
+
 ---
 
 ## 5. Dördüncü sorun: sert/yumuşak kural ayrımı yok
