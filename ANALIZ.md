@@ -124,6 +124,35 @@ tesadüfen zaten kararlıydı (%0.2) ve sıcak başlangıç onu %11.7'ye
 - **Uzman (kalan ~25):** denge çarpanları, öncelik sırası, indirgeme
   davranışı. "Oto-denge kapalıysa" gibi koşullarda görünür olmalı.
 
+### UYGULANDI (2026-08-19)
+
+Ayar ekranının üstüne **Temel / Gelişmiş / Uzman** çubuğu geldi
+(varsayılan Temel, tercih tarayıcıda saklanır — birim profilinin parçası
+değil, kişiye özel).
+
+| Görünüm | Gizlenen alan |
+|---|---|
+| Temel | 30 |
+| Gelişmiş | 17 |
+| Uzman | 0 |
+
+Temel görünümde 7 bölümün her birinde yalnız birimi kurmak için gereken
+alanlar kalıyor (ör. *Çalışan koruması*: "en fazla kaç gün üst üste
+çalışılabilir" + "boş günler nasıl verilsin"; nöbet zinciri, hafta sonu
+tavanı, izin tavanı ve iki gelmeme sınırı gizli).
+
+İki emniyet:
+
+1. **Gizli ayar çalışmaya devam eder** — sadece görünmez. Çubukta bu
+   açıkça yazıyor.
+2. **Varsayılandan farklı ayarlanmış hiçbir alan gizlenmez.** Ölçüldü:
+   `preLeaveGap` (Uzman) değiştirildiğinde Temel görünümde de kalıyor.
+   Aksi halde listeyi etkileyen bir kural görünmez olurdu.
+
+Seviye listesinde olmayan her alan **Temel** sayılır — sonradan eklenen
+bir ayar kazara gizlenmesin. "Çakışan istekler" (öncelik sırası) bilerek
+Temel bırakıldı: kullanıcı onu doğrudan istemişti.
+
 ---
 
 ## 4. Üçüncü sorun: gerçek veriyle test edilmiyor
