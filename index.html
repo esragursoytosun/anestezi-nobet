@@ -461,7 +461,7 @@
               <option value="zorunlu">Evet, gerekirse (önerilen)</option>
               <option value="asla">Hayır, asla</option>
               <option value="serbest">Motor serbestçe seçsin</option>
-            </select><span class="hint">Örn. 24 saatlik nöbet 16'ya inilerek saat tutturulur; değişen günler listenin altında yazılır.</span><div class="etki" data-etki="shiftTypePref"></div></div>
+            </select><span class="hint">Yalnız <b>hafta içi</b>: 24 saatlik nöbet 16'ya inilerek saat tutturulur; değişen günler listenin altında yazılır. <b>Hafta sonu ve tatil nöbeti hiçbir zaman değişmez</b> (kişinin kendi isteği hariç).</span><div class="etki" data-etki="shiftTypePref"></div></div>
           <div class="soru"><label for="postOncallRest">Nöbetten sonra kaç gün dinlenme</label><input type="number" id="postOncallRest" min="0"><div class="etki" data-etki="postOncallRest"></div></div>
           <div class="soru"><label for="maxDutyChain">Gün aşırı nöbet (nöbet–dinlenme–nöbet)</label>
             <select id="maxDutyChain" data-sayi="1">
@@ -660,9 +660,9 @@
   <button class="sm sec" onclick="document.getElementById('output').scrollIntoView({behavior:'smooth',block:'start'})">Listeye git</button>
   <button class="sm sec" onclick="document.getElementById('statusBar').style.display='none'" title="Şeridi gizle">✕</button>
 </div>
-<div class="foot">Nöbet Planlama Asistanı · <b>v48</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
+<div class="foot">Nöbet Planlama Asistanı · <b>v49</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=55"></script>
+<script src="asistan-scheduler.js?v=56"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -824,7 +824,7 @@ function kuralEtkileri(a,p){
     weekendOncall:[`Hafta sonu/tatil nöbeti ${a.hsSaat} saat.`],
     shiftTypePref:[p.shiftTypePref==='asla'?'Nöbet süresi hiç değişmez; saat tutmazsa kişi eksik/fazla kalabilir.'
       :(p.shiftTypePref==='serbest'?'Motor her nöbet için uzun/kısa seçer.'
-      :(kisa?`Saat tutmayınca ${p.oncallLongHours}s nöbet ${p.oncallShortHours}s'e inebilir; değişen günler listede yazılır.`:'Kısa nöbet kapalı olduğu için bu ayar bir şey değiştirmez.'))],
+      :(kisa?`Saat tutmayınca hafta içi ${p.oncallLongHours}s nöbet ${p.oncallShortHours}s'e inebilir; hafta sonu/tatil nöbeti değişmez.`:'Kısa nöbet kapalı olduğu için bu ayar bir şey değiştirmez.'))],
     postOncallRest:[sayi(p.postOncallRest)>0?`Nöbetten sonra ${p.postOncallRest} gün N.İ — o gün(ler) işe gelinmez.`:'Nöbet ertesi dinlenme yok — ertesi gün mesai yazılabilir.',sayi(p.postOncallRest)>0?0:1],
     maxDutyChain:sayi(p.maxDutyChain)===1
       ?(a.gunAsiriRiskli.length?[`Bu ay ${a.gunAsiriRiskli.length} kişide (${a.gunAsiriRiskli.slice(0,3).join(', ')}${a.gunAsiriRiskli.length>3?'…':''}) gün aşırı kaçınılmaz olabilir; ihlal uyarı olarak çıkar.`,1]
@@ -1252,7 +1252,7 @@ function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return c
 let URETICI=null, URETIM_NO=0;
 function ureticiAl(){
   if(URETICI!==null) return URETICI;
-  try{ URETICI=new Worker('asistan-worker.js?v=55'); }
+  try{ URETICI=new Worker('asistan-worker.js?v=56'); }
   catch(e){ URETICI=false; }        // false = "denendi, olmadı" (tekrar denenmesin)
   return URETICI;
 }
@@ -1282,7 +1282,7 @@ function generate(){
     uretimBitti(m.sonuc,cfg,ym);
   };
   w.onerror=()=>{ URETICI=false; if(gosterge)gosterge.style.display='none'; generate(); };
-  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=55'});
+  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=56'});
 }
 function uretimBitti(sonuc,cfg,ym){
   LAST=sonuc; ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0;

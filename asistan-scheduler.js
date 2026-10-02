@@ -2086,7 +2086,10 @@
           var dd = days[d - 1], c = g[d], adaylar = [];
           if (c === 'M' && dd.workday && !zor[d] && !gIst[d]) adaylar.push('UCI');
           if (c === 'UCI' && dd.workday && !bos[d] && !kil[d] && !onc[d] && !p.onlyNobet) adaylar.push('M');
-          if (c === 'NL' && kisaVar && !n24[d] && !asla) adaylar.push('NS');
+          /* 24→16 YALNIZ HAFTA İÇİ. Hafta sonu/tatilde mesai yok: 16 saatlik
+             (16:00'da başlayan) nöbet gündüzü sahipsiz bırakır. Hafta sonu
+             nöbet şekli kesin kuraldır; kişinin kendi isteği dışında değişmez. */
+          if (c === 'NL' && kisaVar && !n24[d] && !asla && dd.workday) adaylar.push('NS');
           if (c === 'NS' && !n16[d] && (serbest || n24[d] || ((dd.weekend || dd.holiday) ? hsT : hiT) === 'NL')) adaylar.push('NL');
           for (var k = 0; k < adaylar.length; k++) {
             g[d] = adaylar[k];

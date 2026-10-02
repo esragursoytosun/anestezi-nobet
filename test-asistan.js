@@ -32,6 +32,16 @@ function checkInvariants(r, P, label) {
     var cnt = 0; names.forEach(function (n) { if (isOncall(grid[n][d])) cnt++; });
     ok(cnt >= need, label + ': ' + d + '. gün kapsama ' + cnt + ' < ' + need);
   }
+  // 1b) HAFTA SONU NÖBET ŞEKLİ KESİN: hafta sonu uzun (24s) ayarlıysa kısa (16s) yazılmaz
+  //     — 16s nöbet gündüzü sahipsiz bırakır. Tek istisna: kişinin o güne kendi kısa nöbet isteği.
+  var RP = r.profile || P;
+  if (RP.weekendOncall !== 'short') r.totals.forEach(function (t) {
+    r.days.forEach(function (dd) {
+      if (!(dd.weekend || dd.holiday)) return;
+      if (grid[t.name][dd.day] === 'NS' && (t.onlyN16 || []).indexOf(dd.day) < 0)
+        ok(false, label + ': ' + t.name + ' ' + dd.day + '. gün (hafta sonu/tatil) 16 saatlik nöbet yazılmış');
+    });
+  });
   // 2) DİNLENME: nöbet ertesi gün nöbet YOK (ardışık nöbet olmaz)
   names.forEach(function (n) { for (var d = 1; d < nD; d++) { if (isOncall(grid[n][d]) && isOncall(grid[n][d + 1])) ok(false, label + ': ' + n + ' ardışık nöbet ' + d + '-' + (d + 1)); } });
   // 3) NÖBETÇİ ARALIĞI: max aşılmaz
