@@ -279,6 +279,49 @@ section('Önceki liste, gereksiz kalmış kısa nöbetleri sonsuza dek taşımaz
   ok(warnCount(sicak) <= warnCount(soguk), 'önceki listeye sadakat kural ihlali eklememeli');
 })();
 
+section('Türkiye tatil takvimi: sabit tatiller, bayramlar, arife yarım günü');
+(function () {
+  var mayis = S.ayTatilleri(2026, 4), mart = S.ayTatilleri(2026, 2), ekim = S.ayTatilleri(2026, 9);
+  ok(JSON.stringify(mayis.holidays) === JSON.stringify([1, 19, 27, 28, 29, 30]), 'Mayıs 2026 tatilleri (çıkan ' + mayis.holidays + ')');
+  ok(JSON.stringify(mayis.halfDays) === JSON.stringify([26]), 'Mayıs 2026 Kurban arifesi yarım gün');
+  ok(JSON.stringify(mart.holidays) === JSON.stringify([20, 21, 22]) && mart.halfDays[0] === 19, 'Mart 2026 Ramazan Bayramı + arife');
+  ok(ekim.halfDays[0] === 28 && ekim.holidays[0] === 29, '28 Ekim yarım, 29 Ekim tatil');
+})();
+
+section('Yarım gün: mesai kısa, hedef düşük, kural ihlali yok');
+(function () {
+  // Mart 2026: 19 arife (Perşembe, yarım), 20 bayram (Cuma), 21-22 hafta sonu
+  var r = S.buildSchedule({ year: 2026, month: 2, holidays: [20], halfDays: [19], personnel: people(12), profile: S.defaultProfile(), __attempts: 16, __lsIter: 3000 });
+  var isGunu = r.days.filter(function (d) { return d.workday; }).length;
+  ok(r.totals[0].target === 8 * (isGunu - 1) + 4, 'hedef = tam günler × 8 + yarım gün × 4 (çıkan ' + r.totals[0].target + ')');
+  var yarimM = 0; r.totals.forEach(function (t) { if (r.grid[t.name][19] === 'M') yarimM++; });
+  ok(yarimM >= 2, 'yarım günde de gündüz mesaisi yazılmalı (' + yarimM + ')');
+  var sert = r.warnings.filter(function (w) { return w.indexOf('💡') !== 0 && /EKSİK|FAZLA/.test(w); });
+  ok(sert.length === 0, 'yarım gün yüzünden saat ihlali çıkmamalı: ' + sert.join(' | '));
+  r.totals.forEach(function (t) { ok(t.fark >= -4 && t.fark <= 0, t.name + ' farkı 0 ile -4 arası olmalı (' + t.fark + ')'); });
+})();
+
+section('Kaçınılmaz fazla mesai paylaşılır (tek kişiye yığılmaz)');
+(function () {
+  var per = people(12, { 1: { noNobet: true } });
+  var P = S.defaultProfile(); P.overtimeForCounts = true;
+  var r = S.buildSchedule({ year: 2026, month: 4, holidays: [1, 19, 26, 27, 28, 29], personnel: per, profile: P, __attempts: 30, __lsIter: 4000 });
+  var fazla = r.totals.map(function (t) { return Math.max(0, t.fark); });
+  ok(Math.max.apply(null, fazla) <= 48, 'en çok fazla mesai 48 saati geçmemeli (çıkan ' + fazla.join(',') + ')');
+})();
+
+section('Bayram nöbeti rotasyonu: geçen bayram tutan bu bayram öncelikli değil');
+(function () {
+  var carry = { byName: {} };
+  ['P1', 'P2', 'P3', 'P4'].forEach(function (n) { carry.byName[n] = { nc: 0, wk: 0, bt: 4 }; });
+  var r = S.buildSchedule({ year: 2026, month: 4, holidays: [1, 19, 27, 28, 29], halfDays: [26], personnel: people(13), profile: S.defaultProfile(), carry: carry, __attempts: 20, __lsIter: 3000 });
+  var tat = r.days.filter(function (d) { return d.holiday; }).map(function (d) { return d.day; });
+  function bt(n) { return tat.filter(function (d) { var c = r.grid[n][d]; return c === 'NL' || c === 'NS'; }).length; }
+  var eski = bt('P1') + bt('P2') + bt('P3') + bt('P4'), digerOrt = 0;
+  for (var i = 5; i <= 13; i++) digerOrt += bt('P' + i); digerOrt /= 9;
+  ok(eski / 4 < digerOrt, 'geçen bayram tutanların ortalaması (' + (eski / 4).toFixed(2) + ') diğerlerinden (' + digerOrt.toFixed(2) + ') düşük olmalı');
+})();
+
 section('Ön analiz: çelişen ayarı liste üretmeden söyler');
 (function () {
   var cfg = { year: Y, month: M, holidays: [], personnel: people(12) };

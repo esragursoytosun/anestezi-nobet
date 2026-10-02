@@ -342,3 +342,18 @@ tahmin gerçek motorla Temmuz 408 s / Ekim 232 s / 536 s örneklerinde birebir t
   ile açılıp Kaydet'le geri yüklenir. Oturum düşünce sayfa yenilenmez (iş kaybolmaz); çakışmada kullanıcının
   hâli yedek dosyası olarak indirilebilir; kayıt hataları kırmızı ve kalıcı.
 - Testler: `test-sunucu.js` (sahte Mongo ile giriş/oturum/fren/geçmiş/şifre) CI'a eklendi.
+
+## Ek 3 (2026-10-02, v47 / motor v54) — Tatil takvimi, yarım gün, daha akıllı dağıtım
+
+- **Türkiye takvimi** (`turkiyeTatilleri`, `ayTatilleri`): sabit tatiller + Ramazan/Kurban bayramları
+  (2025-2030 Diyanet tablosu; sonrası tarayıcının Hicri takviminden, "tahmini" işaretli) + arife ve 28 Ekim
+  yarım gün. Yeni ay açılınca otomatik dolar; "Türkiye takvimini uygula" elle eklenenleri silmeden birleştirir.
+  Gün alanları artık aralık kabul ediyor ("27-30").
+- **Yarım gün** (`config.halfDays`, `profile.halfDayHours/halfDayLabel`): o gün mesai 4 saat (M8-12), hedefe
+  4 saat sayılır, nöbet değişmez. Motor saatleri gün bazında hesaplar (`MH(gün)`, `HR(kod,gün)`); farklı
+  uzunluktaki günler arasında mesai takası yapılmaz. O gün nöbette/dinlenmede olanın 4 saatlik artığı
+  kural ihlali değil nottur.
+- **Fazla mesai paylaşımı:** kaçınılmaz fazla mesai tek kişiye yığılıyordu (bayram ayında +96/+80, diğerleri 0).
+  Ceza: ilk fazla mesai 7500 (bir kez) + kişi başı 2500 + 70/saat + 2×saat². İzinliyken 0-64 → 8-40.
+- **Bayram nöbeti rotasyonu:** resmi tatil nöbetleri ayrı sayılır ve aylar arası taşınır (`carry.bt`);
+  geçen bayram tutan bu bayramda geri planda kalır.

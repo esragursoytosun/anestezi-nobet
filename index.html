@@ -95,6 +95,13 @@
   .etki:empty{display:none}
   .etki.dikkat{color:#f2cc60;background:rgba(210,153,34,.1);border-left-color:#d29922}
   .etki.chk-etki{margin:-4px 0 10px 24px}
+  .tatil-liste{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .tatil-liste:empty{display:none}
+  .tatil-liste .tt{font-size:12px;border:1px solid var(--line2);border-radius:12px;padding:2px 10px;color:var(--muted);background:var(--inset)}
+  .tatil-liste .tt b{color:var(--txt)} .tatil-liste .tt.yarim{border-color:#9a6700;color:#f2cc60}
+  .tatil-liste .tt.uyari{border-color:#9a6700;color:#f2cc60;background:transparent}
+  #monthPanel .hint{font-size:11.5px;color:var(--muted);display:block;margin-top:3px;line-height:1.4}
+  th.yarim{background-image:linear-gradient(to bottom,rgba(210,153,34,.25),transparent)}
   .onanaliz{margin-bottom:12px}
   .onanaliz .oa{border:1px solid var(--line2);border-radius:9px;padding:11px 13px;font-size:12.5px;line-height:1.6;background:var(--inset)}
   .onanaliz .oa-t{font-weight:600;color:var(--txt);margin-bottom:3px}
@@ -495,6 +502,11 @@
           <b style="min-width:96px">Gündüz mesai</b>
           <div class="fld"><label>Kaç saat</label><input type="number" id="mesaiHours"></div>
           <div class="fld"><label>Listede görünen ad</label><input type="text" id="mesaiLabel" style="width:120px"></div></div>
+        <div class="shiftrow"><i class="sw" style="background:var(--c-M);opacity:.55"></i>
+          <b style="min-width:96px">Yarım gün mesai</b>
+          <div class="fld"><label>Kaç saat</label><input type="number" id="halfDayHours" min="1"></div>
+          <div class="fld"><label>Listede görünen ad</label><input type="text" id="halfDayLabel" style="width:120px"></div>
+          <span class="hint">Arife gibi yarım günlerde gündüz mesaisi. Nöbetler değişmez.</span></div>
         <div class="shiftrow"><i class="sw" style="background:var(--c-NL)"></i>
           <b style="min-width:96px">Uzun nöbet</b>
           <div class="fld"><label>Kaç saat</label><input type="number" id="oncallLongHours"></div>
@@ -547,8 +559,11 @@
     <div class="row">
       <div><label>Ay</label><select id="month"></select></div>
       <div><label>Yıl</label><input type="number" id="year" value="2026" style="width:90px"></div>
-      <div style="flex:1;min-width:200px"><label>Resmi tatil günleri (virgülle gün no: 1,30)</label><input type="text" id="holidays" placeholder="örn. 1,30"></div>
+      <div style="flex:1;min-width:180px"><label for="holidays">Resmi tatil / bayram günleri</label><input type="text" id="holidays" placeholder="örn. 1, 20-22"><span class="hint">Tam gün tatil: hafta sonu gibi işlenir, hedeften düşer.</span></div>
+      <div style="flex:1;min-width:180px"><label for="halfDays">Yarım gün çalışılan günler</label><input type="text" id="halfDays" placeholder="örn. 19 (arife)"><span class="hint" id="yarimIpucu">Bu günlerde gündüz mesaisi kısa (08-12), hedefe de o kadar sayılır.</span></div>
+      <div style="align-self:flex-start;padding-top:20px"><button type="button" class="sm sec" onclick="takvimUygula(true)" title="Bu ayın resmi tatillerini, dini bayramları ve arife yarım günlerini Türkiye takviminden doldurur">Türkiye takvimini uygula</button></div>
     </div>
+    <div id="tatilListe" class="tatil-liste"></div>
   </div>
 
   <!-- ===== PERSONEL ===== -->
@@ -645,9 +660,9 @@
   <button class="sm sec" onclick="document.getElementById('output').scrollIntoView({behavior:'smooth',block:'start'})">Listeye git</button>
   <button class="sm sec" onclick="document.getElementById('statusBar').style.display='none'" title="Şeridi gizle">✕</button>
 </div>
-<div class="foot">Nöbet Planlama Asistanı · <b>v46</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
+<div class="foot">Nöbet Planlama Asistanı · <b>v47</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=53"></script>
+<script src="asistan-scheduler.js?v=54"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -661,7 +676,7 @@ const exWrap=document.getElementById('extraDays');
 const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel','oncallLongDaytime','useShortOncall',
   'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','daytimeMin','daytimeExtra',
   'weekendOncall','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
-  'postOncallRest','maxConsecutiveOff','maxAbsentDays','maxWeekendDuties','maxConsecutiveWork','maxDutyChain','maxDutyWhenOnLeave','daytimeMax','idleStyle','shiftTypePref','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
+  'halfDayHours','halfDayLabel','postOncallRest','maxConsecutiveOff','maxAbsentDays','maxWeekendDuties','maxConsecutiveWork','maxDutyChain','maxDutyWhenOnLeave','daytimeMax','idleStyle','shiftTypePref','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
 /* DENGE ÖNCELİKLERİ: motorda ÇARPAN olarak yaşıyor (0.4/1/2.5/6). Seçenekler
    sayı değeri taşır; RULE_FIELDS'in genel yolu string bırakırdı, o yüzden
    ayrı okunup parseFloat ile yazılır. */
@@ -702,7 +717,9 @@ function fillRuleForm(){ const p=curProfile();
      kutu boş görünür ve değer sessizce kaybolurdu. */
   document.querySelectorAll('#ruleBody select[data-sayi]').forEach(el=>{ const v=String(parseInt(p[el.id],10)||0);
     if(![...el.options].some(o=>o.value===v)) el.add(new Option('En fazla '+v+' nöbet arka arkaya',v)); });
-  RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; if(el.type==='checkbox')el.checked=!!p[f]; else el.value=(el.dataset.sayi?String(parseInt(p[f],10)||0):p[f]);});
+  const VARS=AsistanScheduler.defaultProfile();   // eski profillerde sonradan eklenen alan yok -> varsayılanı göster
+  RULE_FIELDS.forEach(f=>{const el=document.getElementById(f); if(!el)return; const v=(p[f]===undefined)?VARS[f]:p[f];
+    if(el.type==='checkbox')el.checked=!!v; else el.value=(el.dataset.sayi?String(parseInt(v,10)||0):(v==null?'':v));});
   [['defaultOncall'],['weekendOncall']].forEach(([id])=>{ const el=document.getElementById(id); if(!el) return;
     el.options[0].text='Uzun ('+(p.oncallLongHours||24)+' saat)'; el.options[1].text='Kısa ('+(p.oncallShortHours||16)+' saat)'+(p.useShortOncall===false?' — kısa nöbet kapalı':''); });
   // carryFairness RULE_FIELDS dışında: varsayılanı AÇIK — eski profillerde alan hiç yok, !!p[f] onları yanlışlıkla kapatırdı
@@ -821,7 +838,9 @@ function kuralEtkileri(a,p){
       ?(a.nobetHaftaSonu>nc*sayi(p.maxWeekendDuties)?[`Bu sınırla en fazla ${nc*sayi(p.maxWeekendDuties)} hafta sonu nöbeti tutulabilir, ${a.nobetHaftaSonu} gerekiyor — tutmaz.`,1][0]
         :`Kimse ayda ${p.maxWeekendDuties}'den fazla hafta sonu nöbeti tutmaz.`)
       :`Sınır yok; eşit dağıtılır (kişi başı ~${(a.nobetHaftaSonu/nc).toFixed(1)}).`, sayi(p.maxWeekendDuties)>0&&a.nobetHaftaSonu>nc*sayi(p.maxWeekendDuties)?1:0],
-    targetPerWorkday:[`Bu ay hedef: ${p.targetPerWorkday} × ${a.isGunu} iş günü = ${a.hedef} saat (izinlilerde daha az).`],
+    targetPerWorkday:[a.yarimGun
+      ?`Bu ay hedef: ${a.isGunu-a.yarimGun} tam gün × ${p.targetPerWorkday} + ${a.yarimGun} yarım gün × ${p.halfDayHours||4} = ${a.hedef} saat (izinlilerde daha az).`
+      :`Bu ay hedef: ${p.targetPerWorkday} × ${a.isGunu} iş günü = ${a.hedef} saat (izinlilerde daha az).`],
     overtimeForCounts:[p.overtimeForCounts?'Gündüz sayısı tutmazsa bazı kişiler hedefin üstüne çıkar (fazla mesai notu düşülür).':'Kimse hedefini aşmaz; gündüz açığı kalırsa uyarı çıkar.'],
     preLeaveOncall:[p.preLeaveOncall?`İzinden ${p.preLeaveDaysBefore} iş günü önce nöbet konur, nöbetten izne kadar iş yazılmaz.`:'İzin öncesine özel düzenleme yapılmaz.'],
     carryFairness:[p.carryFairness!==false?'Geçen aylarda çok nöbet/hafta sonu tutan bu ay daha az tutar.':'Her ay kendi içinde dengelenir.'],
@@ -944,7 +963,50 @@ function bosDurumGuncelle(){
   kutu.style.display=document.querySelectorAll('#pbody .prow').length?'none':'';
 }
 function resetNames(){ document.getElementById('pbody').innerHTML=''; for(let i=1;i<=12;i++)addPerson('Personel '+i); }
-function parseDays(s){ return (s||'').split(',').map(x=>parseInt(x.trim(),10)).filter(x=>x>=1&&x<=31); }
+/* ---- TATİL TAKVİMİ ----
+   Yeni ay açılınca Türkiye'nin resmi tatilleri, dini bayramları ve arife
+   yarım günleri kendiliğinden gelir; elle eklenen günler (idari izin vb.)
+   "Türkiye takvimini uygula" ile silinmez, birleştirilir. */
+let YENI_AY_TAKVIM=null;
+function gunMetni(L){ const a=[...new Set(L||[])].sort((x,y)=>x-y), o=[];
+  for(let i=0;i<a.length;i++){ let j=i; while(j+1<a.length&&a[j+1]===a[j]+1) j++; o.push(j>i+1?(a[i]+'-'+a[j]):(j===i+1?(a[i]+', '+a[j]):String(a[i]))); i=j; }
+  return o.join(', '); }
+function takvimUygula(bildir){
+  if(!AsistanScheduler.ayTatilleri) return;
+  const {y,m}=curYM(); const t=AsistanScheduler.ayTatilleri(y,m);
+  const hEl=document.getElementById('holidays'), yEl=document.getElementById('halfDays');
+  const once=hEl.value+'|'+yEl.value;
+  const tam=new Set(parseDays(hEl.value).concat(t.holidays));
+  const yarim=parseDays(yEl.value).concat(t.halfDays).filter(d=>!tam.has(d));
+  hEl.value=gunMetni([...tam]); yEl.value=gunMetni(yarim);
+  if(bildir){
+    if(once!==hEl.value+'|'+yEl.value){ markDirty(); captureMonth(); try{ guncellikDenetle(); }catch(e){} onAnalizPlanla(); }
+    flash((t.holidays.length||t.halfDays.length)?(MONTHS[m]+' '+y+': '+t.holidays.length+' tatil, '+t.halfDays.length+' yarım gün uygulandı.'):(MONTHS[m]+' '+y+' ayında resmi tatil yok.'));
+  }
+  tatilListeGoster();
+}
+function tatilListeGoster(){
+  const kutu=document.getElementById('tatilListe'); if(!kutu||!AsistanScheduler.ayTatilleri) return;
+  const {y,m}=curYM(); const t=AsistanScheduler.ayTatilleri(y,m), nD=AsistanScheduler.daysInMonth(y,m);
+  const tam=parseDays(document.getElementById('holidays').value).filter(d=>d<=nD), yarim=parseDays(document.getElementById('halfDays').value).filter(d=>d<=nD);
+  const DG=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
+  const dg=d=>DG[new Date(y,m,d).getDay()];
+  const L=tam.map(d=>({d,y:false})).concat(yarim.filter(d=>tam.indexOf(d)<0).map(d=>({d,y:true}))).sort((a,b)=>a.d-b.d);
+  let h=L.map(x=>{ const hs=[0,6].indexOf(new Date(y,m,x.d).getDay())>=0;
+    const ad=(t.adlar[x.d]||'').replace(' (yarım gün)','')||(x.y?'Yarım gün':'Tatil (elle)');
+    return `<span class="tt${x.y?' yarim':''}" title="${hs?'Hafta sonuna denk geliyor — iş günü sayısını değiştirmez':''}"><b>${x.d} ${dg(x.d)}</b> · ${escapeHtml(ad)}${x.y?' · '+(curProfile().halfDayLabel||'M8-12'):''}${hs?' (hafta sonu)':''}</span>`; }).join('');
+  const eksik=t.holidays.filter(d=>tam.indexOf(d)<0).concat(t.halfDays.filter(d=>yarim.indexOf(d)<0&&tam.indexOf(d)<0));
+  if(eksik.length) h+=`<span class="tt uyari">Takvimde olup girilmeyen: ${eksik.map(d=>d+' ('+escapeHtml((t.adlar[d]||'').replace(' (yarım gün)',''))+')').join(', ')} — “Türkiye takvimini uygula”</span>`;
+  if(t.tahmini) h+=`<span class="tt uyari">Bu yılın bayram tarihleri hesaplanmıştır; Diyanet takvimiyle kontrol edin.</span>`;
+  kutu.innerHTML=h;
+}
+['holidays','halfDays'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('input',()=>tatilListeGoster()); });
+/* Gün listesi: "5, 12" ya da aralık "20-22" (boşluk/noktalı virgül de olur).
+   Eskiden "20-22" sessizce yalnız 20 okunuyordu. */
+function parseDays(s){ const o=new Set();
+  String(s||'').split(/[,;\s]+/).forEach(p=>{ const m=p.match(/^(\d{1,2})(?:[-–](\d{1,2}))?$/); if(!m) return;
+    let a=+m[1], b=m[2]?+m[2]:a; if(b<a){ const t=a; a=b; b=t; } for(let d=a;d<=b;d++) if(d>=1&&d<=31) o.add(d); });
+  return [...o].sort((x,y)=>x-y); }
 function readPersonnel(){
   return [...document.querySelectorAll('#pbody .prow')].map(r=>({
     name:(r.querySelector('.p-name').value||'?').trim(),
@@ -988,7 +1050,7 @@ function captureMonth(){ if(CUR_YM==null)return; const prev=MONTHS_DATA[CUR_YM]|
      sessizce siliniyordu — yani "önceki listeye sadık kal" gerçek uygulamada
      hiç devreye girmiyordu (motor testlerinde ızgara doğrudan veriliyordu,
      o yüzden ölçümlerde görünmedi). */
-  MONTHS_DATA[CUR_YM]={ holidays:parseDays(document.getElementById('holidays').value), personnel:readPersonnel(),
+  MONTHS_DATA[CUR_YM]={ holidays:parseDays(document.getElementById('holidays').value), halfDays:parseDays(document.getElementById('halfDays').value), personnel:readPersonnel(),
     summary:prev.summary, lastNight:prev.lastNight, sonuc:prev.sonuc, girdi:prev.girdi, grid:prev.grid }; }
 
 /* ---- AYLAR ARASI DEVİR: önceki ayın SON GECE nöbetçileri ----
@@ -1026,17 +1088,22 @@ function applyStartNI(isimler){
 const ADALET_BASLANGIC='2026-8';   // ay anahtarı 'YYYY-M', ay 0 tabanlı (8=Eylül)
 const adaletAyNo=k=>{ const p=String(k).split('-'); return (+p[0])*12+(+p[1]); };
 const adaletteSayilir=k=>adaletAyNo(k)>=adaletAyNo(ADALET_BASLANGIC);
-function summarizeResult(r){ const m={}; (r.totals||[]).forEach(t=>{ m[t.name]={ nc:(t.nl||0)+(t.ns||0), wk:t.weekendNobet||0 }; }); return m; }
-function buildCarry(ym){ const by={}; let months=0; Object.keys(MONTHS_DATA).forEach(k=>{ if(k===ym||!adaletteSayilir(k))return; const s=MONTHS_DATA[k]&&MONTHS_DATA[k].summary; if(!s)return; months++;
-  Object.keys(s).forEach(n=>{ if(!by[n])by[n]={nc:0,wk:0}; by[n].nc+=s[n].nc||0; by[n].wk+=s[n].wk||0; }); }); return { byName:by, months:months }; }
+function summarizeResult(r){ const m={}; const tat=(r.days||[]).filter(d=>d.holiday).map(d=>d.day);
+  (r.totals||[]).forEach(t=>{ const g=(r.grid||{})[t.name]||{}; m[t.name]={ nc:(t.nl||0)+(t.ns||0), wk:t.weekendNobet||0, bt:tat.filter(d=>g[d]==='NL'||g[d]==='NS').length }; }); return m; }
+function buildCarry(ym){ const by={}; let months=0; Object.keys(MONTHS_DATA).forEach(k=>{ if(k===ym||!adaletteSayilir(k))return;
+  let s=MONTHS_DATA[k]&&MONTHS_DATA[k].summary; const so=MONTHS_DATA[k]&&MONTHS_DATA[k].sonuc;
+  if(so&&so.grid&&so.days&&so.totals){ try{ s=summarizeResult(so); }catch(e){} }   // eski özetlerde bayram sayısı yok
+  if(!s)return; months++;
+  Object.keys(s).forEach(n=>{ if(!by[n])by[n]={nc:0,wk:0,bt:0}; by[n].nc+=s[n].nc||0; by[n].wk+=s[n].wk||0; by[n].bt+=s[n].bt||0; }); }); return { byName:by, months:months }; }
 function showMonth(ym){
   const md=MONTHS_DATA[ym];
-  if(md){ document.getElementById('holidays').value=(md.holidays||[]).join(','); applyPersonnel(md.personnel||[]); }
+  if(md){ document.getElementById('holidays').value=gunMetni(md.holidays); document.getElementById('halfDays').value=gunMetni(md.halfDays); applyPersonnel(md.personnel||[]); }
   else { // YENİ ay: kadro önceki aydan taşınır, istekler + tatiller 0
     let prevList;
     if(CUR_YM!=null&&MONTHS_DATA[CUR_YM]) prevList=MONTHS_DATA[CUR_YM].personnel;
     else { const ks=Object.keys(MONTHS_DATA); prevList=ks.length?MONTHS_DATA[ks[ks.length-1]].personnel:readPersonnel(); }
-    document.getElementById('holidays').value=''; applyPersonnel(rosterOnly(prevList));
+    applyPersonnel(rosterOnly(prevList));
+    YENI_AY_TAKVIM=ym;   // yeni ay: Türkiye takvimi otomatik (aşağıda, ay seçimi kesinleşince)
     // Önceki ayın son gece nöbetçileri bu ayda N.İ ile başlasın (elle
     // işaretlemeye gerek kalmasın). Yalnız YENİ ay açılırken uygulanır;
     // var olan bir ayda kullanıcının kendi tercihi korunur.
@@ -1046,7 +1113,7 @@ function showMonth(ym){
       if(iş.length) setTimeout(()=>flash(iş.join(', ')+' → önceki ayın son nöbetçisi, N.İ ile başlatıldı'),60);
     }
   }
-  CUR_YM=ym; updateDateBounds(); captureMonth(); scheduleCapWarn();
+  CUR_YM=ym; if(YENI_AY_TAKVIM===ym){ YENI_AY_TAKVIM=null; takvimUygula(false); } tatilListeGoster(); updateDateBounds(); captureMonth(); scheduleCapWarn();
   // Ay Ayarları'nda hangi ay seçiliyse gelen kutusu da o ayı gösterir:
   // plan hangi ay için yapılıyorsa talepler de o aya ait olsun.
   REQ_GORUNEN=ym; renderRequests(); }
@@ -1056,7 +1123,7 @@ function onPeriodChange(){ captureMonth(); showMonth(ymNow());
 
 // ===== KAYDET =====
 function readCfg(){ return { year:parseInt(document.getElementById('year').value,10), month:parseInt(document.getElementById('month').value,10),
-  holidays:parseDays(document.getElementById('holidays').value), profile:curProfile(), personnel:readPersonnel() }; }
+  holidays:parseDays(document.getElementById('holidays').value), halfDays:parseDays(document.getElementById('halfDays').value), profile:curProfile(), personnel:readPersonnel() }; }
 /* ---- KAYDEDİLMEMİŞ DEĞİŞİKLİK KORUMASI ----
    Yarım saatlik izin girişi Kaydet'e basılmadan sekme kapanınca uçuyordu.
    Artık düzenlenebilir alanlarda her değişiklik "kirli" işaretlenir; kayıt
@@ -1162,7 +1229,7 @@ function oturumYenile(){ YENIDEN_GIRIS=true;
 
 // ===== ÜRETİM + RENDER =====
 let LAST=null, ALTS=[], ALT_I=0, PRECHECK_HTML='';
-function codeLabel(c){ const p=curProfile(); const base={M:p.mesaiLabel,NL:p.oncallLongLabel,NS:p.oncallShortLabel,NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UCI:'Ü.İ',OFF:'İ',GG:'G.G','':''};
+function codeLabel(c,gun){ const p=curProfile(); if(c==='M'&&gun&&gun.half) return p.halfDayLabel||'M8-12'; const base={M:p.mesaiLabel,NL:p.oncallLongLabel,NS:p.oncallShortLabel,NI:'N.İ',HT:'H.T',RT:'R.T',YI:'Yİ',UCI:'Ü.İ',OFF:'İ',GG:'G.G','':''};
   if(base[c]!==undefined)return base[c]; const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.label:''; }
 function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return cs?cs.color:null; }
 /* Üretim 80 deneme yapıyor ve tarayıcıyı kilitliyor; kalabalık ekipte
@@ -1180,7 +1247,7 @@ function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return c
 let URETICI=null, URETIM_NO=0;
 function ureticiAl(){
   if(URETICI!==null) return URETICI;
-  try{ URETICI=new Worker('asistan-worker.js?v=53'); }
+  try{ URETICI=new Worker('asistan-worker.js?v=54'); }
   catch(e){ URETICI=false; }        // false = "denendi, olmadı" (tekrar denenmesin)
   return URETICI;
 }
@@ -1210,11 +1277,11 @@ function generate(){
     uretimBitti(m.sonuc,cfg,ym);
   };
   w.onerror=()=>{ URETICI=false; if(gosterge)gosterge.style.display='none'; generate(); };
-  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=53'});
+  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=54'});
 }
 function uretimBitti(sonuc,cfg,ym){
   LAST=sonuc; ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0;
-  if(ym!=null){ if(!MONTHS_DATA[ym])MONTHS_DATA[ym]={holidays:cfg.holidays,personnel:cfg.personnel};
+  if(ym!=null){ if(!MONTHS_DATA[ym])MONTHS_DATA[ym]={holidays:cfg.holidays,halfDays:cfg.halfDays||[],personnel:cfg.personnel};
     MONTHS_DATA[ym].summary=summarizeResult(LAST);
     MONTHS_DATA[ym].sonuc=saklanacakSonuc(LAST);               // AÇILIŞTA GÖSTERİLECEK LİSTE
     MONTHS_DATA[ym].girdi=girdiOzeti(cfg);                      // "liste güncel mi" karşılaştırması için
@@ -1251,7 +1318,7 @@ function girdiOzeti(cfg){
   }));
   const pr=cfg.profile||{}; const kural={};
   Object.keys(pr).sort().forEach(a=>{ if(a!=='name') kural[a]=pr[a]; });
-  return { tatil:(cfg.holidays||[]).slice().sort((a,b)=>a-b).join(','), kisiler:k, kural:JSON.stringify(kural) };
+  return { tatil:(cfg.holidays||[]).slice().sort((a,b)=>a-b).join(',')+'|'+(cfg.halfDays||[]).slice().sort((a,b)=>a-b).join(','), kisiler:k, kural:JSON.stringify(kural) };
 }
 /* İki girdi özetini insan diliyle karşılaştırır. */
 function girdiFarki(eski,yeni){
@@ -1269,7 +1336,7 @@ function girdiFarki(eski,yeni){
     Object.keys(alanAd).forEach(alan=>{ if(String(e[alan])!==String(y[alan])){ (degisen[alan]=degisen[alan]||[]).push(y.ad); } }); });
   Object.keys(degisen).forEach(alan=>{ const L=degisen[alan];
     F.push(alanAd[alan]+' değişti: '+L.slice(0,3).join(', ')+(L.length>3?' ve '+(L.length-3)+' kişi daha':'')); });
-  if(eski.tatil!==yeni.tatil) F.push('resmî tatil günleri değişti');
+  if(eski.tatil!==yeni.tatil) F.push('tatil / yarım gün listesi değişti');
   if(eski.kural!==yeni.kural) F.push('kural ayarları değişti');
   if(eAd.length===yAd.length && eAd.join(',')!==yAd.join(',') && !eklenen.length && !cikan.length)
     F.push('kişi sırası değişti');
@@ -1459,11 +1526,13 @@ function toggleWhatif(){ const box=document.getElementById('panelExtra');
 // tek bir listenin tam ızgarası (özet + lejant + uyarılar)
 function gridHtml(r){
   const p=curProfile(); let h=`<div class="gridwrap"><table class="grid"><thead><tr><th class="name">Personel</th>`;
-  r.days.forEach(d=>{ h+=`<th class="${d.weekend||d.holiday?'wknd':''}">${d.day}<br><span class="muted">${d.dowName}</span></th>`; });
+  const TAD=(AsistanScheduler.ayTatilleri?AsistanScheduler.ayTatilleri(r.year,r.month).adlar:{});
+  r.days.forEach(d=>{ const ad=TAD[d.day]||(d.holiday?'Resmi tatil':(d.half?'Yarım gün':''));
+    h+=`<th class="${d.weekend||d.holiday?'wknd':''}${d.half?' yarim':''}"${ad?` title="${escapeHtml(ad)}"`:''}>${d.day}<br><span class="muted">${d.half?'½ ':''}${d.dowName}</span></th>`; });
   h+=`<th class="tot">Hedef</th><th class="tot">Top.</th><th class="tot">Fark</th><th class="tot">${p.mesaiLabel}</th><th class="tot">${p.oncallLongLabel}</th><th class="tot">${p.oncallShortLabel}</th><th class="tot">Nİ</th><th class="tot">Ü.İ</th><th class="tot">HSn</th></tr></thead><tbody>`;
   r.totals.forEach((t,ti)=>{ const g=r.grid[t.name]; h+=`<tr><td class="name">${escapeHtml(t.name)}${t.noNobet?' <span class="muted" style="font-weight:400;font-size:9px">(Sorumlu)</span>':''}</td>`;
     r.days.forEach(d=>{ const c=g[d.day]||''; const cc=customColor(c);
-      h+=`<td class="${cc?'':c}" ${cc?`style="background:${cc}"`:''} data-ti="${ti}" data-d="${d.day}" onclick="editCell(this)">${codeLabel(c)}</td>`; });
+      h+=`<td class="${cc?'':c}" ${cc?`style="background:${cc}"`:''} data-ti="${ti}" data-d="${d.day}" onclick="editCell(this)">${codeLabel(c,d)}</td>`; });
     const fc=t.fark===0?'good':'bad';
     h+=`<td class="tot">${t.target}</td><td class="tot">${t.hours}</td><td class="tot ${fc}">${t.fark>0?'+':''}${t.fark}</td><td class="tot">${t.mesai}</td><td class="tot">${t.nl}</td><td class="tot">${t.ns}</td><td class="tot">${t.ni}</td><td class="tot">${t.uci}</td><td class="tot">${t.weekendNobet}</td></tr>`; });
   function dc(day){let nob=0,gun=0;r.totals.forEach(t=>{const c=r.grid[t.name][day];if(c==='NL'||c==='NS')nob++;const cs=customShiftsOf().find(s=>s.code===c);const cd=(c==='M')||(c==='NL'&&p.oncallLongDaytime)||(c==='NS'&&p.oncallShortDaytime)||(cs&&cs.daytime);if(!t.noNobet&&cd)gun++;});return{nob,gun};}
@@ -1473,7 +1542,7 @@ function gridHtml(r){
   r.days.forEach(d=>{const c=dc(d.day);const need=(d.weekend||d.holiday)?p.weekendOncallPerDay:p.oncallPerDay;h+=`<td class="tot ${c.nob<need?'bad':'good'}">${c.nob}</td>`;});
   h+=`<td class="tot" colspan="9"></td></tr></tbody></table></div>`;
   h+=`<div class="legend">
-    <span><i class="sw" style="background:var(--c-M)"></i> ${p.mesaiLabel}</span>
+    <span><i class="sw" style="background:var(--c-M)"></i> ${p.mesaiLabel}</span>${r.days.some(d=>d.half)?`<span><i class="sw" style="background:var(--c-M);opacity:.55"></i> ${escapeHtml(p.halfDayLabel||'M8-12')} (½ gün)</span>`:''}
     <span><i class="sw" style="background:var(--c-NL)"></i> ${p.oncallLongLabel}</span>
     <span><i class="sw" style="background:var(--c-NS)"></i> ${p.oncallShortLabel}</span>
     <span><i class="sw" style="background:var(--c-NI)"></i> N.İ</span><span><i class="sw" style="background:var(--c-YI)"></i> Yıllık izin</span><span><i class="sw" style="background:var(--c-GG)"></i> Geçici görev</span>
@@ -1504,6 +1573,9 @@ const UYARI_KALIP=[
       const top=xs.reduce((a,x)=>a+(+x[2]),0);
       return `💡 Gündüz üst sınırı (${xs[0][3]} kişi) yüzünden <b>${xs.length} kişi toplam ${top} saat eksik</b> kaldı: `
         +xs.map(x=>x[1]+' '+x[2]+' s').join(', ')+'.'+ayarDuzeltBtn('Gündüz sınırını kaldır',{daytimeMax:0}); } },
+  { re:/^💡 (.+?): (\d+) saat eksik — yarım gün \((\d+) saat\)/, yaz:(xs)=>
+      `💡 Yarım gün yüzünden <b>${xs.length} kişi ${xs[0][2]} saat eksik</b> (o gün nöbette ya da dinlenmede oldukları için saat 8’in katlarıyla tam dolmuyor; kural ihlali değil): `
+        +xs.map(x=>x[1]).join(', ')+'.' },
   { re:/^💡 (.+?): gün aşırı nöbet \((.+?)\. günler\)/, yaz:(xs)=>
       `💡 <b>${xs.length} kişide gün aşırı nöbet</b> kaçınılamadı: `+xs.map(x=>x[1]+' ('+x[2]+')').join(', ')+'. Uygun biriyle elle takas edebilirsiniz.' },
   { re:/^💡 (.+?): planlı fazla mesai (\d+) saat/, yaz:(xs)=>
@@ -1629,7 +1701,7 @@ function editCell(td){ if(!LAST||td.querySelector('select'))return; markDirty();
 // ===== DIŞA AKTARMA =====
 function exportCSV(){ if(!LAST){alert('Önce liste oluşturun.');return;} const r=LAST,p=curProfile();
   const head=['Personel'].concat(r.days.map(d=>d.day+' '+d.dowName)).concat(['Hedef','Toplam','Fark',p.mesaiLabel,p.oncallLongLabel,p.oncallShortLabel,'Nİ','Üİ','HSn']);
-  const rows=[head]; r.totals.forEach(t=>{ const g=r.grid[t.name]; const row=[t.name+(t.noNobet?' (Sorumlu)':'')].concat(r.days.map(d=>codeLabel(g[d.day]||'')));
+  const rows=[head]; r.totals.forEach(t=>{ const g=r.grid[t.name]; const row=[t.name+(t.noNobet?' (Sorumlu)':'')].concat(r.days.map(d=>codeLabel(g[d.day]||'',d)));
     row.push(t.target,t.hours,(t.fark>0?'+':'')+t.fark,t.mesai,t.nl,t.ns,t.ni,t.uci,t.weekendNobet); rows.push(row); });
   const csv=rows.map(rw=>rw.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
   dl(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),fname('csv')); }
@@ -1640,7 +1712,7 @@ function exportXLS(){ if(!LAST){alert('Önce liste oluşturun.');return;} const 
   r.days.forEach(d=>{h+=`<th style="background:${d.weekend||d.holiday?'#fde68a':'#e5e7eb'}">${d.day} ${d.dowName}</th>`;});
   h+='<th>Hedef</th><th>Toplam</th><th>Fark</th><th>'+p.mesaiLabel+'</th><th>'+p.oncallLongLabel+'</th><th>'+p.oncallShortLabel+'</th><th>Nİ</th><th>Üİ</th><th>HSn</th></tr>';
   r.totals.forEach(t=>{ const g=r.grid[t.name]; h+=`<tr><td style="font-weight:bold">${escapeHtml(t.name)}${t.noNobet?' (Sorumlu)':''}</td>`;
-    r.days.forEach(d=>{const c=g[d.day]||'';h+=`<td style="${col[c]?('background:'+col[c]+';color:#fff;font-weight:bold'):''};text-align:center">${codeLabel(c)}</td>`;});
+    r.days.forEach(d=>{const c=g[d.day]||'';h+=`<td style="${col[c]?('background:'+col[c]+';color:#fff;font-weight:bold'):''};text-align:center">${codeLabel(c,d)}</td>`;});
     h+=`<td align=center>${t.target}</td><td align=center>${t.hours}</td><td align=center>${(t.fark>0?'+':'')+t.fark}</td><td align=center>${t.mesai}</td><td align=center>${t.nl}</td><td align=center>${t.ns}</td><td align=center>${t.ni}</td><td align=center>${t.uci}</td><td align=center>${t.weekendNobet}</td></tr>`; });
   h+='</table>'; dl(new Blob(['﻿<html><head><meta charset="utf-8"></head><body>'+h+'</body></html>'],{type:'application/vnd.ms-excel'}),fname('xls')); }
 function fname(ext){ const p=curProfile(); return (p.name||'liste').replace(/\s+/g,'_')+'_'+MONTHS[parseInt(document.getElementById('month').value,10)]+'_'+document.getElementById('year').value+'.'+ext; }
@@ -1683,7 +1755,7 @@ function anonimTestCikar(){
   Object.keys(MONTHS_DATA).forEach(ym=>{
     const m=MONTHS_DATA[ym]||{};
     aylar[ym]={
-      holidays:(m.holidays||[]).slice(),
+      holidays:(m.holidays||[]).slice(), halfDays:(m.halfDays||[]).slice(),
       personnel:(m.personnel||[]).map(k=>({
         name:takma(k.name),
         noNobet:!!k.noNobet, dayOnly:!!k.dayOnly, senior:!!k.senior, startNI:!!k.startNI,
@@ -1742,7 +1814,7 @@ function applyCfgServer(c){
   else if(c&&c.personnel&&c.personnel.length){ const ym=c.year+'-'+c.month; MONTHS_DATA[ym]={holidays:c.holidays||[],personnel:c.personnel}; }   // eski tek-cfg göçü
   if(c&&c.year!=null)y=c.year; if(c&&c.month!=null)m=c.month;
   document.getElementById('year').value=y; document.getElementById('month').value=m;
-  if(!Object.keys(MONTHS_DATA).length){ resetNames(); document.getElementById('holidays').value=''; CUR_YM=y+'-'+m; captureMonth(); return; }   // yeni/boş birim
+  if(!Object.keys(MONTHS_DATA).length){ resetNames(); CUR_YM=y+'-'+m; takvimUygula(false); tatilListeGoster(); captureMonth(); return; }   // yeni/boş birim
   showMonth(y+'-'+m); }
 async function asInit(){
   try{
