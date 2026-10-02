@@ -357,3 +357,17 @@ tahmin gerçek motorla Temmuz 408 s / Ekim 232 s / 536 s örneklerinde birebir t
   Ceza: ilk fazla mesai 7500 (bir kez) + kişi başı 2500 + 70/saat + 2×saat². İzinliyken 0-64 → 8-40.
 - **Bayram nöbeti rotasyonu:** resmi tatil nöbetleri ayrı sayılır ve aylar arası taşınır (`carry.bt`);
   geçen bayram tutan bu bayramda geri planda kalır.
+
+## Ek 4 (2026-10-02, v48 / motor v55) — Son cila, kademeli ölçü, kişiye özel tavan
+
+- **Son cila (`sonCila`)**: seçilen listede tek hücre hamleleri (gereksiz mesai sil, 24→16, eksik saate mesai,
+  16→24 ayar 24 ise) + sorunlu nöbetler için iki kişilik devir (saatler doğrudan dengelenir). Yalnız
+  "önce kural ihlali, eşitse denge+sadakat" ölçüsüyle iyileştiren hamle kalır. İstekler, izin dönüşü zorunlu
+  günü, izin öncesi dinlenme korunur. Sebep: liste kurulduktan sonra çalışan zorunlu adımlar fazla mesai
+  yaratıyor, kaldıran adım yoktu (Eylül: +8 saatli kişinin gündüzü 4 kişilik günde silinebilir mesaisi).
+- **Planlı fazla mesai** ("gerekirse fazla mesai" açık) artık ölçüde: yalnız saat bedeli (8 saat ≈ 690 < gündüz
+  açığı 1000+). Önceden bedavaydı; cila herkese mesai ekliyordu.
+- **Kademeli uyarı ölçüsü**: EKSİK saat, boşta kalma, üst üste çalışma, zincir, tavanlar ve gündüz açığı artık
+  aşım miktarıyla ölçülüyor (arama aşamasıyla aynı). Düz sayınca ihlal adım adım küçültülemiyordu.
+- **Kişiye özel aylık nöbet tavanı** (`personnel[].maxNobet`, Ayrıntılar'da): kurulum, kapsama garantisi (son çare),
+  nöbet devri ve cila tavanı gözetir; tavanlı kişi nöbet adaletinin dışında.

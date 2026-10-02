@@ -322,6 +322,41 @@ section('Bayram nöbeti rotasyonu: geçen bayram tutan bu bayram öncelikli değ
   ok(eski / 4 < digerOrt, 'geçen bayram tutanların ortalaması (' + (eski / 4).toFixed(2) + ') diğerlerinden (' + digerOrt.toFixed(2) + ') düşük olmalı');
 })();
 
+section('Son cila: fazla mesaili kişinin gereksiz mesaisi kalmaz');
+(function () {
+  [[2026, 4, [1, 19, 27, 28, 29], [26], 12, true], [2026, 8, [], [], 11, true], [2026, 1, [], [], 10, false]].forEach(function (c) {
+    var per = people(c[4], { 1: { noNobet: true }, 3: { leaveYI: [8, 9, 10, 11, 12] } });
+    var P = S.defaultProfile(); P.overtimeForCounts = c[5];
+    var r = S.buildSchedule({ year: c[0], month: c[1], holidays: c[2], halfDays: c[3], personnel: per, profile: P, __attempts: 20, __lsIter: 3000 });
+    var kapsar = function (x) { return x === 'M' || x === 'NL'; };
+    var gunduz = function (d) { return r.totals.filter(function (t) { return !t.noNobet && kapsar(r.grid[t.name][d]); }).length; };
+    var sert = function (rr) { return rr.warnings.filter(function (w) { return w.indexOf('💡') !== 0; }); };
+    var kacan = [];
+    r.totals.filter(function (t) { return t.fark >= 8; }).forEach(function (t) {
+      r.days.forEach(function (dd) {
+        if (!dd.workday || r.grid[t.name][dd.day] !== 'M') return;
+        var ihtiyac = (P.daytimeExtraDays.indexOf(dd.dow) >= 0) ? P.daytimeExtra : P.daytimeMin;
+        if (gunduz(dd.day) - 1 < ihtiyac) return;
+        var g2 = {}; Object.keys(r.grid).forEach(function (n) { g2[n] = Object.assign({}, r.grid[n]); }); g2[t.name][dd.day] = 'UCI';
+        var r2 = S.recompute(Object.assign({}, r, { grid: g2 }));
+        var yeni = sert(r2).filter(function (w) { return sert(r).indexOf(w) < 0 && !/FAZLA MESAİ/.test(w); });
+        if (!yeni.length) kacan.push(t.name + ' ' + dd.day + '. gün');
+      });
+    });
+    ok(kacan.length === 0, (c[1] + 1) + '/' + c[0] + ': silinebilir mesaisi kalan fazla mesaili kişi olmamalı (' + kacan.join(', ') + ')');
+  });
+})();
+
+section('Kişiye özel nöbet tavanı');
+(function () {
+  var r = S.buildSchedule({ year: Y, month: M, holidays: [15], personnel: people(14, { 3: { maxNobet: 2 }, 4: { maxNobet: 3 } }), profile: S.defaultProfile(), __attempts: 30, __lsIter: 4000 });
+  var n3 = r.totals[2].nl + r.totals[2].ns, n4 = r.totals[3].nl + r.totals[3].ns;
+  ok(n3 <= 2, 'tavanı 2 olan en fazla 2 nöbet almalı (' + n3 + ')');
+  ok(n4 <= 3, 'tavanı 3 olan en fazla 3 nöbet almalı (' + n4 + ')');
+  ok(r.totals[2].fark === 0 && r.totals[3].fark === 0, 'tavanlı kişilerin saati mesaiyle dolmalı (' + r.totals[2].fark + ', ' + r.totals[3].fark + ')');
+  checkInvariants(r, S.defaultProfile(), 'tavan');
+})();
+
 section('Ön analiz: çelişen ayarı liste üretmeden söyler');
 (function () {
   var cfg = { year: Y, month: M, holidays: [], personnel: people(12) };

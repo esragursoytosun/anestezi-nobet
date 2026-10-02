@@ -660,9 +660,9 @@
   <button class="sm sec" onclick="document.getElementById('output').scrollIntoView({behavior:'smooth',block:'start'})">Listeye git</button>
   <button class="sm sec" onclick="document.getElementById('statusBar').style.display='none'" title="Şeridi gizle">✕</button>
 </div>
-<div class="foot">Nöbet Planlama Asistanı · <b>v47</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
+<div class="foot">Nöbet Planlama Asistanı · <b>v48</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=54"></script>
+<script src="asistan-scheduler.js?v=55"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -917,6 +917,7 @@ function detayOzetGuncelle(row){ const el=row&&row.querySelector('.pdetay-ozet')
   if(q('.p-onlynobet').checked) L.push('Sadece nöbet');
   if(q('.p-startni').checked) L.push('N.İ ile başlar');
   if(q('.p-gg-s').value) L.push('Geçici görev');
+  if(+q('.p-maxnobet').value>0) L.push('en fazla '+q('.p-maxnobet').value+' nöbet');
   const istek=['.p-onlyday','.p-onlyn16','.p-onlyn24'].reduce((n,s)=>n+((q(s).value||'').match(/\d+/g)||[]).length,0);
   if(istek) L.push(istek+' gün isteği');
   el.textContent=L.length?(' · '+L.join(', ')):''; }
@@ -936,6 +937,8 @@ function addPerson(name){
         <label class="chk" title="Önceki ayın son nöbetçisi: ayın 1. günü N.İ (dinlenme) başlar. Liste üretildiğinde otomatik işaretlenir."><input type="checkbox" class="p-startni"> Aya N.İ ile başla</label>
         <label class="chk" title="TÜM AY yalnızca gündüz vardiyası; nöbet tutmaz AMA gündüz sayısına DAHİL EDİLİR."><input type="checkbox" class="p-dayonly" onchange="pmode(this)"> Sadece gündüz</label>
         <label class="chk" title="TÜM AY yalnızca nöbet; hiç gündüz mesaisi (M) yazılmaz."><input type="checkbox" class="p-onlynobet" onchange="pmode(this)"> Sadece nöbet</label>
+        <div class="pdetay-alan"><label>Ayda en fazla nöbet (boş = sınır yok)</label>
+          <input type="number" class="p-maxnobet" min="0" placeholder="örn. 3" title="Kişiye özel tavan (yarı zamanlı, sağlık durumu vb.). Kalan nöbetler diğerlerine dağıtılır; kapsama için mecbur kalınırsa aşılır ve uyarı çıkar." style="width:90px"></div>
         <div class="pdetay-alan"><label>Geçici görev (başka kurumda)</label>
           <div class="daterange"><input type="date" class="p-gg-s" title="Geçici görev başlangıcı"><span>–</span>
             <input type="date" class="p-gg-e" title="Geçici görev bitişi"></div></div>
@@ -1015,7 +1018,8 @@ function readPersonnel(){
     leaveYI:leaveDaysOf(r), yiRanges:rangesOf(r),
     ggRange:ggRangeOf(r), ggDays:ggDaysOf(r),
     offReq:parseDays(r.querySelector('.p-off').value), onlyNobet:r.querySelector('.p-onlynobet').checked,
-    onlyDay:parseDays(r.querySelector('.p-onlyday').value), onlyN16:parseDays(r.querySelector('.p-onlyn16').value), onlyN24:parseDays(r.querySelector('.p-onlyn24').value)
+    onlyDay:parseDays(r.querySelector('.p-onlyday').value), onlyN16:parseDays(r.querySelector('.p-onlyn16').value), onlyN24:parseDays(r.querySelector('.p-onlyn24').value),
+    maxNobet:Math.max(0,parseInt(r.querySelector('.p-maxnobet').value,10)||0)
   })).filter(p=>p.name!=='?');
 }
 function applyPersonnel(list){
@@ -1029,6 +1033,7 @@ function applyPersonnel(list){
     r.querySelector('.yi-list').innerHTML=ranges.map(x=>yiRangeHtml(x.s,x.e)).join(''); updateYiX(r.querySelector('.leave'));
     r.querySelector('.p-onlynobet').checked=!!p.onlyNobet;
     r.querySelector('.p-off').value=(p.offReq||[]).join(','); r.querySelector('.p-onlyday').value=(p.onlyDay||[]).join(','); r.querySelector('.p-onlyn16').value=(p.onlyN16||[]).join(','); r.querySelector('.p-onlyn24').value=(p.onlyN24||[]).join(',');
+    r.querySelector('.p-maxnobet').value=p.maxNobet>0?p.maxNobet:'';
     detayOzetGuncelle(r);
   });
   updateDateBounds();
@@ -1041,7 +1046,7 @@ let MONTHS_DATA={};          // "Y-M" -> {holidays:[], personnel:[...]}
 let CUR_YM=null;
 function ymNow(){ return document.getElementById('year').value+'-'+document.getElementById('month').value; }
 // kimlik (isim, Sorumlu, Haftalık izin günü) korunur; aylık İSTEKLER sıfırlanır
-function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, dayOnly:p.dayOnly, onlyNobet:p.onlyNobet, senior:p.senior, offDay:p.offDay,
+function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, dayOnly:p.dayOnly, onlyNobet:p.onlyNobet, senior:p.senior, offDay:p.offDay, maxNobet:p.maxNobet||0,
   startNI:false, yiRanges:[], leaveYI:[], offReq:[], onlyDay:[], onlyN16:[],
   ggRange:p.ggRange||null })); }   // geçici görev tarih aralığı aylara yayılır, taşınır
 function captureMonth(){ if(CUR_YM==null)return; const prev=MONTHS_DATA[CUR_YM]||{};
@@ -1247,7 +1252,7 @@ function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return c
 let URETICI=null, URETIM_NO=0;
 function ureticiAl(){
   if(URETICI!==null) return URETICI;
-  try{ URETICI=new Worker('asistan-worker.js?v=54'); }
+  try{ URETICI=new Worker('asistan-worker.js?v=55'); }
   catch(e){ URETICI=false; }        // false = "denendi, olmadı" (tekrar denenmesin)
   return URETICI;
 }
@@ -1277,7 +1282,7 @@ function generate(){
     uretimBitti(m.sonuc,cfg,ym);
   };
   w.onerror=()=>{ URETICI=false; if(gosterge)gosterge.style.display='none'; generate(); };
-  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=54'});
+  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=55'});
 }
 function uretimBitti(sonuc,cfg,ym){
   LAST=sonuc; ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0;
@@ -1314,7 +1319,7 @@ function girdiOzeti(cfg){
     yi:(x.leaveYI||[]).slice().sort((a,b)=>a-b).join(','),
     gg:(x.ggDays||[]).slice().sort((a,b)=>a-b).join(','),
     bos:(x.offReq||[]).slice().sort((a,b)=>a-b).join(','),
-    ist:[(x.onlyDay||[]).join(','),(x.onlyN16||[]).join(','),(x.onlyN24||[]).join(',')].join('|')
+    ist:[(x.onlyDay||[]).join(','),(x.onlyN16||[]).join(','),(x.onlyN24||[]).join(',')].join('|'), tavan:x.maxNobet||0
   }));
   const pr=cfg.profile||{}; const kural={};
   Object.keys(pr).sort().forEach(a=>{ if(a!=='name') kural[a]=pr[a]; });
@@ -1763,7 +1768,7 @@ function anonimTestCikar(){
         leaveYI:(k.leaveYI||[]).slice(), yiRanges:(k.yiRanges||[]).map(x=>({s:x.s,e:x.e})),
         ggRange:k.ggRange?{s:k.ggRange.s,e:k.ggRange.e}:null, ggDays:(k.ggDays||[]).slice(),
         offReq:(k.offReq||[]).slice(), onlyDay:(k.onlyDay||[]).slice(),
-        onlyN16:(k.onlyN16||[]).slice(), onlyN24:(k.onlyN24||[]).slice()
+        onlyN16:(k.onlyN16||[]).slice(), onlyN24:(k.onlyN24||[]).slice(), maxNobet:k.maxNobet||0
       }))
     };
   });
