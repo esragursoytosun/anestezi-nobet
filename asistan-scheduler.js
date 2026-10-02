@@ -844,6 +844,16 @@
           var Sp = people[pi], se = ONCEKI[Sp.name]; if (!se) continue;
           var sk = se[dd.day];
           if (sk !== 'NL' && sk !== 'NS') continue;
+          /* Önceki listedeki nöbet ŞEKLİ değil yalnız KİŞİ korunur: eski
+             liste başka ayarlarla (örn. gündüz tavanı) zorunlu kalınıp
+             kısaltılmış nöbetler taşıyabilir. Şekil kopyalanırsa bu sapmalar
+             sonsuza dek kalıyordu (ölçüldü: gerekmediği hâlde 42 nöbet 16s).
+             Gerekirse motor kısaltmayı kendi yeniden yapar. Kişinin açık
+             tür isteği varsa o geçerli.
+             Adayların YARISI şekli kopyalar, yarısı sıfırlar; puanlama
+             seçer: gerekli kısaltmalar korunur (küçük istek = küçük
+             değişiklik), gereksizler atılır. */
+          if (variant % 4 === 2 && P.shiftTypePref !== 'serbest' && !Sp.onlyN16.has(dd.day) && !Sp.onlyN24.has(dd.day)) sk = dayType(dd);
           if (sk === 'NS' && !P.useShortOncall) continue;
           if (!tohumUygun(Sp, dd, sk)) continue;
           placeOncall(Sp, dd, sk);
@@ -1959,10 +1969,18 @@
 
   // ===== MULTI-START + ALTERNATİFLER =====
   function scoreResult(r, P, carry) {
-    var s = 0;
-    // Denge öncelikleri: aday SIRALAMASI da cilanın kullandığı ölçüyle aynı olmalı
     var SP = r.profile || P || {};
     var SAG = { hs: SP.weightWeekend || 1, nb: SP.weightDuty || 1, ya: SP.weightSpread || 1, bo: SP.weightIdle || 1, ri: SP.weightRhythm || 1 };
+    return uyariPuani(r, SAG) + dengePuani(r, P, carry, SP, SAG);
+  }
+  /* KURAL İHLALLERİNİN ağırlıklı toplamı. Aday seçimi önce BUNA bakar:
+     "önceki listeye sadakat" ya da adalet, hücre başına küçük cezalar
+     toplanınca bir kural ihlalini geçebiliyordu (ölçüldü: tek boş gün
+     isteğinden sonra ihlalsiz aday dururken "5 gün işe gelmiyor" uyarılı
+     sadık aday seçildi). Kural her zaman önce gelir. */
+  function uyariPuani(r, SAG) {
+    if (!SAG) { var SP0 = r.profile || {}; SAG = { bo: SP0.weightIdle || 1 }; }
+    var s = 0;
     (r.warnings || []).forEach(function (w) {
       if (w.indexOf('💡') === 0) return;
       // Ağırlıklar W'den — cilanın içindeki penalty() ile AYNI ölçü (bkz. W tanımı)
@@ -1986,7 +2004,27 @@
       else if (/gündüzde \d+ kişi/.test(w)) s += W.gunduzGun;
       else s += W.digerUyari;
     });
+    return s;
+  }
+  function dengePuani(r, P, carry, SP, SAG) {
+    var s = 0;
     var wd = (r.days || []).filter(function (d) { return d.workday; }).map(function (d) { return d.day; });
+    /* NÖBET ŞEKLİ SAPMASI aday sıralamasında da sayılır (cila zaten
+       sayıyordu). Sayılmadığında, önceki listeden gereksiz kısa nöbetleri
+       kopyalayan aday, onları düzelten adayı "daha sadık" diye yeniyordu. */
+    var SKL = SP.shiftTypePref === 'serbest' ? 0 : (SP.shiftTypePref === 'asla' ? 20000 : W.sekilSapma);
+    if (SKL) {
+      var kisaVar = SP.useShortOncall !== false;
+      var hiT = (SP.defaultOncall === 'short' && kisaVar) ? 'NS' : 'NL', hsT = (SP.weekendOncall === 'short' && kisaVar) ? 'NS' : 'NL';
+      (r.totals || []).forEach(function (t) {
+        var g = r.grid[t.name] || {}, n16 = t.onlyN16 || [], n24 = t.onlyN24 || [];
+        (r.days || []).forEach(function (dd) {
+          var c = g[dd.day]; if (c !== 'NL' && c !== 'NS') return;
+          if (n16.indexOf(dd.day) >= 0 || n24.indexOf(dd.day) >= 0) return;
+          if (c !== ((dd.weekend || dd.holiday) ? hsT : hiT)) s += SKL;
+        });
+      });
+    }
     (r.totals || []).forEach(function (t) {
       if (t.noNobet) return; var locked = {}; (t.lockedOff || []).forEach(function (d) { locked[d] = 1; });
       var g = r.grid[t.name] || {}, run = 0;
@@ -2054,14 +2092,20 @@
     // aylar arası adalet (rotasyon hafızası) — profil kapatmışsa aday sıralaması da kullanmaz
     var carryMap = (P.carryFairness !== false && config.carry && config.carry.byName) || null;
     // FAZ 1 — ÇEŞİTLİLİK: LS kapalı (hızlı), farklı rastgele tie-break'lerle aday üret.
+    // Önce kural ihlali ağırlığı, eşitse denge + sadakat (bkz. uyariPuani)
+    function kuralOnce(a, b) {
+      if (a.__uy == null) a.__uy = uyariPuani(a);
+      if (b.__uy == null) b.__uy = uyariPuani(b);
+      return (a.__uy - b.__uy) || (a.__score - b.__score);
+    }
     var cands = [];
     for (var v = 0; v < attempts; v++) { var r = buildOne(mk(v, 0)); r.__variant = v; r.__score = scoreResult(r, P, carryMap) + sadakatCezasi(r); r.__sig = sigOf(r); cands.push(r); }
-    cands.sort(function (a, b) { return a.__score - b.__score; });
+    cands.sort(kuralOnce);
     var seen = {}, picks = [];
     for (var i = 0; i < cands.length && picks.length < maxAlts; i++) if (!seen[cands[i].__sig]) { seen[cands[i].__sig] = 1; picks.push(cands[i]); }
     // FAZ 2 — CİLA: seçilen adayları YEREL ARAMA/TAVLAMA ile iyileştir (aynı variant -> aynı başlangıç + LS).
     var alts = picks.map(function (pk) { var r = buildOne(mk(pk.__variant, lsIter)); r.__variant = pk.__variant; r.__score = scoreResult(r, P, carryMap) + sadakatCezasi(r); r.__sig = sigOf(r); return r; });
-    alts.sort(function (a, b) { return a.__score - b.__score; });
+    alts.sort(kuralOnce);
     /* FAZ 2.5 — TIRMANDIRMA: en iyi aday hâlâ uyarı taşıyorsa bütçe BÜYÜTÜLÜR.
        Kolay aylar ilk turda çözülür ve buraya hiç girmez (süre değişmez);
        zorlu aylarda ise kullanıcı yarım saniye yerine 2-3 saniye bekler ama
@@ -2076,7 +2120,7 @@
           r.__variant = a.__variant; r.__score = scoreResult(r, P, carryMap) + sadakatCezasi(r); r.__sig = sigOf(r); return r;
         });
         alts = yeni.concat(alts);
-        alts.sort(function (a, b) { return a.__score - b.__score; });
+        alts.sort(kuralOnce);
         return !uyariVar(alts[0]);          // temizlendiyse ikinci kata gerek yok
       });
     }
@@ -2319,6 +2363,9 @@
     var ns = kisiBasiNobet.map(function (x) { return x.n; });
     return {
       isGunu: nWork, gun: nDays, nobet: slot, nobetHaftaSonu: slotHs, nobetci: nobetciler.length,
+      hedef: P.targetPerWorkday * nWork, hiSaat: hiSaat, hsSaat: hsSaat,
+      gunduzSinirEksik: (P.daytimeMax > 0 && nWork) ? Math.max(0, Math.round((gunduzArz - P.daytimeMax * nWork) * mh)) : 0,
+      gunAsiriRiskli: sikisik.map(function (x) { return x.k.ad; }),
       nobetKisiBasi: ns.length ? { min: Math.min.apply(null, ns), max: Math.max.apply(null, ns), ort: slot / nobetciler.length } : null,
       gunduzOrt: gunduzOrt, gunduzIstenen: nWork ? gunduzIhtiyac / nWork : 0,
       bulgular: B

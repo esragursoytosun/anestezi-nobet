@@ -16,3 +16,5 @@ jobs:
           node-version: '20'
       - name: Regresyon testleri (motor invariant + senaryolar)
         run: node test-asistan.js
+      - name: Sunucu testleri (giriş, oturum süresi, deneme freni, sürüm geçmişi)
+        run: node test-sunucu.js

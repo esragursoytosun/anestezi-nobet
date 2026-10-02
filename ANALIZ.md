@@ -327,3 +327,18 @@ Arayüz: seviye çubuğu, sol menü ve özet/düzenle ikiliği kaldırıldı. Te
 Alan id'leri aynı kaldı, kayıtlı profiller olduğu gibi çalışır.
 `AsistanScheduler.onAnaliz(cfg)` liste üretmeden (ms) saat dengesini hesaplar;
 tahmin gerçek motorla Temmuz 408 s / Ekim 232 s / 536 s örneklerinde birebir tuttu.
+
+## Ek 2 (2026-10-02, v46 / motor v53) — Profesyonel kullanım turu
+
+- **Kurallar:** her ayarın altında canlı "bu ay ne anlama geliyor" satırı (`kuralEtkileri`), sorunlu olanlar sarı.
+- **Motor — bayat liste:** önceki listeye sadakat, eski ayarlarla zorunlu kalınmış kısa nöbetleri sonsuza
+  dek kopyalıyordu (ölçüldü: gerekmediği hâlde 42 nöbet 16s, "0 hücre değişti"). Sıcak başlangıç adaylarının
+  yarısı nöbet şeklini sıfırlıyor; aday sıralaması artık şekil sapmasını da sayıyor.
+- **Motor — kural önce:** aday seçimi önce kural ihlali ağırlığına (`uyariPuani`), eşitse denge+sadakate bakar.
+  Hücre başı küçük sadakat cezaları toplanınca bir ihlali geçebiliyordu.
+- **Güvenlik:** canlıda koddaki varsayılan yönetici şifresi/imza anahtarı kapalı; oturum 7 gün; X-Auth'ta düz
+  şifre kabulü kaldırıldı; giriş deneme freni; isimler HTML'den kaçışlı; yönetici kendi şifresini değiştirebilir.
+- **Veri güvenliği:** her kayıt sunucuda sürüm olarak saklanır (birim başı 20, ayrı belgeler), "Sürüm geçmişi"
+  ile açılıp Kaydet'le geri yüklenir. Oturum düşünce sayfa yenilenmez (iş kaybolmaz); çakışmada kullanıcının
+  hâli yedek dosyası olarak indirilebilir; kayıt hataları kırmızı ve kalıcı.
+- Testler: `test-sunucu.js` (sahte Mongo ile giriş/oturum/fren/geçmiş/şifre) CI'a eklendi.

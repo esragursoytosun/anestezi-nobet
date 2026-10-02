@@ -45,8 +45,11 @@ Bu repo `git push` ile güncel. Render bu repoyu otomatik çeker.
    - **Key:** `MONGODB_URI` · **Value:** (1. adımdaki bağlantı dizesi)
      *(Atlas kullanmıyorsanız bu adımı atlayın; dosya moduna düşer.)*
    - **Key:** `APP_PASSWORD` · **Value:** (yönetici şifresi — kendi belirlediğiniz gizli bir söz)
-     ❗ **ÖNEMLİ:** Bunu mutlaka değiştirin. Ayarlamazsanız varsayılan `anestezi2026` olur ve bu kod
-     herkese açık repoda görünür. Bu, **yönetici** (`admin`) kullanıcısının ilk şifresidir.
+     ❗ **ZORUNLU (Vercel):** Ayarlanmazsa ana yönetici (`admin`) girişi **kapalıdır** — koddaki
+     varsayılan şifre yalnız yerel geliştirmede geçerlidir (repo herkese açık olduğu için).
+   - *(Önerilen)* **Key:** `SESSION_SECRET` · **Value:** uzun rastgele bir metin. Oturum imzası içindir;
+     yoksa `APP_PASSWORD` kullanılır. Değiştirilirse herkes bir kez yeniden giriş yapar.
+     Oturumlar 7 gün geçerlidir; aynı kullanıcı adına 15 dk'da 8 hatalı denemeden sonra 15 dk kilit uygulanır.
    - *(İsteğe bağlı)* **Key:** `ADMIN_USER` · **Value:** yönetici kullanıcı adı (varsayılan `admin`).
 
    **Giriş ve kullanıcılar:** İlk girişte **kullanıcı adı: `admin`** (veya `ADMIN_USER`), **şifre: `APP_PASSWORD`**.

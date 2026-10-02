@@ -11,6 +11,14 @@ module.exports = async (req, res) => {
     const id = (req.query && req.query.id) || null;
     if (!core.aCanAccess(me, id)) return json(res, 403, { error: 'Bu birime erişim yetkiniz yok' });
 
+    if (req.method === 'GET' && req.query && req.query.gecmis) {
+        // ?gecmis=liste → son kayıtların listesi; ?gecmis=<kayıt id> → o kaydın içeriği
+        if (req.query.gecmis === 'liste') return json(res, 200, { kayitlar: await core.gecmisListe(id) });
+        const k = await core.gecmisAl(id, req.query.gecmis);
+        if (!k) return json(res, 404, { error: 'Kayıt bulunamadı' });
+        return json(res, 200, { rev: k.rev, savedAt: k.savedAt, savedBy: k.savedBy, profile: k.profile || null, cfg: k.cfg || null });
+    }
+
     if (req.method === 'GET') {
         const st = await core.loadAsistan();
         const un = (st.units || []).find(x => x.id === id);
@@ -85,6 +93,14 @@ module.exports = async (req, res) => {
                 });
             }
         }
+        /* SÜRÜM GEÇMİŞİ: geçmiş henüz boşsa önce kayıttan ÖNCEKİ hâl de
+           saklanır — ilk yanlış kayıt da geri alınabilsin. */
+        if (!(await core.gecmisListe(id)).length && (un.profile || un.cfg)) {
+            await core.gecmisEkle(id, { rev: mevcut, savedAt: un.savedAt || new Date(0).toISOString(), savedBy: un.savedBy || null,
+                profile: un.profile || null, cfg: un.cfg || null });
+        }
+        await core.gecmisEkle(id, { rev: mevcut + 1, savedAt: savedAt, savedBy: me.u,
+            profile: b.profile !== undefined ? b.profile : (un.profile || null), cfg: b.cfg !== undefined ? b.cfg : (un.cfg || null) });
         return json(res, 200, { ok: true, rev: mevcut + 1, savedAt: savedAt, savedBy: me.u });
     }
 

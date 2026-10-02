@@ -19,6 +19,19 @@ module.exports = async (req, res) => {
     if (!me) return json(res, 401, { error: 'Giriş gerekli' });
 
     const b = req.body || {};
+    /* KENDİ ŞİFRESİNİ DEĞİŞTİRME (birim yöneticisi). Eski şifre doğrulanır;
+       ana yöneticinin şifresi ortam değişkenindedir, buradan değişmez. */
+    if (b.action === 'changeOwnPw') {
+        if (me.role === 'admin') return json(res, 400, { error: 'Ana yönetici şifresi sunucu ayarlarından (APP_PASSWORD) değiştirilir.' });
+        const eski = typeof b.eski === 'string' ? b.eski : '', yeni = typeof b.yeni === 'string' ? b.yeni : '';
+        if (yeni.length < 8) return json(res, 400, { error: 'Yeni şifre en az 8 karakter olmalı.' });
+        const st0 = await core.loadAsistan();
+        const usr = (st0.users || []).find(x => x.u === me.u && x.role === 'manager');
+        if (!usr || !core.aFindUser(st0, me.u, eski)) return json(res, 403, { error: 'Mevcut şifre hatalı.' });
+        usr.pw = core.hashPw(yeni); delete usr.p;
+        if (!(await core.saveAsistan(st0))) return json(res, 503, { error: 'Kaydedilemedi — veri deposuna ulaşılamadı' });
+        return json(res, 200, { ok: true });
+    }
     const yetkili = me.role === 'admin' ||
         (me.role === 'manager' && YONETICI_ISLEMLERI.indexOf(b.action) >= 0 && b.id && me.unitId === b.id);
     if (!yetkili) return json(res, 403, { error: 'Bu işlem için yetkiniz yok' });

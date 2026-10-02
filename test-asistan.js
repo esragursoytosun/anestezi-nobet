@@ -266,6 +266,19 @@ section('Arka arkaya nöbet sınırı 1 = yalnız GÜN AŞIRI yasak (nöbet-dinl
   ok(zincirUyarisi([6, 8]), 'gün aşırı nöbet (2 gün ara) zincir sayılmalı');
 })();
 
+section('Önceki liste, gereksiz kalmış kısa nöbetleri sonsuza dek taşımaz');
+(function () {
+  function kisaSay(r) { var n = 0; r.totals.forEach(function (t) { for (var d = 1; d <= r.nDays; d++) if (r.grid[t.name][d] === 'NS') n++; }); return n; }
+  var P3 = S.defaultProfile(); P3.daytimeMax = 3;          // tavan yüzünden nöbetler kısaltılır
+  var eski = run({ profile: P3, personnel: people(12), __attempts: 16, __lsIter: 2000 });
+  var onceki = {}; eski.totals.forEach(function (t) { onceki[t.name] = Object.assign({}, eski.grid[t.name]); });
+  var soguk = run({ personnel: people(12), __attempts: 16, __lsIter: 2000 });
+  var sicak = run({ personnel: people(12), previousGrid: onceki, __attempts: 16, __lsIter: 2000 });
+  ok(kisaSay(eski) > 5, 'kurgu: tavanlı listede kısa nöbet olmalı (' + kisaSay(eski) + ')');
+  ok(kisaSay(sicak) <= kisaSay(soguk) + 2, 'tavan kalkınca kısa nöbetler geri alınmalı (önceki listeyle ' + kisaSay(sicak) + ', sıfırdan ' + kisaSay(soguk) + ')');
+  ok(warnCount(sicak) <= warnCount(soguk), 'önceki listeye sadakat kural ihlali eklememeli');
+})();
+
 section('Ön analiz: çelişen ayarı liste üretmeden söyler');
 (function () {
   var cfg = { year: Y, month: M, holidays: [], personnel: people(12) };
