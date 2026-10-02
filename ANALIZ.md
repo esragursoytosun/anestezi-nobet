@@ -307,3 +307,23 @@ yeni bir onarım fazı eklemek gerektiğinde birleştirme o zaman yapılmalı.
 
 **Önerim: 1 ve 2 ile başlamak.** Kararsızlık çözülmeden diğerleri
 hissedilmez; gerçek veri olmadan da her değişiklik kör atış olur.
+
+---
+
+## Ek (2026-10-02, v45 / motor v52) — Ayarlar sadeleştirildi
+
+Gerçek birimin anonim 4 aylık verisiyle ölçüldü. "Liste yanlış" şikâyetinin
+kaynağı motor değil, **birbiriyle çelişen ayarlardı**:
+
+| Bulgu | Etki | Çözüm |
+|---|---|---|
+| Gündüz üst sınırı 3, saatler günde ~4–6 kişi gerektiriyor | Her ay 3–11 kişi 8–408 saat **eksik** | Ön analiz kutusu çelişkiyi sayıyla söyler + "Sınırı kaldır" |
+| "Arka arkaya en fazla 1 nöbet" 3 gün aralığı da zincir sayıyordu (kodda `<= adim+1`) | Eylül'de 9–11 ihlal | Hata düzeltildi: 1 = yalnız gün aşırı yasak → 3–4 ihlal |
+| Otomatik dengenin ek turları da pahalı "tırmandırma" çalıştırıyordu | Üretim 10–25 sn | Ek turlarda kapalı → 2–8 sn, uyarı artmadı |
+| Not kutusunda aynı tür satırlar kişi başına tekrar | 8–17 not | Aynı kalıp tek satır (`uyariGrupla`) |
+
+Arayüz: seviye çubuğu, sol menü ve özet/düzenle ikiliği kaldırıldı. Tek sayfa,
+4 soru kartı + öncelik sırası + kapalı "Vardiya saatleri" ve "Teknik ayarlar".
+Alan id'leri aynı kaldı, kayıtlı profiller olduğu gibi çalışır.
+`AsistanScheduler.onAnaliz(cfg)` liste üretmeden (ms) saat dengesini hesaplar;
+tahmin gerçek motorla Temmuz 408 s / Ekim 232 s / 536 s örneklerinde birebir tuttu.

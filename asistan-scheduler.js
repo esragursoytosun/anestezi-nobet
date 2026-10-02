@@ -386,7 +386,7 @@
         var zOn = []; for (var zd = 1; zd <= nDays; zd++) if (isOncall(a[zd] || '')) zOn.push(zd);
         var zAdim2 = (P.postOncallRest || 0) + 1, zR = 1, zMax = 1, zBas = zOn.length ? zOn[0] : 0, zEnBas = zBas;
         for (var zj = 1; zj < zOn.length; zj++) {
-          if (zOn[zj] - zOn[zj - 1] <= zAdim2 + 1) { zR++; if (zR > zMax) { zMax = zR; zEnBas = zBas; } }
+          if (zOn[zj] - zOn[zj - 1] <= zAdim2) { zR++; if (zR > zMax) { zMax = zR; zEnBas = zBas; } }
           else { zR = 1; zBas = zOn[zj]; }
         }
         if (zMax > P.maxDutyChain)
@@ -1211,7 +1211,7 @@
             if (P.maxDutyChain > 0) {
               var zAdim = (P.postOncallRest || 0) + 1, zRun = 1;
               for (var zi = 1; zi < onDays.length; zi++) {
-                if (onDays[zi] - onDays[zi - 1] <= zAdim + 1) { zRun++;
+                if (onDays[zi] - onDays[zi - 1] <= zAdim) { zRun++;
                   if (zRun > P.maxDutyChain) s += W.zincirNobet;
                 } else zRun = 1;
               }
@@ -2069,7 +2069,7 @@
        En iyi 4 aday 4 kat, o da yetmezse 16 kat arama bütçesiyle yeniden
        cilalanır. Aday kümesi aynı kalır (aynı girdi -> aynı liste korunur). */
     var uyariVar = function (r) { return (r.warnings || []).some(function (w) { return w.indexOf('💡') !== 0; }); };
-    if (lsIter > 0 && alts.length && uyariVar(alts[0])) {
+    if (lsIter > 0 && alts.length && uyariVar(alts[0]) && !config.__tirmanmaYok) {
       [4, 16].some(function (kat) {
         var yeni = alts.slice(0, 4).map(function (a) {
           var r = buildOne(mk(a.__variant, lsIter * kat));
@@ -2149,6 +2149,10 @@
       for (var w in carpan) prof[w] = Math.min(10, (parseFloat(config.profile && config.profile[w]) || 1) * carpan[w]);
       var c2 = {}; for (var k3 in config) c2[k3] = config[k3];
       c2.profile = prof; c2.__attempts = Math.min(attemptsOto, config.__attempts || 80);
+      /* Ek turlar yalnız ADALET için: uyarı sayısı ilk turdan fazlaysa zaten
+         reddedilir, o yüzden uyarı kovalayan pahalı tırmandırma burada
+         gereksiz (ölçüldü: üretim süresinin ~3/4'ü buradaydı). */
+      c2.__tirmanmaYok = true;
       var r2 = buildSchedule(c2);
       var o2 = haksizlikOlc(r2);
       denenen.push(olc.boyut);
@@ -2199,8 +2203,130 @@
     return analyze(result.grid, plist, result.days, result.nDays, P);
   }
 
+  /* ---- ÖN ANALİZ: "bu ayarlar bu kadroyla ne verir?" ----
+     Liste üretmeden (milisaniyede) saat dengesini hesaplar: ayın gerçek iş
+     günleri, kişilerin izinleri ve rolleri üzerinden. Amaç kesin liste değil,
+     birbiriyle ya da kadroyla ÇELİŞEN ayarları üretimden önce söylemek —
+     yoksa kullanıcı her ay "yanlış" görünen bir liste alıp sebebini
+     bulamıyor. Her bulgu {tur, baslik, aciklama, duzelt:[{ad, degisiklik}]}. */
+  function onAnaliz(config) {
+    var P = clampProfile(config.profile);
+    var year = config.year, month = config.month, nDays = daysInMonth(year, month);
+    var hol = new Set(config.holidays || []);
+    var days = [];
+    for (var d = 1; d <= nDays; d++) { var w = dow(year, month, d);
+      days.push({ day: d, dow: w, off: isWeekend(w) || hol.has(d), workday: !isWeekend(w) && !hol.has(d) }); }
+    var workdays = days.filter(function (x) { return x.workday; });
+    var nWork = workdays.length;
+    var kisaAcik = P.useShortOncall !== false;
+    var hiSaat = (P.defaultOncall === 'short' && kisaAcik) ? P.oncallShortHours : P.oncallLongHours;
+    var hsSaat = (P.weekendOncall === 'short' && kisaAcik) ? P.oncallShortHours : P.oncallLongHours;
+    var hiGunduz = (P.defaultOncall === 'short' && kisaAcik) ? P.oncallShortDaytime : P.oncallLongDaytime;
+    var slotHi = 0, slotHs = 0, nobetSaat = 0, gunduzIhtiyac = 0;
+    days.forEach(function (x) {
+      if (x.off) { slotHs += P.weekendOncallPerDay; nobetSaat += P.weekendOncallPerDay * hsSaat; }
+      else { slotHi += P.oncallPerDay; nobetSaat += P.oncallPerDay * hiSaat;
+        gunduzIhtiyac += (P.daytimeExtraDays.indexOf(x.dow) >= 0) ? Math.max(P.daytimeExtra, P.daytimeMin) : P.daytimeMin; }
+    });
+    var slot = slotHi + slotHs;
+    var kisiler = (config.personnel || []).map(function (p) {
+      var YI = new Set((p.leaveYI || []).concat(p.ggDays || []));
+      var izinIs = workdays.filter(function (x) { return YI.has(x.day); }).length;
+      var off = (p.offDay == null || p.offDay === '') ? 0 : workdays.filter(function (x) { return x.dow === +p.offDay && !YI.has(x.day); }).length;
+      var bos = new Set(p.offReq || []);
+      var pencere = days.filter(function (x) { return !YI.has(x.day) && !bos.has(x.day); }).length;
+      return { ad: p.name, hedef: P.targetPerWorkday * (nWork - izinIs - off), pencere: pencere,
+        nobetci: !p.noNobet && !p.dayOnly, kidemli: !!p.senior, sorumlu: !!p.noNobet, gunduzcu: !!p.dayOnly, sadeceNobet: !!p.onlyNobet };
+    });
+    var nobetciler = kisiler.filter(function (k) { return k.nobetci; });
+    var nobetciSaat = nobetciler.reduce(function (a, k) { return a + k.hedef; }, 0);
+    var mh = Math.max(1, P.mesaiHours);
+    // nöbetçilerin nöbetten artan saatleri gündüz mesaisine döner (sadece-nöbet hariç)
+    var mesaiSaat = Math.max(0, nobetciSaat - nobetSaat);
+    var sadeceNobetSaat = nobetciler.filter(function (k) { return k.sadeceNobet; }).reduce(function (a, k) { return a + k.hedef; }, 0);
+    var mesaiGun = Math.max(0, mesaiSaat - sadeceNobetSaat * Math.max(0, 1 - nobetSaat / Math.max(1, nobetciSaat))) / mh;
+    kisiler.forEach(function (k) { if (k.gunduzcu) mesaiGun += k.hedef / mh; });
+    var nobetGunduz = hiGunduz ? slotHi : 0;
+    var gunduzArz = mesaiGun + nobetGunduz;             // hafta içi kişi-gün toplamı
+    var gunduzOrt = nWork ? gunduzArz / nWork : 0;
+    var B = [];
+    var ekle = function (tur, baslik, aciklama, duzelt) { B.push({ tur: tur, baslik: baslik, aciklama: aciklama, duzelt: duzelt || [] }); };
+    var kisiBasiNobet = nobetciSaat ? nobetciler.map(function (k) { return { k: k, n: slot * k.hedef / nobetciSaat }; }) : [];
+
+    if (!nobetciler.length) {
+      ekle('hata', 'Nöbet tutabilecek kimse yok.', 'Personel tablosunda herkes Sorumlu ya da sadece gündüz işaretli.');
+    } else if (nobetSaat > nobetciSaat) {
+      var kisaSaat = slotHi * (kisaAcik ? P.oncallShortHours : hiSaat) + slotHs * (kisaAcik ? P.oncallShortHours : hsSaat);
+      var acik = Math.round(nobetSaat - nobetciSaat);
+      ekle('hata', 'Nöbetler saat hedefine sığmıyor: ' + slot + ' nöbet ' + Math.round(nobetSaat) + ' saat, nöbetçilerin toplam hedefi ' + Math.round(nobetciSaat) + ' saat.',
+        'Ya bazı günler eksik nöbetçi kalır ya da kişiler hedefin üstüne çıkar (~' + acik + ' saat, ~' + Math.ceil(acik / Math.max(1, P.targetPerWorkday * nWork)) + ' kişilik açık).' +
+        (kisaAcik && P.shiftTypePref !== 'asla' && kisaSaat <= nobetciSaat ? ' Motor bazı nöbetleri kısaya indirerek kapatmaya çalışır.' : ''),
+        (P.overtimeForCounts ? [] : [{ ad: 'Gerekirse fazla mesai verilsin', degisiklik: { overtimeForCounts: true } }])
+          .concat(!kisaAcik ? [{ ad: 'Kısa nöbeti aç', degisiklik: { useShortOncall: true } }] : []));
+    }
+    if (nobetciler.length && nWork) {
+      if (gunduzArz + 0.5 < gunduzIhtiyac) {
+        var eks = gunduzIhtiyac - gunduzArz;
+        ekle('hata', 'Gündüz kişi sayısı tutmaz: ayda ~' + Math.round(gunduzIhtiyac) + ' kişi-gün gerekiyor, saatlerden ~' + Math.round(gunduzArz) + ' çıkıyor.',
+          'Ortalama günde ' + gunduzOrt.toFixed(1) + ' kişi düşer; ~' + Math.round(eks) + ' gün istenen sayının altında kalır' +
+          (P.overtimeForCounts ? ' (fazla mesaiyle kapatılır).' : ' ya da fazla mesai gerekir.'),
+          P.overtimeForCounts ? [] : [{ ad: 'Gerekirse fazla mesai verilsin', degisiklik: { overtimeForCounts: true } }]);
+      }
+      if (P.daytimeMax > 0 && gunduzOrt > P.daytimeMax + 0.3) {
+        var fazlaGun = gunduzArz - P.daytimeMax * nWork;
+        var eksikSaat = Math.round(fazlaGun * mh);
+        var nn = nobetciler.filter(function (k) { return !k.sadeceNobet; }).length || 1;
+        ekle('hata', 'Gündüz üst sınırı (' + P.daytimeMax + ') saat hedefiyle çelişiyor.',
+          'Herkesin saatini doldurmak için günde ortalama ~' + gunduzOrt.toFixed(1) + ' kişi gündüz çalışmalı. Sınır yüzünden ~' + eksikSaat +
+          ' saat ücretli izne döner: kişi başı ~' + Math.round(eksikSaat / nn) + ' saat EKSİK kalır ve her ay uyarı/not çıkar.',
+          [{ ad: 'Sınırı kaldır', degisiklik: { daytimeMax: 0 } }, { ad: 'Sınırı ' + Math.ceil(gunduzOrt) + ' yap', degisiklik: { daytimeMax: Math.ceil(gunduzOrt) } }]);
+      }
+    }
+    // gün aşırı / arka arkaya nöbet: her nöbet (nöbet + dinlenme + en az 1 boş gün) yer kaplar
+    var adim = 2 + (P.postOncallRest || 0);
+    var sikisik = kisiBasiNobet.filter(function (x) { return x.n > 0 && ((Math.round(x.n) - 1) * adim + 1) > x.k.pencere; });
+    if (sikisik.length) {
+      var adlar = sikisik.map(function (x) { return x.k.ad; });
+      if (P.maxDutyChain === 1)
+        ekle('hata', '"Gün aşırı nöbet olmasın" bu ay ' + sikisik.length + ' kişide tutamaz.',
+          (adlar.slice(0, 4).join(', ') + (adlar.length > 4 ? ' …' : '')) + ': izin/istek sonrası kalan günlere payına düşen nöbet ancak gün aşırı sığıyor. Kural ihlal edilir ve her biri uyarı olarak çıkar.',
+          [{ ad: 'Gün aşırıdan yalnız kaçınılsın', degisiklik: { maxDutyChain: 0 } }]);
+      else
+        ekle('bilgi', 'Bu ay ' + sikisik.length + ' kişide gün aşırı nöbet kaçınılmaz olabilir.',
+          (adlar.slice(0, 4).join(', ') + (adlar.length > 4 ? ' …' : '')) + ': izinleri yüzünden kalan günleri dar. Liste altında not olarak gösterilir.');
+    }
+    if (P.maxWeekendDuties > 0 && nobetciler.length && slotHs > nobetciler.length * P.maxWeekendDuties)
+      ekle('hata', 'Hafta sonu tavanı (' + P.maxWeekendDuties + ') yetmiyor: bu ay ' + slotHs + ' hafta sonu/tatil nöbeti var.',
+        nobetciler.length + ' nöbetçi bu tavanla en fazla ' + (nobetciler.length * P.maxWeekendDuties) + ' tutabilir.',
+        [{ ad: 'Tavanı ' + Math.ceil(slotHs / nobetciler.length) + ' yap', degisiklik: { maxWeekendDuties: Math.ceil(slotHs / nobetciler.length) } }]);
+    if (P.useShortOncall === false && (P.defaultOncall === 'short' || P.weekendOncall === 'short'))
+      ekle('uyari', 'Nöbet şekli "kısa" seçili ama kısa nöbet kapalı.', 'Bu seçim yok sayılır, her nöbet uzun tutulur.',
+        [{ ad: 'Kısa nöbeti aç', degisiklik: { useShortOncall: true } }]);
+    if (P.daytimeExtraDays.length && P.daytimeExtra <= P.daytimeMin)
+      ekle('uyari', 'Yoğun günler seçili ama o günlerin sayısı (' + P.daytimeExtra + ') normal günden fazla değil.', 'Bu hâliyle hiçbir şey değiştirmez.',
+        [{ ad: 'Yoğun günde ' + (P.daytimeMin + 1) + ' kişi', degisiklik: { daytimeExtra: P.daytimeMin + 1 } }]);
+    if (P.maxAbsentDays > 0 && P.maxConsecutiveOff > P.maxAbsentDays)
+      ekle('uyari', 'Boşta kalma sınırları tutarsız.', 'İş günü sınırı (' + P.maxConsecutiveOff + ') takvim günü sınırından (' + P.maxAbsentDays + ') büyük olamaz.',
+        [{ ad: 'Takvim sınırını ' + (P.maxConsecutiveOff + 2) + ' yap', degisiklik: { maxAbsentDays: P.maxConsecutiveOff + 2 } }]);
+    var kidemliler = nobetciler.filter(function (k) { return k.kidemli; }), kidemli = kidemliler.length;
+    if (P.minSeniorOncall > 0 && nobetciler.length) {
+      var kidemliKap = kidemliler.reduce(function (a, k) { return a + k.hedef / Math.max(1, hiSaat); }, 0);
+      if (kidemliKap < P.minSeniorOncall * nDays)
+        ekle('hata', 'Her nöbette ' + P.minSeniorOncall + ' kıdemli şartı bu kadroyla tutmaz.',
+          'Ayda ~' + (P.minSeniorOncall * nDays) + ' kıdemli-nöbet gerekiyor; ' + kidemli + ' kıdemli saat hedefiyle en fazla ~' + Math.floor(kidemliKap) + ' tutabilir.',
+          [{ ad: 'Kıdemli şartını kapat', degisiklik: { minSeniorOncall: 0 } }]);
+    }
+    var ns = kisiBasiNobet.map(function (x) { return x.n; });
+    return {
+      isGunu: nWork, gun: nDays, nobet: slot, nobetHaftaSonu: slotHs, nobetci: nobetciler.length,
+      nobetKisiBasi: ns.length ? { min: Math.min.apply(null, ns), max: Math.max.apply(null, ns), ort: slot / nobetciler.length } : null,
+      gunduzOrt: gunduzOrt, gunduzIstenen: nWork ? gunduzIhtiyac / nWork : 0,
+      bulgular: B
+    };
+  }
+
   var API = { buildSchedule: buildScheduleAuto, buildScheduleTek: buildSchedule, recompute: recompute, defaultProfile: defaultProfile,
-    haksizlikOlc: haksizlikOlc,
+    haksizlikOlc: haksizlikOlc, onAnaliz: onAnaliz,
     daysInMonth: daysInMonth, DOW_TR: DOW_TR, hoursMap: hoursMap };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else root.AsistanScheduler = API;

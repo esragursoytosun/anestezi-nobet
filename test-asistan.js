@@ -252,6 +252,35 @@ section('Sadece gündüz / Sorumlu: yıllık izin alsa bile Ü.İ KULLANAMAZ');
   ok(u2 === 0, 'Sorumlu + izinli kişide Ü.İ olmamalı (' + u2 + ')');
 })();
 
+section('Arka arkaya nöbet sınırı 1 = yalnız GÜN AŞIRI yasak (nöbet-dinlenme-iş-nöbet serbest)');
+(function () {
+  var P = S.defaultProfile(); P.maxDutyChain = 1;
+  var r = run({ profile: P, personnel: people(13), __attempts: 4, __lsIter: 0 });
+  function zincirUyarisi(seri) {
+    var g = r.grid['P1'];
+    for (var d = 1; d <= r.nDays; d++) g[d] = isWeekend(d) ? 'HT' : 'M';
+    seri.forEach(function (d) { g[d] = 'NL'; if (d < r.nDays) g[d + 1] = 'NI'; });
+    return S.recompute(r).warnings.some(function (w) { return w.indexOf('P1: ') === 0 && /nöbet arka arkaya/.test(w); });
+  }
+  ok(!zincirUyarisi([6, 9, 12]), '3 gün arayla nöbet zincir sayılmamalı');
+  ok(zincirUyarisi([6, 8]), 'gün aşırı nöbet (2 gün ara) zincir sayılmalı');
+})();
+
+section('Ön analiz: çelişen ayarı liste üretmeden söyler');
+(function () {
+  var cfg = { year: Y, month: M, holidays: [], personnel: people(12) };
+  var temiz = S.onAnaliz(Object.assign({ profile: S.defaultProfile() }, cfg));
+  ok(!temiz.bulgular.some(function (b) { return b.tur === 'hata'; }), 'varsayılan ayarlar + 12 kişi: hata bulgusu olmamalı');
+  ok(temiz.nobet === 62, 'Temmuz 2026 nöbet sayısı 62 olmalı (çıkan ' + temiz.nobet + ')');
+  var P = S.defaultProfile(); P.daytimeMax = 3;
+  var a = S.onAnaliz(Object.assign({ profile: P }, cfg));
+  var b = a.bulgular.filter(function (x) { return /Gündüz üst sınırı/.test(x.baslik); })[0];
+  ok(!!b, 'gündüz tavanı 3 iken saat çelişkisi bulunmalı');
+  ok(b && b.duzelt.some(function (d) { return d.degisiklik.daytimeMax === 0; }), 'çelişki için "sınırı kaldır" düzeltmesi önerilmeli');
+  var az = S.onAnaliz(Object.assign({ profile: S.defaultProfile() }, cfg, { personnel: people(4) }));
+  ok(az.bulgular.some(function (x) { return x.tur === 'hata' && /sığmıyor/.test(x.baslik); }), '4 kişiyle nöbetlerin saate sığmadığı söylenmeli');
+})();
+
 // ---------------------------------------------------------------
 console.log('\n──────────────────────────────');
 console.log('SONUÇ: ' + pass + ' geçti, ' + fail + ' düştü.');
