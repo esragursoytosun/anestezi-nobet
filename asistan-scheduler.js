@@ -23,7 +23,8 @@
     return {
       name: 'Anestezi',
       mesaiHours: 8, mesaiLabel: 'M8-17',                 // gündüz mesai vardiyası
-      halfDayHours: 4, halfDayLabel: 'M8-12',             // YARIM GÜN (örn. arife): o gün mesai bu kadar saat, hedefe de bu kadar sayılır
+      halfDayHours: 4, halfDayLabel: 'M8-12',
+      loadBalance: 1,                                     // fazladan nöbet alana daha az hafta sonu (0 kapalı · 1 normal · 2.5 güçlü)             // YARIM GÜN (örn. arife): o gün mesai bu kadar saat, hedefe de bu kadar sayılır
       oncallLongHours: 24, oncallLongLabel: 'N08-08', oncallLongDaytime: true,   // 24s nöbet (gündüzü kapsar)
       oncallShortHours: 16, oncallShortLabel: 'N16-08', oncallShortDaytime: false, // 16s nöbet (gündüzü kapsamaz)
       useShortOncall: true,                                // 16s nöbet kullanılsın mı
@@ -213,6 +214,7 @@
     var mdc = parseInt(r.maxDutyChain, 10); r.maxDutyChain = (mdc >= 0 && mdc <= 31) ? mdc : 0;
     var mdl = parseInt(r.maxDutyWhenOnLeave, 10); r.maxDutyWhenOnLeave = (mdl >= 0 && mdl <= 31) ? mdl : 0;
     if (['serbest', 'zorunlu', 'asla'].indexOf(r.shiftTypePref) < 0) r.shiftTypePref = 'zorunlu';
+    var lb = parseFloat(r.loadBalance); r.loadBalance = (lb >= 0 && lb <= 10) ? lb : 1;
     var yh = parseFloat(r.halfDayHours); r.halfDayHours = (yh > 0 && yh <= r.mesaiHours) ? yh : Math.min(4, r.mesaiHours);
     return r; }
 
@@ -286,6 +288,11 @@
     adaletSeri:         30,                      // uzun çalışma serisi YÜKÜNÜN kişiler arası dengesi
     sekilSapma:        400,                      // ayarlanan nöbet şeklinden sapan her nöbet ('zorunlu' modda)
     adaletNobet:        16, adaletHaftaSonu: 14, adaletBayram: 18,
+    /* TOPLAM YÜK DENGESİ (nöbet + hafta sonu nöbeti, aynı ay içinde): o ay
+       fazladan nöbet alan daha az hafta sonu tutsun; "6 nöbet + 1 hafta sonu"
+       ile "5 nöbet + 2 hafta sonu" birbirini dengelesin. Çarpanı profilde
+       (loadBalance: 0 kapalı, 1 normal, 2.5 güçlü). */
+    adaletYuk:          40,
     adaletGun:          12,                      // çalışılan GÜN sayısı adaleti
     adaletMesai:        14,                      // MESAİ günü adaleti (tabloda en çok görülen sütun)
     enKotuKat:           3,                      // "en kötü durumdaki kişi" ek çarpanı (minimax)
@@ -1336,6 +1343,10 @@
         // EN KÖTÜ KİŞİ ayrıca cezalı: toplamı düşürmek yetmez, kimse çok sapmasın
         s += enNc * W.adaletNobet * W.enKotuKat * AG.nb;
         s += enWk * W.adaletHaftaSonu * W.enKotuKat * AG.hs;
+        if (P.loadBalance > 0 && ncArr.length) {
+          var totYuk = 0; for (var fy = 0; fy < ncArr.length; fy++) totYuk += ncArr[fy] + wkArr[fy];
+          for (var fy2 = 0; fy2 < ncArr.length; fy2++) s += Math.abs(ncArr[fy2] + wkArr[fy2] - totYuk * wArr[fy2] / sumW) * W.adaletYuk * P.loadBalance;
+        }
         /* BAYRAM NÖBETİ ROTASYONU: bayram/resmi tatil nöbeti sıradan hafta
            sonundan ağır hissedilir; geçen bayram tutan bu bayram tutmasın.
            Yalnız bu ay tatil nöbeti varsa devreye girer. */
@@ -2312,6 +2323,9 @@
       arr.push({ nc: nc, wk: t.weekendNobet || 0, w: w, cn: cn, cw: cw }); totNc += nc; totWk += t.weekendNobet || 0; sumW += w; totCrNc += cn; totCrWk += cw; });
     var cumNc = totNc + totCrNc, cumWk = totWk + totCrWk;
     arr.forEach(function (a) { s += Math.abs((a.nc + a.cn) - cumNc * a.w / sumW) * W.adaletNobet * SAG.nb + Math.abs((a.wk + a.cw) - cumWk * a.w / sumW) * W.adaletHaftaSonu * SAG.hs; });
+    var ybl = parseFloat(SP.loadBalance); if (!(ybl >= 0)) ybl = 1;   // toplam yük dengesi (bkz. W.adaletYuk)
+    if (ybl > 0 && arr.length) { var tYuk = 0; arr.forEach(function (a) { tYuk += a.nc + a.wk; });
+      arr.forEach(function (a) { s += Math.abs(a.nc + a.wk - tYuk * a.w / sumW) * W.adaletYuk * ybl; }); }
     // ÇALIŞMA GÜNÜ ADALETİ — cila ile aynı ölçü (rol gereği farklı olanlar hariç)
     var gTot = 0, gSum = 0, gArr = [];
     (r.totals || []).forEach(function (t) { if (t.noNobet || t.dayOnly || t.onlyNobet) return;
