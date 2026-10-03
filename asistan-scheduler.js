@@ -268,6 +268,11 @@
     bosGunKisi:       1000, bosGunEk:      400,   // takvim boşluğu: eşik + aşan her gün
     digerUyari:        100,
     kume:              2.5, gunAsiri:       6, yayilim: 2.5,
+    /* GÜN AŞIRI her çift için TABAN bedel: "kaçınılsın" modunda çift başına
+       ~24 puan kalıyordu, adalet gürültüsünün altında; yoğun ayda 7 kişiye
+       yayılıyordu. Kural ihlalinden (1000+) ucuz, dengeden pahalı. */
+    gunAsiriTaban:    100,                       // ARAMA sırasında: ılımlı (250+ olunca arama katılaşıp adaleti, bir stres senaryosunda kapsamayı bozuyordu)
+    gunAsiriTabanSon: 800,                       // SIRALAMA + SON CİLA: ≈ 8 saat planlı fazla mesai; kural ihlalinden (1000+) ucuz
     bosBlok:            60,                      // TOPLU düzende: her ayrı boşluk bloğu (az blok = uzun mola)
     hsTavanKisi:      4000, hsTavanEk:    1500,   // hafta sonu üst sınırı aşımı (kişi + aşan her nöbet)
     tekGunAda:          90,                      // TOPLU düzende: 1 gün çalışıp yine boşa çıkma
@@ -1283,7 +1288,10 @@
             if (onDays.length > 1) { var ideal = nDays / onDays.length; for (var q = 1; q < onDays.length; q++) { var gap = onDays[q] - onDays[q - 1]; if (gap < ideal) spacing += (ideal - gap); } }
             // GÜN AŞIRI NÖBET (2 gün arayla: N _ N): mecbur kalmadıkça kaçın — nöbetleri yay.
             // İlk gün-aşırı çiftinden itibaren cezalı, zincir uzadıkça ARTAN (nöbet-boş-nöbet-boş... engellenir).
-            var gaRun = 1; for (var ga = 1; ga < onDays.length; ga++) { if (onDays[ga] - onDays[ga - 1] === 2) { gaRun++; s += gaRun * gaRun * W.gunAsiri * AG.ya; } else gaRun = 1; }
+            var gaRun = 1; for (var ga = 1; ga < onDays.length; ga++) { if (onDays[ga] - onDays[ga - 1] === 2) { gaRun++;
+              // kişinin kendi istediği iki nöbetten oluşan çift cezasız (istek her şeyden önce)
+              var istekCift = (Pp.onlyN16.has(onDays[ga]) || Pp.onlyN24.has(onDays[ga])) && (Pp.onlyN16.has(onDays[ga - 1]) || Pp.onlyN24.has(onDays[ga - 1]));
+              if (!istekCift) s += (W.gunAsiriTaban + gaRun * gaRun * W.gunAsiri) * AG.ya; } else gaRun = 1; }
             /* ARKA ARKAYA NÖBET ZİNCİRİ: dinlenme dışında boşluk bırakmadan
                sıralanan nöbetler. Dinlenme 1 gün ise "nöbet-boş-nöbet" zincir
                sayılır; 2 gün ise "nöbet-boş-boş-nöbet". Kullanıcı isteği:
@@ -2174,6 +2182,7 @@
       plist.forEach(function (pa) {
         sorunluNobetler(pa.name).forEach(function (d) {
           var A = pa.name, kod = grid[A][d]; if (!isOn(kod)) return;
+          if (meta[A].n16[d] || meta[A].n24[d]) return;     // kişinin İSTEDİĞİ nöbet devredilmez
           var once = en;
           for (var bi = 0; bi < plist.length; bi++) {
             var B = plist[bi].name; if (B === A || !devirUygun(B, d, kod)) continue;
@@ -2226,7 +2235,7 @@
       var pfm = w.match(/^💡 .*: planlı fazla mesai (\d+) saat/);
       // Yalnız saat bedeli: 8 saatlik planlı mesai (~690) bir gündüz açığından (1000+) ucuz,
       // ama hiçbir açığı kapatmayan fazla mesai kârsız kalır.
-      if (pfm) { var ph = +pfm[1]; s += ph * W.fazlaMesaiSaat + ph * ph * W.fazlaMesaiKare; return; }
+      if (pfm) return;   // planlı fazla mesai kural ihlali değil: bedeli dengePuani'nda (diğer yumuşak bedellerle tartılır)
       if (w.indexOf('💡') === 0) return;
       // Ağırlıklar W'den — cilanın içindeki penalty() ile AYNI ölçü (bkz. W tanımı)
       /* Açığın BÜYÜKLÜĞÜ de sayılır. Eskiden "2 gerekirken 1" ile
@@ -2258,6 +2267,11 @@
   }
   function dengePuani(r, P, carry, SP, SAG) {
     var s = 0;
+    /* PLANLI FAZLA MESAİ ("gerekirse fazla mesai" açıkken): kural ihlali değil
+       ama bedava da değil — yalnız gerektiği kadar. Yumuşak bedeller arasında
+       tartılır: örn. bir gün aşırı nöbeti kaldırmak için 8 saat verilebilir. */
+    (r.warnings || []).forEach(function (w) { var pfm = w.match(/^💡 .*: planlı fazla mesai (\d+) saat/);
+      if (pfm) { var ph = +pfm[1]; s += ph * W.fazlaMesaiSaat + ph * ph * W.fazlaMesaiKare; } });
     var wd = (r.days || []).filter(function (d) { return d.workday; }).map(function (d) { return d.day; });
     /* NÖBET ŞEKLİ SAPMASI aday sıralamasında da sayılır (cila zaten
        sayıyordu). Sayılmadığında, önceki listeden gereksiz kısa nöbetleri
@@ -2287,7 +2301,9 @@
       if (sTOPLU) s += sBlok * W.bosBlok * SAG.bo;
       // GÜN AŞIRI NÖBET (N _ N): ilk çiftten itibaren cezalı, artan -> nöbetler yayılır
       var onD = []; for (var od = 1; od <= (r.nDays || 31); od++) if (isOncall(g[od])) onD.push(od);
-      var gr = 1; for (var j = 1; j < onD.length; j++) { if (onD[j] - onD[j - 1] === 2) { gr++; s += gr * gr * W.gunAsiri * SAG.ya; } else gr = 1; }
+      var gr = 1; for (var j = 1; j < onD.length; j++) { if (onD[j] - onD[j - 1] === 2) { gr++;
+        var ist = function (x) { return (t.onlyN16 || []).indexOf(x) >= 0 || (t.onlyN24 || []).indexOf(x) >= 0; };
+        if (!(ist(onD[j]) && ist(onD[j - 1]))) s += (W.gunAsiriTabanSon + gr * gr * W.gunAsiri) * SAG.ya; } else gr = 1; }
     });
     // ADALET (KÜMÜLATİF): nöbet ve hafta sonu nöbeti, önceki aylar (carry) + bu ay birlikte, hedef-oranlı adil paydan sapma
     var totNc = 0, totWk = 0, sumW = 0, arr = [], totCrNc = 0, totCrWk = 0;
@@ -2362,7 +2378,8 @@
        daha temiz liste alır — ayda bir yapılan iş için doğru takas.
        En iyi 4 aday 4 kat, o da yetmezse 16 kat arama bütçesiyle yeniden
        cilalanır. Aday kümesi aynı kalır (aynı girdi -> aynı liste korunur). */
-    var uyariVar = function (r) { return (r.warnings || []).some(function (w) { return w.indexOf('💡') !== 0; }); };
+    // Gün aşırı nöbet de derin aramayı başlatır: 'kaçınılsın' modunda uyarı değil not, ama çalışana en ağır gelen düzen
+    var uyariVar = function (r) { return (r.warnings || []).some(function (w) { return w.indexOf('💡') !== 0 || / gün aşırı nöbet \(/.test(w); }); };
     if (lsIter > 0 && alts.length && uyariVar(alts[0]) && !config.__tirmanmaYok) {
       [4, 16].some(function (kat) {
         var yeni = alts.slice(0, 4).map(function (a) {

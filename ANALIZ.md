@@ -371,3 +371,13 @@ tahmin gerçek motorla Temmuz 408 s / Ekim 232 s / 536 s örneklerinde birebir t
   aşım miktarıyla ölçülüyor (arama aşamasıyla aynı). Düz sayınca ihlal adım adım küçültülemiyordu.
 - **Kişiye özel aylık nöbet tavanı** (`personnel[].maxNobet`, Ayrıntılar'da): kurulum, kapsama garantisi (son çare),
   nöbet devri ve cila tavanı gözetir; tavanlı kişi nöbet adaletinin dışında.
+
+## Ek 5 (2026-10-03, v50 / motor v57) — "Gün aşırı: kaçınılsın" gerçekten kaçınsın
+
+- Gün aşırı çifti için taban bedel: aramada 100 (250+ aramayı katılaştırıp adaleti ve bir stres
+  senaryosunda kapsamayı bozdu), sıralama + son cilada 800 (≈ 8 saat planlı fazla mesai; kural ihlalinden ucuz).
+- Planlı fazla mesai bedeli kural ölçüsünden (uyariPuani) yumuşak ölçüye (dengePuani) taşındı: kural ihlali
+  değil; gün aşırıyı kaldırmak için 8 saat verilebilsin diye birlikte tartılıyor.
+- Gün aşırı varsa derin arama da çalışır. Kişinin kendi istediği iki nöbetten oluşan çift cezasız ve
+  son cilada istenen nöbet devredilmez (testte yakalandı).
+- Gerçek birim, Eylül, "kaçınılsın": 10 → 7 gün aşırı çifti (aşırı bedelle bile alt sınır 6), 0 uyarı.
