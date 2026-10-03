@@ -660,7 +660,7 @@
   <button class="sm sec" onclick="document.getElementById('output').scrollIntoView({behavior:'smooth',block:'start'})">Listeye git</button>
   <button class="sm sec" onclick="document.getElementById('statusBar').style.display='none'" title="Şeridi gizle">✕</button>
 </div>
-<div class="foot">Nöbet Planlama Asistanı · <b>v50</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
+<div class="foot">Nöbet Planlama Asistanı · <b>v51</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
 <script src="asistan-scheduler.js?v=57"></script>
 <script>
@@ -1108,6 +1108,8 @@ function showMonth(ym){
     if(CUR_YM!=null&&MONTHS_DATA[CUR_YM]) prevList=MONTHS_DATA[CUR_YM].personnel;
     else { const ks=Object.keys(MONTHS_DATA); prevList=ks.length?MONTHS_DATA[ks[ks.length-1]].personnel:readPersonnel(); }
     applyPersonnel(rosterOnly(prevList));
+    // önceki ayın tatilleri yeni aya TAŞINMAZ (29 Ekim, Kasım'a R.T olarak geçiyordu)
+    document.getElementById('holidays').value=''; document.getElementById('halfDays').value='';
     YENI_AY_TAKVIM=ym;   // yeni ay: Türkiye takvimi otomatik (aşağıda, ay seçimi kesinleşince)
     // Önceki ayın son gece nöbetçileri bu ayda N.İ ile başlasın (elle
     // işaretlemeye gerek kalmasın). Yalnız YENİ ay açılırken uygulanır;
