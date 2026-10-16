@@ -367,6 +367,19 @@ section('Kişiye özel nöbet tavanı');
   checkInvariants(r, S.defaultProfile(), 'tavan');
 })();
 
+section('Ay sınırındaki izin: sonraki ay başlayan izin + önceki ay biten izin');
+(function () {
+  // Kasım 2026; P3'ün izni 1 Aralık (Salı) başlıyor, P4'ün izni 31 Ekim'de bitti
+  var r = S.buildSchedule({ year: 2026, month: 10, holidays: [], personnel: people(13, { 1: { noNobet: true }, 3: { nextLeaveStart: 1 }, 4: { prevLeaveEnded: true } }), profile: S.defaultProfile(), __attempts: 20, __lsIter: 3000 });
+  var g3 = r.grid['P3'], g4 = r.grid['P4'];
+  ok(g3[25] === 'NL', 'izinden 4 iş günü önce (25 Kasım) nöbet olmalı (' + g3[25] + ')');
+  var isVar = false; for (var d = 26; d <= 30; d++) if (g3[d] === 'M' || g3[d] === 'NL' || g3[d] === 'NS') isVar = true;
+  ok(!isVar, 'izin öncesi nöbetten aya sonuna kadar iş yazılmamalı');
+  ok(g4[2] === 'M', 'önceki ay biten izin: ilk iş günü (2 Kasım) mesai olmalı (' + g4[2] + ')');
+  ok(g4[1] !== 'NL' && g4[1] !== 'NS', 'dönüşten önceki hafta sonuna nöbet yazılmamalı');
+  checkInvariants(r, S.defaultProfile(), 'ay sınırı');
+})();
+
 section('Ön analiz: çelişen ayarı liste üretmeden söyler');
 (function () {
   var cfg = { year: Y, month: M, holidays: [], personnel: people(12) };

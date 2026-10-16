@@ -600,6 +600,10 @@
       days.push({ day: d, dow: w, dowName: DOW_TR[w], weekend: isWeekend(w), holiday: holidays.has(d), half: YARIM.has(d),
         isExtra: (P.daytimeExtraDays.indexOf(w) >= 0), workday: (!isWeekend(w) && !holidays.has(d)) });
     }
+    // Sonraki ayın n. günü iş günü mü (hafta sonu ve o ayın tatilleri hariç; tatiller arayüzden ya da Türkiye takviminden)
+    var sonrakiY = month === 11 ? year + 1 : year, sonrakiM = (month + 1) % 12;
+    var SONRAKI_TATIL = new Set(config.nextMonthHolidays || (ayTatilleri(sonrakiY, sonrakiM).holidays));
+    function SONRAKI_IS_GUNU(n) { return !isWeekend(dow(sonrakiY, sonrakiM, n)) && !SONRAKI_TATIL.has(n); }
     // O günün gündüz mesaisi kaç saat / bir hücre o gün kaç saat
     function MH(dn) { return YARIM.has(dn) ? P.halfDayHours : P.mesaiHours; }
     function HR(code, dn) { return (code === 'M' && YARIM.has(dn)) ? P.halfDayHours : (HOURS[code] || 0); }
@@ -651,6 +655,11 @@
       return { name: p.name, idx: idx, noNobet: !!p.noNobet, dayOnly: !!p.dayOnly, startNI: !!p.startNI,
         onlyNobet: !!p.onlyNobet, senior: !!p.senior, YI: YI, GG: GG, offDow: offDow,
         maxNobet: (+p.maxNobet > 0) ? Math.floor(+p.maxNobet) : 0,   // KİŞİYE ÖZEL aylık nöbet tavanı (0 = yok)
+        /* AY SINIRINDAKİ İZİN: sonraki ayın N. günü başlayan izin (izin öncesi
+           nöbet + boşluk bu aya düşebilir) ve önceki ayın sonunda biten izin
+           (dönüşün ilk iş günü bu ayda). Arayüz komşu ayların verisinden doldurur. */
+        sonrakiIzin: (+p.nextLeaveStart >= 1 && +p.nextLeaveStart <= 20) ? Math.floor(+p.nextLeaveStart) : 0,
+        oncekiIzinBitti: !!p.prevLeaveEnded,
         onlyDay: new Set(p.onlyDay || []), onlyN16: new Set(p.onlyN16 || []), onlyN24: new Set(p.onlyN24 || []), offReq: new Set(p.offReq || []),
         assign: assign, target: target, hours: 0, nobetDays: [], lastNobet: -99, weekendNobet: 0,
         preLeaveLock: preLeaveLock, preLeaveKisaldi: false,
@@ -732,21 +741,27 @@
         people.forEach(function (Pp) {
           var starts = [];
           for (var d = 1; d <= nDays; d++) if (Pp.assign[d] === 'YI' && (d === 1 || Pp.assign[d - 1] !== 'YI')) starts.push(d);
+          /* Sonraki ay başlayan izin: sanal gün (nDays + N). Aradaki sonraki-ay
+             iş günleri de sayılır ki "4 iş günü önce" doğru gün olsun. */
+          if (Pp.sonrakiIzin && Pp.assign[nDays] !== 'YI') starts.push(nDays + Pp.sonrakiIzin);
           starts.forEach(function (bs) {
-            var wprev = workdayNums.filter(function (x) { return x < bs; }).sort(function (a, b) { return b - a; });
+            var wprev = workdayNums.filter(function (x) { return x < bs; });
+            for (var vd = nDays + 1; vd < bs; vd++) if (SONRAKI_IS_GUNU(vd - nDays)) wprev.push(vd);
+            wprev.sort(function (a, b) { return b - a; });
             var placed = false;
             if (!Pp.noNobet && !Pp.dayOnly) {
               [P.preLeaveDaysBefore - 1, P.preLeaveDaysBeforeFallback - 1].some(function (ni) {
                 var nd = wprev[ni];
+                if (nd > nDays) { placed = true; return true; }     // izin öncesi nöbet sonraki aya düşüyor: o ay halleder
                 if (nd === undefined || Pp.assign[nd] !== '' || Pp.hours + HOURS[defType()] > Pp.target) return false;
                 if (oncallCount(nd) >= oncallCap(days[nd - 1])) return false;   // o gün max nöbetçi dolu
                 placeOncall(Pp, days[nd - 1], defType());
-                for (var g = nd + 1; g < bs; g++) { Pp.lockedOff.add(g); Pp.preLeaveLock.add(g); if (Pp.assign[g] === '') Pp.assign[g] = 'UCI'; }
+                for (var g = nd + 1; g < bs && g <= nDays; g++) { Pp.lockedOff.add(g); Pp.preLeaveLock.add(g); if (Pp.assign[g] === '') Pp.assign[g] = 'UCI'; }
                 placed = true; return true;
               });
             }
             // "sadece gündüz"/Sorumlu kişiye Ü.İ boşluk YAZILMAZ (izinli olsa bile tüm iş günleri mesai)
-            if (!placed && !Pp.noNobet && !Pp.dayOnly) for (var i = 0; i < P.preLeaveGap; i++) { var dd2 = wprev[i]; if (dd2 !== undefined && Pp.assign[dd2] === '') { Pp.assign[dd2] = 'UCI'; Pp.lockedOff.add(dd2); Pp.preLeaveLock.add(dd2); } }
+            if (!placed && !Pp.noNobet && !Pp.dayOnly) for (var i = 0; i < P.preLeaveGap; i++) { var dd2 = wprev[i]; if (dd2 !== undefined && dd2 <= nDays && Pp.assign[dd2] === '') { Pp.assign[dd2] = 'UCI'; Pp.lockedOff.add(dd2); Pp.preLeaveLock.add(dd2); } }
           });
         });
       }
@@ -821,6 +836,20 @@
         for (var w = d + 1; w < rd; w++) if (!days[w - 1].workday) Pp.lockedOff.add(w);  // aradaki h.sonu/tatil kilit
         if (Pp.onlyNobet) continue;                                 // "sadece nöbet": mesai rezerve edilmez
         addMesai(Pp, rd); Pp.mustMesai.add(rd);                     // dönüş günü = korumalı kesin çalışma
+      }
+      /* Önceki ayın sonunda biten izin: dönüş bu ayın ilk iş günü. Aradaki
+         hafta sonu/tatile nöbet yazılmaz, dönüş günü korumalı çalışma olur. */
+      if (Pp.oncekiIzinBitti && Pp.assign[1] !== 'YI') {
+        var rd2 = -1;
+        for (var k2 = 1; k2 <= nDays; k2++) {
+          if (!days[k2 - 1].workday || Pp.assign[k2] === 'OFF') continue;
+          if (Pp.assign[k2] === '') rd2 = k2;
+          break;
+        }
+        if (rd2 > 0) {
+          for (var w2 = 1; w2 < rd2; w2++) if (!days[w2 - 1].workday) Pp.lockedOff.add(w2);
+          if (!Pp.onlyNobet) { addMesai(Pp, rd2); Pp.mustMesai.add(rd2); }
+        }
       }
     });
 

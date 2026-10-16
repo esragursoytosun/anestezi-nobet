@@ -700,9 +700,9 @@
   <button class="sm sec" onclick="document.getElementById('output').scrollIntoView({behavior:'smooth',block:'start'})">Listeye git</button>
   <button class="sm sec" onclick="document.getElementById('statusBar').style.display='none'" title="Şeridi gizle">✕</button>
 </div>
-<div class="foot">Nöbet Planlama Asistanı · <b>v52</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
+<div class="foot">Nöbet Planlama Asistanı · <b>v53</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=58"></script>
+<script src="asistan-scheduler.js?v=59"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -934,7 +934,8 @@ function updateDateBounds(){ const {y,m}=curYM(); const last=AsistanScheduler.da
   const min=dayToISO(y,m,1),max=dayToISO(y,m,last);
   // Geçici görev tarihleri BİLEREK sınırlanmaz: aralık aylara yayılabilmeli
   // (ör. 5 Eylül – 4 Ekim). Yıllık izin ise ay ay girilir, sınırlı kalır.
-  document.querySelectorAll('#pbody input[type=date]:not(.p-gg-s):not(.p-gg-e)').forEach(inp=>{inp.min=min;inp.max=max;}); }
+  // Yıllık izin de ay sınırını aşabilir (örn. 28 Kasım – 5 Aralık); o yüzden tarih kutuları sınırlanmaz.
+  document.querySelectorAll('#pbody input[type=date]:not(.p-gg-s):not(.p-gg-e):not(.p-yi-s):not(.p-yi-e)').forEach(inp=>{inp.min=min;inp.max=max;}); }
 function yiRangeHtml(s,e){ return `<div class="daterange"><input type="date" class="p-yi-s" value="${s||''}"><span>–</span>`
   +`<input type="date" class="p-yi-e" value="${e||''}"><button type="button" class="sm danger yix" onclick="rmYi(this)" title="Sil" style="padding:2px 7px;display:none">×</button></div>`; }
 function yiCellHtml(){ return `<div class="yi-list">${yiRangeHtml('','')}</div><button type="button" class="sm sec" onclick="addYi(this)" style="margin-top:4px">+ izin ekle</button>`; }
@@ -942,6 +943,40 @@ function updateYiX(cell){ const list=cell.querySelector('.yi-list'); const multi
 function addYi(btn){ markDirty(); const cell=btn.closest('.leave'); cell.querySelector('.yi-list').insertAdjacentHTML('beforeend',yiRangeHtml('','')); updateDateBounds(); updateYiX(cell); }
 function rmYi(btn){ markDirty(); scheduleCapWarn(); const cell=btn.closest('.leave'),row=btn.closest('.daterange'),list=cell.querySelector('.yi-list');
   if(list.children.length>1)row.remove(); else {row.querySelector('.p-yi-s').value='';row.querySelector('.p-yi-e').value='';} updateYiX(cell); }
+/* ---- AY SINIRINDAKİ İZİN ----
+   İzin bir tarih aralığıdır ve ay sınırını aşabilir. Bir ayın listesi için
+   önemli olanlar: o aya düşen günler, ay bittikten sonra kısa süre içinde
+   başlayan izin (izin öncesi nöbet + boşluk bu aya düşer) ve ay başından
+   hemen önce biten izin (dönüşün ilk iş günü bu ayda). */
+const tarihOf=iso=>{ if(!iso) return null; const p=iso.split('-').map(Number); return new Date(p[0],p[1]-1,p[2],12); };
+function izinAylaIlgili(r){
+  if(!r||!r.s) return false; const {y,m}=curYM();
+  const bas=tarihOf(r.s), bit=tarihOf(r.e||r.s), ayBas=new Date(y,m,1,12), aySon=new Date(y,m+1,0,12);
+  const gun=86400000;
+  return (bas<=aySon && bit>=ayBas) || (bas>aySon && (bas-aySon)/gun<=14) || (bit<ayBas && (ayBas-bit)/gun<=7);
+}
+function ayKomsuIzinleri(cfg){
+  const y=cfg.year, m=cfg.month, ayBas=new Date(y,m,1,12), aySon=new Date(y,m+1,0,12), gun=86400000;
+  const sY=m===11?y+1:y, sM=(m+1)%12, oY=m===0?y-1:y, oM=(m+11)%12;
+  const sonraki=MONTHS_DATA[sY+'-'+sM], onceki=MONTHS_DATA[oY+'-'+oM];
+  if(sonraki&&sonraki.holidays) cfg.nextMonthHolidays=sonraki.holidays.slice();
+  const isGunu=dt=>{ const w=dt.getDay(); if(w===0||w===6) return false;
+    const md=MONTHS_DATA[dt.getFullYear()+'-'+dt.getMonth()]; const tat=(md&&md.holidays)||AsistanScheduler.ayTatilleri(dt.getFullYear(),dt.getMonth()).holidays;
+    return tat.indexOf(dt.getDate())<0; };
+  const araliklar=(ad,kaynak)=>{ const k=((kaynak&&kaynak.personnel)||[]).find(x=>x.name===ad); if(!k) return [];
+    return (k.yiRanges||[]).concat(k.ggRange&&k.ggRange.s?[{s:k.ggRange.s,e:k.ggRange.e||k.ggRange.s}]:[]); };
+  cfg.personnel.forEach(p=>{
+    const L=(p.yiRanges||[]).concat(p.ggRange&&p.ggRange.s?[{s:p.ggRange.s,e:p.ggRange.e||p.ggRange.s}]:[])
+      .concat(araliklar(p.name,sonraki)).concat(araliklar(p.name,onceki)).filter(r=>r&&r.s);
+    let enYakin=0;
+    L.forEach(r=>{ const bas=tarihOf(r.s); if(bas>aySon && (bas-aySon)/gun<=20 && bas.getMonth()===sM){ const g=bas.getDate(); if(!enYakin||g<enYakin) enYakin=g; } });
+    if(enYakin) p.nextLeaveStart=enYakin;
+    // önceki ayın son günlerinde biten izin: bitişten ay başına kadar hiç iş günü yoksa dönüş bu ayda
+    p.prevLeaveEnded=L.some(r=>{ const bit=tarihOf(r.e||r.s); if(!(bit<ayBas) || (ayBas-bit)/gun>7) return false;
+      for(let t=new Date(bit.getTime()+gun); t<ayBas; t=new Date(t.getTime()+gun)) if(isGunu(t)) return false; return true; });
+  });
+  return cfg;
+}
 function rangesOf(tr){ return [...tr.querySelectorAll('.yi-list .daterange')].map(d=>({s:d.querySelector('.p-yi-s').value,e:d.querySelector('.p-yi-e').value})).filter(r=>r.s); }
 /* GEÇİCİ GÖREVLENDİRME
    Kişi başka bir kuruma görevlendirildiğinde burada hiç bulunmaz: ne nöbet
@@ -1103,7 +1138,8 @@ function applyPersonnel(list){
        ve sonrasında görünmeye devam ediyordu. */
     if(p.ggRange && ggAyaDuser(p.ggRange)){ r.querySelector('.p-gg-s').value=p.ggRange.s||''; r.querySelector('.p-gg-e').value=p.ggRange.e||'';
       r.querySelector('.p-gg-s').dataset.onceki=(p.ggRange.s||'')+'|'+(p.ggRange.e||''); }
-    let ranges=(p.yiRanges&&p.yiRanges.length)?p.yiRanges:[]; if(!ranges.length)ranges=[{s:'',e:''}];
+    // yalnız bu ayla ilgili izinler: aya düşen, ay bitince ~2 hafta içinde başlayan ya da ay başından hemen önce biten
+    let ranges=(p.yiRanges||[]).filter(izinAylaIlgili); if(!ranges.length)ranges=[{s:'',e:''}];
     r.querySelector('.yi-list').innerHTML=ranges.map(x=>yiRangeHtml(x.s,x.e)).join(''); updateYiX(r.querySelector('.leave'));
     r.querySelector('.p-onlynobet').checked=!!p.onlyNobet;
     r.querySelector('.p-off').value=(p.offReq||[]).join(','); r.querySelector('.p-onlyday').value=(p.onlyDay||[]).join(','); r.querySelector('.p-onlyn16').value=(p.onlyN16||[]).join(','); r.querySelector('.p-onlyn24').value=(p.onlyN24||[]).join(',');
@@ -1121,7 +1157,7 @@ let CUR_YM=null;
 function ymNow(){ return document.getElementById('year').value+'-'+document.getElementById('month').value; }
 // kimlik (isim, Sorumlu, Haftalık izin günü) korunur; aylık İSTEKLER sıfırlanır
 function rosterOnly(list){ return (list||[]).map(p=>({ name:p.name, noNobet:p.noNobet, dayOnly:p.dayOnly, onlyNobet:p.onlyNobet, senior:p.senior, offDay:p.offDay, maxNobet:p.maxNobet||0,
-  startNI:false, yiRanges:[], leaveYI:[], offReq:[], onlyDay:[], onlyN16:[],
+  startNI:false, yiRanges:(p.yiRanges||[]).map(x=>({s:x.s,e:x.e})), leaveYI:[], offReq:[], onlyDay:[], onlyN16:[],   // ay sınırını aşan izin yeni aya taşınır (ekranda yalnız ilgili olanlar görünür)
   ggRange:p.ggRange||null })); }   // geçici görev tarih aralığı aylara yayılır, taşınır
 function captureMonth(){ if(CUR_YM==null)return; const prev=MONTHS_DATA[CUR_YM]||{};
   /* grid DE TAŞINMALI. Bu fonksiyon neredeyse her etkileşimde çalışıyor ve
@@ -1203,8 +1239,9 @@ function onPeriodChange(){ captureMonth(); showMonth(ymNow());
   if(!kayitliListeyiGoster(CUR_YM)) generate(); }   // o ayın kayıtlı listesi varsa gösterilir, yoksa üretilir
 
 // ===== KAYDET =====
-function readCfg(){ return { year:parseInt(document.getElementById('year').value,10), month:parseInt(document.getElementById('month').value,10),
-  holidays:parseDays(document.getElementById('holidays').value), halfDays:parseDays(document.getElementById('halfDays').value), profile:curProfile(), personnel:readPersonnel() }; }
+function readCfg(){ const c={ year:parseInt(document.getElementById('year').value,10), month:parseInt(document.getElementById('month').value,10),
+  holidays:parseDays(document.getElementById('holidays').value), halfDays:parseDays(document.getElementById('halfDays').value), profile:curProfile(), personnel:readPersonnel() };
+  ayKomsuIzinleri(c); return c; }
 /* ---- KAYDEDİLMEMİŞ DEĞİŞİKLİK KORUMASI ----
    Yarım saatlik izin girişi Kaydet'e basılmadan sekme kapanınca uçuyordu.
    Artık düzenlenebilir alanlarda her değişiklik "kirli" işaretlenir; kayıt
@@ -1328,7 +1365,7 @@ function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return c
 let URETICI=null, URETIM_NO=0;
 function ureticiAl(){
   if(URETICI!==null) return URETICI;
-  try{ URETICI=new Worker('asistan-worker.js?v=58'); }
+  try{ URETICI=new Worker('asistan-worker.js?v=59'); }
   catch(e){ URETICI=false; }        // false = "denendi, olmadı" (tekrar denenmesin)
   return URETICI;
 }
@@ -1358,7 +1395,7 @@ function generate(){
     uretimBitti(m.sonuc,cfg,ym);
   };
   w.onerror=()=>{ URETICI=false; if(gosterge)gosterge.style.display='none'; generate(); };
-  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=58'});
+  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=59'});
 }
 function uretimBitti(sonuc,cfg,ym){
   LAST=sonuc; ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0;
@@ -1395,7 +1432,8 @@ function girdiOzeti(cfg){
     yi:(x.leaveYI||[]).slice().sort((a,b)=>a-b).join(','),
     gg:(x.ggDays||[]).slice().sort((a,b)=>a-b).join(','),
     bos:(x.offReq||[]).slice().sort((a,b)=>a-b).join(','),
-    ist:[(x.onlyDay||[]).join(','),(x.onlyN16||[]).join(','),(x.onlyN24||[]).join(',')].join('|'), tavan:x.maxNobet||0
+    ist:[(x.onlyDay||[]).join(','),(x.onlyN16||[]).join(','),(x.onlyN24||[]).join(',')].join('|'), tavan:x.maxNobet||0,
+    sinirIzin:(x.nextLeaveStart||0)+'|'+(x.prevLeaveEnded?1:0)
   }));
   const pr=cfg.profile||{}; const kural={};
   Object.keys(pr).sort().forEach(a=>{ if(a!=='name') kural[a]=pr[a]; });
@@ -1411,14 +1449,27 @@ function girdiFarki(eski,yeni){
   if(cikan.length)   F.push(cikan.length+' kişi çıkarıldı ('+cikan.slice(0,3).join(', ')+(cikan.length>3?'…':'')+')');
   const alanAd={yi:'yıllık izin', bos:'boş gün isteği', ist:'nöbet/gündüz isteği', gg:'geçici görev',
                 izinGunu:'haftalık izin günü', sorumlu:'sorumlu', gunduz:'sadece gündüz',
-                nobetci:'sadece nöbet', kidem:'kıdem', ni:'aya N.İ ile başlama'};
+                nobetci:'sadece nöbet', kidem:'kıdem', ni:'aya N.İ ile başlama',
+                tavan:'kişiye özel nöbet tavanı', sinirIzin:'ay sınırındaki izin (önceki/sonraki ay)'};
   const degisen={};
   yeni.kisiler.forEach(y=>{ const e=eski.kisiler.filter(x=>x.ad===y.ad)[0]; if(!e) return;
-    Object.keys(alanAd).forEach(alan=>{ if(String(e[alan])!==String(y[alan])){ (degisen[alan]=degisen[alan]||[]).push(y.ad); } }); });
+    Object.keys(alanAd).forEach(alan=>{ if(e[alan]===undefined) return;   // eski kayıtta olmayan alan: değişti sayılmaz
+      if(String(e[alan])!==String(y[alan])){ (degisen[alan]=degisen[alan]||[]).push(y.ad); } }); });
   Object.keys(degisen).forEach(alan=>{ const L=degisen[alan];
     F.push(alanAd[alan]+' değişti: '+L.slice(0,3).join(', ')+(L.length>3?' ve '+(L.length-3)+' kişi daha':'')); });
   if(eski.tatil!==yeni.tatil) F.push('tatil / yarım gün listesi değişti');
-  if(eski.kural!==yeni.kural) F.push('kural ayarları değişti');
+  if(eski.kural!==yeni.kural){
+    /* Sonradan eklenen bir ayar eski kayıtta yoktur; varsayılan değerindeyse
+       "kural değişti" sayılmaz (her güncellemeden sonra bütün kayıtlı listeler
+       "güncel değil" görünüyordu). */
+    let degisti=true;
+    try{ const a=JSON.parse(eski.kural), b=JSON.parse(yeni.kural), v=AsistanScheduler.defaultProfile();
+      degisti=Object.keys(Object.assign({},a,b)).some(k=>{
+        if(!(k in a)) return JSON.stringify(b[k])!==JSON.stringify(v[k]) && b[k]!==undefined && String(b[k])!==String(v[k]);
+        return JSON.stringify(a[k])!==JSON.stringify(b[k]) && String(a[k])!==String(b[k]); });
+    }catch(e){}
+    if(degisti) F.push('kural ayarları değişti');
+  }
   if(eAd.length===yAd.length && eAd.join(',')!==yAd.join(',') && !eklenen.length && !cikan.length)
     F.push('kişi sırası değişti');
   return F;
