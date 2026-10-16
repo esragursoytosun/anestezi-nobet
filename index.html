@@ -286,6 +286,11 @@
   table.grid.hl-on tbody tr.hl-row td{box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
   table.grid.hl-on tbody tr.hl-row td.name{background:var(--panel2)!important;color:#fff}
   .tot{background:var(--inset);font-weight:600} .tot.bad{color:var(--err)} .tot.good{color:var(--ok)}
+  /* Gündüz / nöbetçi satırı: belirlenen sayının DIŞINDAKİ günler göze çarpsın */
+  td.tot.sayi-az{background:#7f1d1d!important;color:#fff!important}
+  td.tot.sayi-fazla{background:#9a6700!important;color:#fff!important}
+  .sayi-lejant{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:6px}
+  .sayi-lejant i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:12.5px;color:var(--txt)}
   .legend span{display:inline-flex;align-items:center;gap:6px}
   .sw{width:15px;height:15px;border-radius:4px;display:inline-block;border:1px solid rgba(255,255,255,.15)}
@@ -347,6 +352,7 @@
       color:#000!important;font-size:10px;font-weight:700;letter-spacing:0;text-align:left;padding:2px 4px}
     .tot{background:#f3f4f6!important;color:#000!important;font-size:8.4px;font-weight:700}
     .tot.bad{color:#b91c1c!important} .tot.good{color:#15803d!important}
+    td.tot.sayi-az{background:#fecaca!important;color:#7f1d1d!important} td.tot.sayi-fazla{background:#fde68a!important;color:#78350f!important}
     .legend{font-size:9px;margin-top:6px;gap:8px;color:#000} .legend .sw{border:1px solid #999}
     /* ---- DİKEY KÂĞIDA YATAY BASKI (telefon) ----------------------------
        Telefon yazdırma kutuları @page'in "landscape" isteğini çoğu zaman
@@ -700,7 +706,7 @@
   <button class="sm sec" onclick="document.getElementById('output').scrollIntoView({behavior:'smooth',block:'start'})">Listeye git</button>
   <button class="sm sec" onclick="document.getElementById('statusBar').style.display='none'" title="Şeridi gizle">✕</button>
 </div>
-<div class="foot">Nöbet Planlama Asistanı · <b>v54</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
+<div class="foot">Nöbet Planlama Asistanı · <b>v55</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
 <script src="asistan-scheduler.js?v=60"></script>
 <script>
@@ -1669,10 +1675,20 @@ function gridHtml(r){
     h+=`<td class="tot">${t.target}</td><td class="tot">${t.hours}</td><td class="tot ${fc}">${t.fark>0?'+':''}${t.fark}</td><td class="tot">${t.mesai}</td><td class="tot">${t.nl}</td><td class="tot">${t.ns}</td><td class="tot">${t.ni}</td><td class="tot">${t.uci}</td><td class="tot">${t.weekendNobet}</td></tr>`; });
   function dc(day){let nob=0,gun=0;r.totals.forEach(t=>{const c=r.grid[t.name][day];if(c==='NL'||c==='NS')nob++;const cs=customShiftsOf().find(s=>s.code===c);const cd=(c==='M')||(c==='NL'&&p.oncallLongDaytime)||(c==='NS'&&p.oncallShortDaytime)||(cs&&cs.daytime);if(!t.noNobet&&cd)gun++;});return{nob,gun};}
   h+=`<tr style="font-weight:700;border-top:2px solid var(--accent)"><td class="name">☀️ Gündüz</td>`;
-  r.days.forEach(d=>{const c=dc(d.day);const need=d.workday?(d.isExtra?p.daytimeExtra:p.daytimeMin):0;h+=`<td class="tot ${d.workday&&c.gun<need?'bad':'good'}">${c.gun}</td>`;});
+  r.days.forEach(d=>{const c=dc(d.day);
+    if(!d.workday){ h+=`<td class="tot">${c.gun}</td>`; return; }
+    const need=d.isExtra?Math.max(p.daytimeExtra,p.daytimeMin):p.daytimeMin;
+    const sinif=c.gun<need?'sayi-az':(c.gun>need?'sayi-fazla':'good');
+    const ipucu=c.gun<need?`İstenen en az ${need}, ${need-c.gun} kişi eksik`:(c.gun>need?`İstenen ${need}, ${c.gun-need} kişi fazla`+(p.daytimeMax>0&&c.gun>p.daytimeMax?` (üst sınır ${p.daytimeMax} aşıldı)`:''):`İstenen sayı: ${need}`);
+    h+=`<td class="tot ${sinif}" title="${ipucu}">${c.gun}</td>`;});
   h+=`<td class="tot" colspan="9"></td></tr><tr style="font-weight:700"><td class="name">🌙 Nöbetçi</td>`;
-  r.days.forEach(d=>{const c=dc(d.day);const need=(d.weekend||d.holiday)?p.weekendOncallPerDay:p.oncallPerDay;h+=`<td class="tot ${c.nob<need?'bad':'good'}">${c.nob}</td>`;});
+  r.days.forEach(d=>{const c=dc(d.day);const hs=(d.weekend||d.holiday);const need=hs?p.weekendOncallPerDay:p.oncallPerDay;
+    const enCok=Math.max(need,(hs?p.weekendOncallMax:p.oncallMax)||need);
+    const sinif=c.nob<need?'sayi-az':(c.nob>enCok?'sayi-fazla':'good');
+    const ipucu=c.nob<need?`İstenen en az ${need} nöbetçi, ${need-c.nob} eksik`:(c.nob>enCok?`İstenen en fazla ${enCok}, ${c.nob-enCok} fazla (kişisel nöbet isteği olabilir)`:`İstenen: ${need===enCok?need:need+'–'+enCok}`);
+    h+=`<td class="tot ${sinif}" title="${ipucu}">${c.nob}</td>`;});
   h+=`<td class="tot" colspan="9"></td></tr></tbody></table></div>`;
+  h+=`<div class="sayi-lejant noprint"><span><i style="background:#7f1d1d"></i>Gündüz/nöbetçi sayısı belirlenen sayının <b>altında</b></span><span><i style="background:#9a6700"></i>belirlenen sayının <b>üstünde</b></span><span>Hücrenin üzerine gelince istenen sayı yazar.</span></div>`;
   h+=`<div class="legend">
     <span><i class="sw" style="background:var(--c-M)"></i> ${p.mesaiLabel}</span>${r.days.some(d=>d.half)?`<span><i class="sw" style="background:var(--c-M);opacity:.55"></i> ${escapeHtml(p.halfDayLabel||'M8-12')} (½ gün)</span>`:''}
     <span><i class="sw" style="background:var(--c-NL)"></i> ${p.oncallLongLabel}</span>
