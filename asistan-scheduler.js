@@ -2124,6 +2124,9 @@
     var kisaVar = P.useShortOncall !== false, asla = P.shiftTypePref === 'asla', serbest = P.shiftTypePref === 'serbest';
     var hiT = (P.defaultOncall === 'short' && kisaVar) ? 'NS' : 'NL', hsT = (P.weekendOncall === 'short' && kisaVar) ? 'NS' : 'NL';
     var kume = function (a) { var s = {}; (a || []).forEach(function (x) { s[x] = 1; }); return s; };
+    // Tek hücre turu: başta ve iki kişilik devirlerden SONRA yeniden çalışır (devirlerin
+    // saat dengelemesi yeni fırsatlar/artıklar yaratır — ölçüldü: devirden kalan +8 saat).
+    function tekHucreCila() {
     for (var tur = 0; tur < 4; tur++) {
       var iyilesti = false;
       plist.forEach(function (p) {
@@ -2149,6 +2152,8 @@
       });
       if (!iyilesti) break;
     }
+    }
+    tekHucreCila();
 
     /* İKİ KİŞİLİK HAMLE — sorunlu nöbeti devret. Gün aşırı / arka arkaya
        nöbet tek hücre değiştirerek çözülemez: nöbeti o gün boşta olan
@@ -2164,6 +2169,10 @@
       for (var d = 1; d <= nDays; d++) if (isOn(g[d])) on.push(d);
       // kişiye özel tavanı aşan: bütün nöbetleri devir adayı
       if (meta[n].p.maxNobet > 0 && on.length > meta[n].p.maxNobet) return on.slice();
+      /* FAZLA MESAİSİ OLAN: fazlası nöbetten geliyorsa silinecek mesaisi yoktur;
+         nöbetlerinden biri, gündüzü kalabalık günlerde mesaisi olan birine
+         devredilip o kişinin mesaisi düşülerek fazla mesai eritilir. */
+      if (saatOf(n) > meta[n].p.target) return on.slice();
       for (var i = 1; i < on.length; i++) if (on[i] - on[i - 1] <= dinlenme + 1) { if (out.indexOf(on[i - 1]) < 0) out.push(on[i - 1]); out.push(on[i]); }
       return out;
     }
@@ -2275,6 +2284,7 @@
       if (!yapildi) break;
     }
     if (adaletDevri) { r.meta = r.meta || {}; r.meta.adaletDevri = adaletDevri; }
+    if (devirSay || adaletDevri) tekHucreCila();
     if (devirSay) { r.meta = r.meta || {}; r.meta.devir = devirSay; }
     if (!degisen) return r;
     r.grid = grid; r.totals = en.totals; r.warnings = en.warnings.concat(ekNotlar);
