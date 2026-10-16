@@ -380,6 +380,18 @@ section('Ay sınırındaki izin: sonraki ay başlayan izin + önceki ay biten iz
   checkInvariants(r, S.defaultProfile(), 'ay sınırı');
 })();
 
+section('Kadro değişince önceki liste dengesizliği taşımaz (aynı hedefte en fazla 1 nöbet fark)');
+(function () {
+  function kadro() { return people(13, { 1: { noNobet: true, offDay: 2 }, 12: { offDay: 4 } }); }
+  var a = S.buildSchedule({ year: 2026, month: 10, holidays: [], personnel: kadro(), profile: S.defaultProfile(), __attempts: 20, __lsIter: 3000 });
+  var onceki = {}; a.totals.forEach(function (t) { onceki[t.name] = Object.assign({}, a.grid[t.name]); });
+  var k2 = kadro(); k2[12].dayOnly = true; k2[4].maxNobet = 3;
+  var b = S.buildSchedule({ year: 2026, month: 10, holidays: [], personnel: k2, profile: S.defaultProfile(), previousGrid: onceki, __attempts: 20, __lsIter: 3000 });
+  var hedef = Math.max.apply(null, b.totals.map(function (t) { return t.target; }));
+  var n = b.totals.filter(function (t) { return !t.noNobet && !t.dayOnly && !t.maxNobet && t.target === hedef; }).map(function (t) { return t.nl + t.ns; });
+  ok(Math.max.apply(null, n) - Math.min.apply(null, n) <= 1, 'aynı hedefli kişiler arası nöbet farkı en fazla 1 olmalı (' + n.join(',') + ')');
+})();
+
 section('Ön analiz: çelişen ayarı liste üretmeden söyler');
 (function () {
   var cfg = { year: Y, month: M, holidays: [], personnel: people(12) };

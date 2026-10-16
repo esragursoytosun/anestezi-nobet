@@ -2241,6 +2241,40 @@
       });
       if (!devirOldu) break;
     }
+    /* ADALET DEVRİ — aynı hedefe göre 2+ nöbet fark kalmasın.
+       Ölçüldü: kadro değişince (biri "sadece gündüz" yapıldı) sıcak başlangıç
+       herkesin eski nöbetini koruyup boşalanları dengesiz dağıttı (aynı ayda
+       4 ve 7 nöbet). Sadakat bedeli, tek nöbetlik adalet kazancından büyük
+       olduğu için arama bunu düzeltmiyordu. Burada en yüklüden en az yüklüye
+       nöbet devredilir; kural ihlali artmıyorsa kabul edilir. 1 nöbetlik fark
+       (eşit bölünemeyen) dokunulmaz — küçük istek yine küçük değişiklik. */
+    var adaletDevri = 0;
+    for (var ad = 0; ad < 12; ad++) {
+      var adaylar2 = plist.filter(function (p) { return !p.noNobet && !p.dayOnly && !p.onlyNobet && !(p.maxNobet > 0); });
+      if (adaylar2.length < 2) break;
+      var topH = 0, topN = 0;
+      var nb = {}; adaylar2.forEach(function (p) { var c = 0; for (var q = 1; q <= nDays; q++) if (isOn(grid[p.name][q])) c++; nb[p.name] = c; topH += p.target || 1; topN += c; });
+      var sap = function (p) { return nb[p.name] - topN * (p.target || 1) / topH; };
+      adaylar2.sort(function (a, b) { return sap(b) - sap(a); });
+      var cok = adaylar2[0], az = adaylar2[adaylar2.length - 1];
+      if (sap(cok) - sap(az) < 1.9) break;
+      var yapildi = false;
+      for (var dd3 = 1; dd3 <= nDays && !yapildi; dd3++) {
+        var A2 = cok.name, B3 = az.name, kod2 = grid[A2][dd3];
+        if (!isOn(kod2) || meta[A2].n16[dd3] || meta[A2].n24[dd3] || !devirUygun(B3, dd3, kod2)) continue;
+        var yA2 = Object.assign({}, grid[A2]), yB2 = Object.assign({}, grid[B3]);
+        grid[A2][dd3] = bazHucre(dd3);
+        for (var k5 = 1; k5 <= dinlenme && dd3 + k5 <= nDays; k5++) if (grid[A2][dd3 + k5] === 'NI') grid[A2][dd3 + k5] = bazHucre(dd3 + k5);
+        grid[B3][dd3] = kod2;
+        for (var k6 = 1; k6 <= dinlenme && dd3 + k6 <= nDays; k6++) grid[B3][dd3 + k6] = 'NI';
+        saatDengele(A2); saatDengele(B3);
+        var e3 = degerle();
+        if (e3.u <= en.u) { en = e3; yapildi = true; adaletDevri++; degisen++; }
+        else { grid[A2] = yA2; grid[B3] = yB2; }
+      }
+      if (!yapildi) break;
+    }
+    if (adaletDevri) { r.meta = r.meta || {}; r.meta.adaletDevri = adaletDevri; }
     if (devirSay) { r.meta = r.meta || {}; r.meta.devir = devirSay; }
     if (!degisen) return r;
     r.grid = grid; r.totals = en.totals; r.warnings = en.warnings.concat(ekNotlar);

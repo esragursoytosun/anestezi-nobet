@@ -700,9 +700,9 @@
   <button class="sm sec" onclick="document.getElementById('output').scrollIntoView({behavior:'smooth',block:'start'})">Listeye git</button>
   <button class="sm sec" onclick="document.getElementById('statusBar').style.display='none'" title="Şeridi gizle">✕</button>
 </div>
-<div class="foot">Nöbet Planlama Asistanı · <b>v53</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
+<div class="foot">Nöbet Planlama Asistanı · <b>v54</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=59"></script>
+<script src="asistan-scheduler.js?v=60"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -1365,7 +1365,7 @@ function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return c
 let URETICI=null, URETIM_NO=0;
 function ureticiAl(){
   if(URETICI!==null) return URETICI;
-  try{ URETICI=new Worker('asistan-worker.js?v=59'); }
+  try{ URETICI=new Worker('asistan-worker.js?v=60'); }
   catch(e){ URETICI=false; }        // false = "denendi, olmadı" (tekrar denenmesin)
   return URETICI;
 }
@@ -1395,7 +1395,7 @@ function generate(){
     uretimBitti(m.sonuc,cfg,ym);
   };
   w.onerror=()=>{ URETICI=false; if(gosterge)gosterge.style.display='none'; generate(); };
-  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=59'});
+  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=60'});
 }
 function uretimBitti(sonuc,cfg,ym){
   LAST=sonuc; ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0;
@@ -1684,11 +1684,52 @@ function gridHtml(r){
   const _notes=uyariGrupla((r.warnings||[]).filter(w=>w.startsWith('💡'))); const _realsHam=(r.warnings||[]).filter(w=>!w.startsWith('💡'));
   const _reals=uyariGrupla(_realsHam);
   h+=diagnose(r);
+  h+=kisiNedenleri(r);
   if(_reals.length){ h+=`<div class="warns"><b>⚠️ ${_realsHam.length} uyarı</b><ul>`+_reals.map(w=>`<li>${w}</li>`).join('')+`</ul></div>`; }
   else { const eksik=(r.totals||[]).filter(t=>t.fark<0&&!t.noNobet&&!t.onlyNobet).length;
     h+=`<div class="warns ok"><b>✓ Liste hazır.</b> Her gün yeterli nöbetçi var`+(eksik?`, kural ihlali yok — ancak <b>${eksik} kişi saat hedefinin altında</b> (aşağıdaki notlara bakın).`:', herkes saat hedefini tuttu.')+`</div>`; }
   if(_notes.length) h+=`<div class="warns" style="background:#0b2030;border-color:#1e3a5f;color:#bae6fd"><b>${_notes.length} not</b><ul>`+_notes.map(w=>`<li>${w}</li>`).join('')+`</ul></div>`;
   return h;
+}
+/* ---- KİŞİ BAZINDA "NEDEN?" ----
+   Kullanıcı "bazılarına daha az nöbet / daha çok gündüz veriyor" diye
+   soruyordu ve listede sebebi görmenin yolu yoktu. Ortalamadan sapan her
+   kişi için sebep, girilen verilerden çıkarılıp düz cümleyle yazılır. */
+function kisiNedenleri(r){
+  const tot=r.totals||[]; let kisiler=[]; try{ kisiler=readPersonnel(); }catch(e){}
+  const bul=ad=>kisiler.find(k=>k.name===ad)||{};
+  const nob=t=>(t.nl||0)+(t.ns||0);
+  const normal=tot.filter(t=>!t.noNobet&&!t.dayOnly&&!t.onlyNobet);
+  if(!normal.length) return '';
+  const tamHedef=Math.max(...normal.map(t=>t.target||0));
+  const ort=normal.reduce((a,t)=>a+nob(t),0)/normal.length;
+  let carry={}; try{ carry=(buildCarry(CUR_YM)||{}).byName||{}; }catch(e){}
+  const crOrt=normal.length?normal.reduce((a,t)=>a+((carry[t.name]||{}).nc||0),0)/normal.length:0;
+  const p=curProfile(), nobSaat=p.oncallLongHours||24, mesSaat=p.mesaiHours||8;
+  const satirlar=[];
+  tot.forEach(t=>{
+    const k=bul(t.name), n=nob(t), L=[];
+    if(t.noNobet){ return; }
+    if(t.dayOnly){ satirlar.push(`<b>${escapeHtml(t.name)}</b>: hiç nöbet yok — Ayrıntılar'da <b>"Sadece gündüz"</b> işaretli.`); return; }
+    if(Math.abs(n-ort)<0.9 && !(t.onlyNobet)) return;
+    if(t.onlyNobet) L.push('"Sadece nöbet" işaretli (gündüz yazılmaz)');
+    if(k.maxNobet>0) L.push(`kişiye özel tavan: en fazla ${k.maxNobet} nöbet`);
+    if((t.izinIsGunu||0)>0) L.push(`${t.izinIsGunu} iş günü yıllık izin / geçici görev`);
+    if(k.offDay!=null && k.offDay!=='') L.push('haftalık izin günü var');
+    if(t.target<tamHedef) L.push(`aylık hedefi ${t.target} saat (diğerleri ${tamHedef})`);
+    if((k.offReq||[]).length) L.push(`${k.offReq.length} gün boş gün isteği`);
+    if((k.onlyDay||[]).length) L.push(`${k.onlyDay.length} gün "bu günlerde gündüz" isteği (o günler nöbet verilmez)`);
+    const cr=(carry[t.name]||{}).nc;
+    if(cr!=null && Math.abs(cr-crOrt)>=1) L.push(`önceki aylarda ${cr>crOrt?'ortalamadan fazla':'ortalamadan az'} nöbet tutmuş (${cr} / ort. ${crOrt.toFixed(1)}) — aylar arası denge ${cr>crOrt?'bu ay azaltıyor':'bu ay artırıyor'}`);
+    if(!L.length && Math.abs(n-ort)<1.5) L.push(`nöbetler herkese eşit bölünemiyor (${normal.reduce((a,x)=>a+nob(x),0)} nöbet / ${normal.length} kişi); bu ay ${n>ort?'1 fazla':'1 eksik'} tuttu, aylar arası denge sonraki aylarda eşitler`);
+    else if(!L.length) L.push(`ortalamadan ${(Math.abs(n-ort)).toFixed(1)} ${n>ort?'fazla':'az'} — girilen bilgilerle açıklanamıyor; büyük olasılıkla kurallar (izin öncesi nöbet, gündüz sayısı, dinlenme) o günlere başka kimseyi yerleştirmeye izin vermedi`);
+    satirlar.push(`<b>${escapeHtml(t.name)}</b>: ${n} nöbet (ortalama ${ort.toFixed(1)}) — ${L.join('; ')}.`);
+  });
+  if(!satirlar.length) return '';
+  const katsayi=Math.round(nobSaat/mesSaat);
+  return `<details class="warns" style="background:var(--inset);border-color:var(--line2);color:var(--txt)"><summary style="cursor:pointer"><b>Neden bazıları az / çok nöbet tuttu?</b> <span class="muted">(${satirlar.length} kişi)</span></summary>`
+    +`<p class="muted" style="margin:6px 0 4px;font-size:12px">Herkesin aylık saati aynı olduğu için <b>1 nöbet fazla = ${katsayi} gün daha az gündüz</b> demektir (${nobSaat} saat = ${katsayi} × ${mesSaat} saat). Gündüz sayısı farkının sebebi budur.</p>`
+    +'<ul>'+satirlar.map(s=>`<li>${s}</li>`).join('')+'</ul></details>';
 }
 /* ---- AYNI TÜR UYARILARI TEK SATIRDA ----
    Eskiden her kişi için ayrı satır çıkıyordu ("P3: 32 saat eksik — gündüz
