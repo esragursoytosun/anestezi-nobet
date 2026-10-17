@@ -63,7 +63,9 @@
       weekendOncallPerDay: 2,                              // hafta sonu/tatil nöbetçi EN AZ
       weekendOncallMax: 2,                                 // hafta sonu/tatil nöbetçi EN FAZLA (aralık)
       targetPerWorkday: 8,                                 // aylık hedef = bu × iş günü
-      preLeaveOncall: true,                                // yıllık izin öncesi nöbet konsun mu
+      preLeaveOncall: true,                                // yıllık izin öncesi nöbet konsun mu (uzun izinde)
+      preLeaveLongMin: 5,                                  // "uzun izin": en az bu kadar iş günü (altı kısa izin)
+      preLeaveShortGap: 1,                                 // kısa izinden önce kaç gün boş (hafta sonu dahil; 0 = yok)
       preLeaveDaysBefore: 4,                               // izinden kaç iş günü önce nöbet (tercih)
       preLeaveDaysBeforeFallback: 3,                       // olmazsa kaç iş günü önce
       preLeaveGap: 2,                                      // izinden hemen önce kaç iş günü boş (ücretli izin)
@@ -214,6 +216,8 @@
     var mdc = parseInt(r.maxDutyChain, 10); r.maxDutyChain = (mdc >= 0 && mdc <= 31) ? mdc : 0;
     var mdl = parseInt(r.maxDutyWhenOnLeave, 10); r.maxDutyWhenOnLeave = (mdl >= 0 && mdl <= 31) ? mdl : 0;
     if (['serbest', 'zorunlu', 'asla'].indexOf(r.shiftTypePref) < 0) r.shiftTypePref = 'zorunlu';
+    var plm = parseInt(r.preLeaveLongMin, 10); r.preLeaveLongMin = (plm >= 1 && plm <= 31) ? plm : 5;
+    var psg = parseInt(r.preLeaveShortGap, 10); r.preLeaveShortGap = (psg >= 0 && psg <= 7) ? psg : 1;
     var lb = parseFloat(r.loadBalance); r.loadBalance = (lb >= 0 && lb <= 10) ? lb : 1;
     var yh = parseFloat(r.halfDayHours); r.halfDayHours = (yh > 0 && yh <= r.mesaiHours) ? yh : Math.min(4, r.mesaiHours);
     return r; }
@@ -659,6 +663,8 @@
            nöbet + boşluk bu aya düşebilir) ve önceki ayın sonunda biten izin
            (dönüşün ilk iş günü bu ayda). Arayüz komşu ayların verisinden doldurur. */
         sonrakiIzin: (+p.nextLeaveStart >= 1 && +p.nextLeaveStart <= 20) ? Math.floor(+p.nextLeaveStart) : 0,
+        sonrakiIzinIsGunu: +p.nextLeaveWorkdays > 0 ? Math.floor(+p.nextLeaveWorkdays) : 0,   // o iznin iş günü sayısı
+        izinDevamIsGunu: +p.leaveCarryWorkdays > 0 ? Math.floor(+p.leaveCarryWorkdays) : 0,  // ay sonunda süren iznin sonraki aydaki iş günü
         oncekiIzinBitti: !!p.prevLeaveEnded,
         onlyDay: new Set(p.onlyDay || []), onlyN16: new Set(p.onlyN16 || []), onlyN24: new Set(p.onlyN24 || []), offReq: new Set(p.offReq || []),
         assign: assign, target: target, hours: 0, nobetDays: [], lastNobet: -99, weekendNobet: 0,
@@ -737,7 +743,35 @@
         people.forEach(function (Pp) { if (Pp.startNI && Pp.assign[1] === '') Pp.assign[1] = 'NI'; });
       },
       preLeave: function () {        // YILLIK İZİN ÖNCESİ NÖBET + BOŞLUK (izin & boşluk kuralı)
-        if (!P.preLeaveOncall) return;
+        /* İZİN UZUNLUĞUNA GÖRE: uzun izinde (en az preLeaveLongMin iş günü)
+           izin öncesi nöbet + izne kadar boşluk; kısa izinde nöbet konmaz,
+           yalnız izinden hemen önceki preLeaveShortGap gün (hafta sonu dahil)
+           boş bırakılır. Her birim kendi sayılarını seçer. Eskiden kural
+           izin süresine bakmıyordu: 1 günlük izne de 3-5 gün boşluk düşüyordu. */
+        function izinIsGunuSay(Pp, bs) {
+          if (bs > nDays) return Pp.sonrakiIzinIsGunu || 99;     // sonraki ay başlayan: uzunluk bilinmiyorsa uzun say
+          var n = 0, d = bs;
+          for (; d <= nDays && Pp.assign[d] === 'YI'; d++) if (days[d - 1].workday) n++;
+          if (d > nDays) n += (Pp.izinDevamIsGunu || 0);           // izin sonraki aya taşıyor
+          return n;
+        }
+        function kisaBosluk(Pp, bs) {
+          for (var k = 1; k <= P.preLeaveShortGap; k++) { var d = bs - k; if (d < 1 || d > nDays) continue;
+            var c = Pp.assign[d];
+            if (c === '') { Pp.assign[d] = 'UCI'; Pp.lockedOff.add(d); Pp.preLeaveLock.add(d); }
+            else if (c === 'HT' || c === 'RT') { Pp.lockedOff.add(d); Pp.preLeaveLock.add(d); } }   // hafta sonu da korunur: önceki günün nöbet dinlenmesi buraya düşmesin
+          /* Boşluğun hemen önündeki ilk iş günü ÇALIŞMA olsun: yoksa sıradan bir
+             ücretli izin günü + hafta sonu + dinlenme eklenip kısa izin yine
+             5 günlük boşluğa dönüşüyordu (ölçüldü: Çarşamba izninde 5 gün). */
+          if (P.preLeaveShortGap > 0 && !Pp.onlyNobet) {
+            for (var gd = bs - P.preLeaveShortGap - 1; gd >= 1 && gd > bs - P.preLeaveShortGap - 5; gd--) {
+              if (gd > nDays) continue;
+              if (!days[gd - 1].workday) continue;
+              if (Pp.assign[gd] === '' && !Pp.offReq.has(gd)) { addMesai(Pp, gd); Pp.mustMesai.add(gd); }
+              break;
+            }
+          }
+        }
         people.forEach(function (Pp) {
           var starts = [];
           for (var d = 1; d <= nDays; d++) if (Pp.assign[d] === 'YI' && (d === 1 || Pp.assign[d - 1] !== 'YI')) starts.push(d);
@@ -745,6 +779,8 @@
              iş günleri de sayılır ki "4 iş günü önce" doğru gün olsun. */
           if (Pp.sonrakiIzin && Pp.assign[nDays] !== 'YI') starts.push(nDays + Pp.sonrakiIzin);
           starts.forEach(function (bs) {
+            var uzun = P.preLeaveOncall && izinIsGunuSay(Pp, bs) >= P.preLeaveLongMin;
+            if (!uzun) { if (!Pp.noNobet && !Pp.dayOnly) kisaBosluk(Pp, bs); return; }
             var wprev = workdayNums.filter(function (x) { return x < bs; });
             for (var vd = nDays + 1; vd < bs; vd++) if (SONRAKI_IS_GUNU(vd - nDays)) wprev.push(vd);
             wprev.sort(function (a, b) { return b - a; });
@@ -926,7 +962,7 @@
       if (Pp.lockedOff.has(d) || Pp.offReq.has(d)) return false;
       if (!(cur === '' || cur === 'HT' || cur === 'RT')) return false;   // izin/istek/başka nöbet varsa dokunma
       if (d > 1 && isOncall(Pp.assign[d - 1])) return false;             // dinlenme kuralı
-      if (d < nDays && isOncall(Pp.assign[d + 1])) return false;
+      if (d < nDays && (isOncall(Pp.assign[d + 1]) || Pp.preLeaveLock.has(d + 1))) return false;   // dinlenmesi izin öncesi boş güne düşmesin
       if (Pp.hours + HOURS[kind] > Pp.target) return false;              // saat tavanı
       return true;
     }
@@ -972,7 +1008,7 @@
       if (Pp.lockedOff.has(d) || Pp.offReq.has(d)) return false;
       if (cur === 'YI' || cur === 'OFF' || cur === 'NI' || isOncall(cur)) return false;
       if (d > 1 && isOncall(Pp.assign[d - 1])) return false;
-      if (d < nDays) { var nx = Pp.assign[d + 1]; if (nx === 'M' || isOncall(nx) || nx === 'YI') return false; }
+      if (d < nDays) { var nx = Pp.assign[d + 1]; if (nx === 'M' || isOncall(nx) || nx === 'YI' || Pp.preLeaveLock.has(d + 1)) return false; }
       return true;
     }
     function freeBudget(Pp, needH, excl, allowBreak) {
@@ -1154,7 +1190,7 @@
            (coverEligible) bu kodları zaten kabul ediyordu; tutarsızlıktı. */
         var cell = B.assign[d]; if (!(cell === 'M' || cell === 'UCI' || cell === 'HT' || cell === 'RT' || cell === '')) continue;
         if (d > 1 && isOncall(B.assign[d - 1])) continue;                       // arka arkaya nöbet olmaz
-        if (d < nDays) { var nx = B.assign[d + 1]; if (!(nx === '' || nx === 'HT' || nx === 'RT' || nx === 'UCI' || nx === 'NI')) continue; }  // ertesi gün dinlenme yazılabilmeli
+        if (d < nDays) { var nx = B.assign[d + 1]; if (!(nx === '' || nx === 'HT' || nx === 'RT' || nx === 'UCI' || nx === 'NI') || B.preLeaveLock.has(d + 1)) continue; }  // ertesi gün dinlenme yazılabilmeli
         out.push(B); }
       return out;
     }
@@ -1930,7 +1966,7 @@
         for (var guard = 0; guard < need + 2 && oncallCount(d) < need; guard++) {
           var kind = dayType(dd);
           if (kind === 'NS' && !P.useShortOncall) kind = 'NL';
-          var pool = people.filter(function (Pp) {
+          var uygunSon = function (Pp) {
             if (Pp.noNobet || Pp.dayOnly) return false;
             if (Pp.onlyDay.has(d)) return false;
             if (Pp.onlyN16.has(d) && kind === 'NL') return false;
@@ -1948,8 +1984,29 @@
             if (d < nDays) { var nx = Pp.assign[d + 1];
               if (isOncall(nx) || nx === 'YI' || nx === 'OFF') return false; } // izin/ertesi gün nöbet: yasak
             return true;
-          });
-          if (!pool.length) break;
+          };
+          var pool = people.filter(uygunSon);
+          /* ZİNCİRLİ ÇÖZÜM: kimse uygun değilse, gün öncesi/sonrası nöbeti yüzünden
+             engellenen birinin O nöbetini başka birine devret, kişiyi bu güne al.
+             Ölçüldü: yoğun izinli bir ayda tek kişilik zincirle kapanabilen açık
+             kalıyordu (11 kişi, 3 nöbetçi, 20. gün 2/3). */
+          if (!pool.length) {
+            var zincir = null;
+            for (var zi = 0; zi < people.length && !zincir; zi++) {
+              var X = people[zi];
+              if (X.noNobet || X.dayOnly || X.offReq.has(d) || X.onlyDay.has(d)) continue;
+              [d - 1, d + 1].forEach(function (aa) {
+                if (zincir || aa < 1 || aa > nDays || !isOncall(X.assign[aa]) || X.onlyN16.has(aa) || X.onlyN24.has(aa)) return;
+                var adaylarZ = devirAdaylari(X, aa);
+                for (var bz = 0; bz < adaylarZ.length && !zincir; bz++) {
+                  var geri = nobetDevret(X, adaylarZ[bz], aa);
+                  if (uygunSon(X)) zincir = X; else geri();
+                }
+              });
+            }
+            if (!zincir) break;
+            pool = [zincir];
+          }
           pool.sort(function (x, y) {
             var xn = x.nobetDays.length, yn = y.nobetDays.length; if (xn !== yn) return xn - yn;   // en az nöbet tutan
             return (y.target - y.hours) - (x.target - x.hours);                                    // saati en boş olan
@@ -2186,7 +2243,7 @@
       for (var k = 1; k <= dinlenme + 1; k++) { if (d - k >= 1 && isOn(gB[d - k])) return false; }
       for (var k2 = 1; k2 <= dinlenme + 1 && d + k2 <= nDays; k2++) {
         var c2 = gB[d + k2]; if (isOn(c2)) return false;
-        if (k2 <= dinlenme && (c2 === 'YI' || c2 === 'GG' || c2 === 'OFF' || m.zor[d + k2])) return false;
+        if (k2 <= dinlenme && (c2 === 'YI' || c2 === 'GG' || c2 === 'OFF' || m.zor[d + k2] || m.onc[d + k2])) return false;   // dinlenme izin öncesi boş güne düşmesin
       }
       return true;
     }

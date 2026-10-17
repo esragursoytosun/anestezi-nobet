@@ -392,6 +392,21 @@ section('Kadro değişince önceki liste dengesizliği taşımaz (aynı hedefte 
   ok(Math.max.apply(null, n) - Math.min.apply(null, n) <= 1, 'aynı hedefli kişiler arası nöbet farkı en fazla 1 olmalı (' + n.join(',') + ')');
 })();
 
+section('İzin uzunluğuna göre izin öncesi kural (uzun: nöbet + boşluk, kısa: 1 gün boş)');
+(function () {
+  // Kasım 2026: 16 Pzt 5 gün (uzun), 18 Çar 3 gün (kısa), 23 Pzt 1 gün (kısa)
+  var r = S.buildSchedule({ year: 2026, month: 10, holidays: [], personnel: people(13, { 1: { noNobet: true }, 3: { leaveYI: [16, 17, 18, 19, 20] }, 4: { leaveYI: [18, 19, 20] }, 6: { leaveYI: [23] } }), profile: S.defaultProfile(), __attempts: 20, __lsIter: 3000 });
+  var calis = function (c) { return c === 'M' || c === 'NL' || c === 'NS'; };
+  ok(r.grid['P3'][10] === 'NL', 'uzun izin (Pzt 5 gün): önceki Salı nöbet (' + r.grid['P3'][10] + ')');
+  var isVar = false; for (var d = 11; d <= 15; d++) if (calis(r.grid['P3'][d])) isVar = true;
+  ok(!isVar, 'uzun izin: nöbetten izne kadar iş yok');
+  ok(!calis(r.grid['P4'][17]) && r.grid['P4'][17] !== 'NI', 'kısa izin (Çar): Salı gerçekten boş, N.İ değil (' + r.grid['P4'][17] + ')');
+  var bosBlok = 0; for (var d2 = 17; d2 >= 11 && !calis(r.grid['P4'][d2]); d2--) bosBlok++;
+  ok(bosBlok <= 4, 'kısa izinde uzun boşluk verilmemeli (' + bosBlok + ' gün)');
+  ok(r.grid['P6'][22] === 'HT', 'kısa izin (Pzt 1 gün): Pazar boş, önceki nöbetin dinlenmesi buraya düşmez (' + r.grid['P6'][22] + ')');
+  checkInvariants(r, S.defaultProfile(), 'izin uzunluğu');
+})();
+
 section('Ön analiz: çelişen ayarı liste üretmeden söyler');
 (function () {
   var cfg = { year: Y, month: M, holidays: [], personnel: people(12) };

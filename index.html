@@ -503,7 +503,9 @@
           <h4>Saat ve izin</h4>
           <div class="soru"><label for="targetPerWorkday">Her iş günü kaç saat sayılsın</label><input type="number" id="targetPerWorkday" min="0"><span class="hint">Aylık hedef = bu × iş günü. Yıllık izin ve haftalık izin günleri düşülür.</span><div class="etki" data-etki="targetPerWorkday"></div></div>
           <label class="chk"><input type="checkbox" id="overtimeForCounts"> Gündüz sayısı tutmazsa fazla mesai verilebilsin</label><div class="etki chk-etki" data-etki="overtimeForCounts"></div>
-          <label class="chk"><input type="checkbox" id="preLeaveOncall"> Yıllık izinden önce nöbet koyulsun (izne dinlenmiş çıksın)</label><div class="etki chk-etki" data-etki="preLeaveOncall"></div>
+          <label class="chk"><input type="checkbox" id="preLeaveOncall"> Uzun izinden önce nöbet koyulsun (izne dinlenmiş çıksın)</label><div class="etki chk-etki" data-etki="preLeaveOncall"></div>
+          <div class="soru" style="margin-left:24px"><label for="preLeaveLongMin">Uzun izin sayılması için en az kaç iş günü</label><input type="number" id="preLeaveLongMin" min="1" max="31"><span class="hint">Bu kadar ya da daha uzun izinde nöbet izinden birkaç iş günü önce konur, nöbetten izne kadar iş yazılmaz. Örn. 5 → Pazartesi başlayan 5 günlük izinde önceki Salı nöbet, Pazartesiye kadar boş.</span></div>
+          <div class="soru"><label for="preLeaveShortGap">Kısa izinden önce kaç gün boş <small>(hafta sonu dahil · 0 = kural yok)</small></label><input type="number" id="preLeaveShortGap" min="0" max="7"><span class="hint">Uzun sayılmayan izinlerde öncesine nöbet konmaz; yalnız izinden hemen önceki bu kadar gün boş bırakılır. Bir önceki günün nöbet dinlenmesi bu güne düşmez. Örn. 1 → Çarşamba izninde Salı boş; Pazartesi izninde Pazar zaten boş olduğu için iş günü kaybolmaz.</span><div class="etki" data-etki="preLeaveShortGap"></div></div>
           <label class="chk"><input type="checkbox" id="carryFairness"> Aylar arası denge (geçen ay çok tutan bu ay az tutsun)</label><div class="etki chk-etki" data-etki="carryFairness"></div>
         </div>
       </div>
@@ -706,9 +708,9 @@
   <button class="sm sec" onclick="document.getElementById('output').scrollIntoView({behavior:'smooth',block:'start'})">Listeye git</button>
   <button class="sm sec" onclick="document.getElementById('statusBar').style.display='none'" title="Şeridi gizle">✕</button>
 </div>
-<div class="foot">Nöbet Planlama Asistanı · <b>v56</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
+<div class="foot">Nöbet Planlama Asistanı · <b>v57</b> · <span class="sign">by Cem Eren Tosun — Udeto</span></div>
 
-<script src="asistan-scheduler.js?v=61"></script>
+<script src="asistan-scheduler.js?v=62"></script>
 <script>
 const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
@@ -722,7 +724,7 @@ const exWrap=document.getElementById('extraDays');
 const RULE_FIELDS=['mesaiHours','mesaiLabel','oncallLongHours','oncallLongLabel','oncallLongDaytime','useShortOncall',
   'oncallShortHours','oncallShortLabel','oncallShortDaytime','defaultOncall','daytimeMin','daytimeExtra',
   'weekendOncall','preLeaveOncall','preLeaveDaysBefore','preLeaveDaysBeforeFallback','preLeaveGap',
-  'halfDayHours','halfDayLabel','loadBalance','postOncallRest','maxConsecutiveOff','maxAbsentDays','maxWeekendDuties','maxConsecutiveWork','maxDutyChain','maxDutyWhenOnLeave','daytimeMax','idleStyle','shiftTypePref','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
+  'halfDayHours','halfDayLabel','loadBalance','preLeaveLongMin','preLeaveShortGap','postOncallRest','maxConsecutiveOff','maxAbsentDays','maxWeekendDuties','maxConsecutiveWork','maxDutyChain','maxDutyWhenOnLeave','daytimeMax','idleStyle','shiftTypePref','targetPerWorkday','minStaffWarn','overtimeForCounts','minSeniorOncall','minSeniorDaytime'];
 /* DENGE ÖNCELİKLERİ: motorda ÇARPAN olarak yaşıyor (0.4/1/2.5/6). Seçenekler
    sayı değeri taşır; RULE_FIELDS'in genel yolu string bırakırdı, o yüzden
    ayrı okunup parseFloat ile yazılır. */
@@ -757,7 +759,7 @@ const PRIO_ACIKLAMA={
   leave:['Personel → "Yıllık izin" tarih aralığı (geçici görev de aynı işlenir). İzin günleri Yİ yazılır, aylık hedeften düşer.','Kaybederse: üstteki kayıt (örn. nöbet isteği) o güne yazılır; o gün izin sayılmaz.'],
   offDay:['Personel → "Haftalık izin günü" (örn. her Perşembe). O gün çalışılmaz, hedeften düşer.','Kaybederse iptal olmaz: izin aynı haftanın başka boş iş gününe kaydırılır.'],
   startNI:['Önceki ayın son günü nöbet tutan kişi ayın 1\'inde dinlenir (yeni ay açılınca otomatik işaretlenir; Ayrıntılar\'da "Aya N.İ ile başla").','Kaybederse: 1. gün başka kayıtla doluysa dinlenme yazılmaz.'],
-  preLeave:['Kural ayarlarında "Yıllık izinden önce nöbet" açıksa: izinden birkaç iş günü önce nöbet konur, nöbetten izne kadar iş yazılmaz.','Kaybederse: o günler doluysa ikinci mesafe denenir; o da olmazsa yalnız boş gün bırakılır.']
+  preLeave:['Kural ayarlarındaki izin öncesi kural: uzun izinde izinden birkaç iş günü önce nöbet ve izne kadar boşluk; kısa izinde yalnız izinden hemen önceki günler boş.','Kaybederse: o günler doluysa ikinci mesafe denenir; o da olmazsa yalnız boş gün bırakılır.']
 };
 function renderPrio(){ const box=document.getElementById('prioList'); if(!box)return; const po=prioOf(curProfile());
   box.innerHTML=po.map((k,i)=>{ const a=PRIO_ACIKLAMA[k]||['',''];
@@ -858,7 +860,9 @@ function onAnalizGoster(){
    Her ayarın altında, o ayarın BU AY BU KADROYLA ne anlama geldiği tek
    cümleyle yazılır. Kullanıcı "bu sayıyı değiştirirsem ne olur?" sorusunu
    liste üretmeden görür. Sorun çıkaran durumlar sarı (dikkat) gösterilir. */
-function kuralEtkileri(a,p){
+function kuralEtkileri(a,p0){
+  // eski profillerde sonradan eklenen alanlar yok: motorun kullandığı varsayılanlarla tamamla
+  const p=Object.assign(AsistanScheduler.defaultProfile(),Object.fromEntries(Object.entries(p0||{}).filter(([k,v])=>v!==undefined&&v!==null&&v!=="")));
   const TAM=['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
   const sayi=v=>parseFloat(v)||0, kb=a.nobetKisiBasi, nc=Math.max(1,a.nobetci);
   const kisa=p.useShortOncall!==false;
@@ -902,7 +906,8 @@ function kuralEtkileri(a,p){
       ?`Bu ay hedef: ${a.isGunu-a.yarimGun} tam gün × ${p.targetPerWorkday} + ${a.yarimGun} yarım gün × ${p.halfDayHours||4} = ${a.hedef} saat (izinlilerde daha az).`
       :`Bu ay hedef: ${p.targetPerWorkday} × ${a.isGunu} iş günü = ${a.hedef} saat (izinlilerde daha az).`],
     overtimeForCounts:[p.overtimeForCounts?'Gündüz sayısı tutmazsa bazı kişiler hedefin üstüne çıkar (fazla mesai notu düşülür).':'Kimse hedefini aşmaz; gündüz açığı kalırsa uyarı çıkar.'],
-    preLeaveOncall:[p.preLeaveOncall?`İzinden ${p.preLeaveDaysBefore} iş günü önce nöbet konur, nöbetten izne kadar iş yazılmaz.`:'İzin öncesine özel düzenleme yapılmaz.'],
+    preLeaveOncall:[p.preLeaveOncall?`${p.preLeaveLongMin||5}+ iş günlük izinde: izinden ${p.preLeaveDaysBefore} iş günü önce nöbet, nöbetten izne kadar iş yok.`:'Uzun izin öncesine nöbet konmaz (kısa izin kuralı tüm izinlere uygulanır).'],
+    preLeaveShortGap:[(+p.preLeaveShortGap||0)>0?`${p.preLeaveOncall?(p.preLeaveLongMin||5)+" iş gününden kısa":"Tüm"} izinlerde: izinden önceki ${p.preLeaveShortGap} gün (hafta sonu dahil) boş.`:'Kısa izinlere özel boşluk verilmez.'],
     carryFairness:[p.carryFairness!==false?'Geçen aylarda çok nöbet/hafta sonu tutan bu ay daha az tutar.':'Her ay kendi içinde dengelenir.'],
   };
   document.querySelectorAll('#ruleBody [data-etki]').forEach(el=>{ const e=E[el.dataset.etki];
@@ -974,9 +979,15 @@ function ayKomsuIzinleri(cfg){
   cfg.personnel.forEach(p=>{
     const L=(p.yiRanges||[]).concat(p.ggRange&&p.ggRange.s?[{s:p.ggRange.s,e:p.ggRange.e||p.ggRange.s}]:[])
       .concat(araliklar(p.name,sonraki)).concat(araliklar(p.name,onceki)).filter(r=>r&&r.s);
-    let enYakin=0;
-    L.forEach(r=>{ const bas=tarihOf(r.s); if(bas>aySon && (bas-aySon)/gun<=20 && bas.getMonth()===sM){ const g=bas.getDate(); if(!enYakin||g<enYakin) enYakin=g; } });
-    if(enYakin) p.nextLeaveStart=enYakin;
+    // bir aralığın [a,b] günleri içindeki iş günü sayısı (izin uzunluğu "uzun/kısa" kararı için)
+    const isGunuSay=(a,b)=>{ let n=0; for(let t=new Date(a.getTime()); t<=b; t=new Date(t.getTime()+gun)) if(isGunu(t)) n++; return n; };
+    let enYakin=0, enYakinUzunluk=0, devam=0;
+    L.forEach(r=>{ const bas=tarihOf(r.s), bit=tarihOf(r.e||r.s);
+      if(bas>aySon && (bas-aySon)/gun<=20 && bas.getMonth()===sM){ const g=bas.getDate(); if(!enYakin||g<enYakin){ enYakin=g; enYakinUzunluk=isGunuSay(bas,bit); } }
+      // bu ay başlayıp sonraki aya taşan izin: ay sonrasındaki iş günleri
+      if(bas<=aySon && bit>aySon) devam=Math.max(devam, isGunuSay(new Date(aySon.getTime()+gun), bit)); });
+    if(enYakin){ p.nextLeaveStart=enYakin; p.nextLeaveWorkdays=enYakinUzunluk; }
+    if(devam) p.leaveCarryWorkdays=devam;
     // önceki ayın son günlerinde biten izin: bitişten ay başına kadar hiç iş günü yoksa dönüş bu ayda
     p.prevLeaveEnded=L.some(r=>{ const bit=tarihOf(r.e||r.s); if(!(bit<ayBas) || (ayBas-bit)/gun>7) return false;
       for(let t=new Date(bit.getTime()+gun); t<ayBas; t=new Date(t.getTime()+gun)) if(isGunu(t)) return false; return true; });
@@ -1371,7 +1382,7 @@ function customColor(c){ const cs=customShiftsOf().find(s=>s.code===c); return c
 let URETICI=null, URETIM_NO=0;
 function ureticiAl(){
   if(URETICI!==null) return URETICI;
-  try{ URETICI=new Worker('asistan-worker.js?v=61'); }
+  try{ URETICI=new Worker('asistan-worker.js?v=62'); }
   catch(e){ URETICI=false; }        // false = "denendi, olmadı" (tekrar denenmesin)
   return URETICI;
 }
@@ -1401,7 +1412,7 @@ function generate(){
     uretimBitti(m.sonuc,cfg,ym);
   };
   w.onerror=()=>{ URETICI=false; if(gosterge)gosterge.style.display='none'; generate(); };
-  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=61'});
+  w.postMessage({id:no,cfg:cfg,motor:'asistan-scheduler.js?v=62'});
 }
 function uretimBitti(sonuc,cfg,ym){
   LAST=sonuc; ALTS=(LAST&&LAST.alternatives)||[LAST]; ALT_I=0;
